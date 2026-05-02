@@ -65,9 +65,7 @@ async def _run_cmd(
         **({"cwd": cwd} if cwd else {}),
     )
     try:
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout
-        )
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except TimeoutError:
         proc.kill()
         raise
@@ -96,6 +94,7 @@ SIMPLE_RESTART_MAP: dict[str, str] = {
     "agent-metrics": "agent-metrics",
     "agent-vista": "agent-vista",
     "litellm": "litellm",
+    "ccr": "ccr",
     "auto-survey": "auto-survey",
     "capture-console": "capture-console",
     "anvil": "anvil",
@@ -400,8 +399,14 @@ class Remediator:
         try:
             rc, _, _ = await _run_cmd(
                 [
-                    "bash", str(RELAY_SCRIPT), pane, "",
-                    command, "--no-forward", "--signal", str(signal_file),
+                    "bash",
+                    str(RELAY_SCRIPT),
+                    pane,
+                    "",
+                    command,
+                    "--no-forward",
+                    "--signal",
+                    str(signal_file),
                 ],
                 timeout=_TIMEOUT_GIT_OP,
                 label="relay dispatch",

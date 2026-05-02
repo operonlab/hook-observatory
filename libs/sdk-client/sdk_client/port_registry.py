@@ -254,6 +254,14 @@ PORTS: list[ServicePort] = [
         "third-party",
         health_path="/health/liveliness",
     ),
+    ServicePort(
+        "ccr",
+        3456,
+        "third-party",
+        # CCR has no dedicated health endpoint; root returns 404 but TCP listens
+        # — sentinel light_check tolerates expect_status=404 below.
+        health_path="/",
+    ),
     ServicePort("mcpproxy", 8808, "third-party", health_path="/health"),
     ServicePort("nginx", 8080, "third-party", health_path="/health"),
     # ── Docker (keep standard ports) ──

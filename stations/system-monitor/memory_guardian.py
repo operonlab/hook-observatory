@@ -87,6 +87,22 @@ DEFAULTS = {
         "crit_threshold_gb": 7.0,
         "notify_cooldown_minutes": 120,
     },
+    "swap": {
+        "warn_pct": 70,
+        "crit_pct": 85,
+        "notify_cooldown_minutes": 30,
+    },
+    "bloated_orphan": {
+        "footprint_gb": 5.0,
+        "min_age_seconds": 600,
+        "cwd_match": "workshop",
+        "protected_substrings": [
+            "uvicorn src.main:app",
+            "workshop_services.py",
+            "auto-survey-rs",
+            "remote-node-rs",
+        ],
+    },
 }
 
 
@@ -170,20 +186,108 @@ def _get_compressed_memory_gb() -> dict:
     }
 
 
-def _get_user_idle_seconds() -> int:
-    """Get user idle time from macOS HID system (no elevation needed).
-
-    Reads HIDIdleTime from ioreg (value is in nanoseconds).
-    Returns idle seconds, or -1 on failure.
-    """
-    out = _run("ioreg -c IOHIDSystem -r 2>/dev/null | grep HIDIdleTime")
+def _get_swap_usage() -> dict:
+    """Read swap usage from sysctl. Returns {used_pct, used_gb, total_gb}."""
+    out = _run("/usr/sbin/sysctl -n vm.swapusage")
     if not out:
-        return -1
-    match = re.search(r"=\s*(\d+)", out)
-    if match:
-        idle_ns = int(match.group(1))
-        return idle_ns // 1_000_000_000
-    return -1
+        return {"used_pct": 0, "used_gb": 0.0, "total_gb": 0.0}
+    m = re.search(r"total\s*=\s*([\d.]+)M\s+used\s*=\s*([\d.]+)M", out)
+    if not m:
+        return {"used_pct": 0, "used_gb": 0.0, "total_gb": 0.0}
+    total_mb = float(m.group(1))
+    used_mb = float(m.group(2))
+    return {
+        "used_pct": int(used_mb / total_mb * 100) if total_mb > 0 else 0,
+        "used_gb": round(used_mb / 1024, 2),
+        "total_gb": round(total_mb / 1024, 2),
+    }
+
+
+def _get_process_footprint_gb(pid: int) -> float:
+    """Get physical memory footprint via vmmap. Returns 0.0 on failure.
+
+    'Physical footprint' captures pages currently resident PLUS pages swapped
+    out, so it surfaces leakers whose RSS looks small after the kernel paged
+    them out (the exact case that broke our orphan detection on 2026-05-01).
+    """
+    try:
+        r = subprocess.run(
+            ["/usr/bin/vmmap", "-summary", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=_ENV,
+        )
+        m = re.search(r"Physical footprint:\s+([\d.]+)\s*([GMK])", r.stdout)
+        if not m:
+            return 0.0
+        val = float(m.group(1))
+        unit = m.group(2)
+        if unit == "G":
+            return val
+        if unit == "M":
+            return val / 1024.0
+        return val / (1024.0 * 1024.0)
+    except Exception:
+        return 0.0
+
+
+def _get_process_cwd(pid: int) -> str:
+    """Get process cwd via lsof. Empty string on failure."""
+    try:
+        r = subprocess.run(
+            ["lsof", "-p", str(pid), "-d", "cwd", "-Fn"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            env=_ENV,
+        )
+        for line in r.stdout.splitlines():
+            if line.startswith("n"):
+                return line[1:]
+    except Exception:
+        pass
+    return ""
+
+
+def _is_user_active_assertion() -> bool | None:
+    """Read macOS pmset UserIsActive power-management assertion.
+
+    More reliable than HIDIdleTime for setups where input doesn't go through
+    the local IOHIDSystem (Universal Control with keyboard/mouse on a paired
+    Mac, software KVM, screen-share viewers). On this machine the IOHIDDevice
+    list contains no Generic Desktop keyboard/mouse, so HIDIdleTime never
+    decreases — but UserIsActive flips to 1 when the user is actually active.
+    Returns True/False, or None when pmset isn't queryable.
+    """
+    out = _run("pmset -g assertions")
+    if not out:
+        return None
+    m = re.search(r"UserIsActive\s+(\d+)", out)
+    if m:
+        return m.group(1) == "1"
+    return None
+
+
+def _get_user_idle_seconds() -> int:
+    """Get user idle seconds.
+
+    Prefers macOS UserIsActive assertion (covers Universal Control / KVM /
+    screen-share); falls back to HIDIdleTime when the assertion is unreadable
+    or explicitly False. Returns -1 only when both signals are unavailable.
+    """
+    is_active = _is_user_active_assertion()
+    if is_active is True:
+        return 0
+
+    out = _run("ioreg -c IOHIDSystem -r 2>/dev/null | grep HIDIdleTime")
+    if out:
+        match = re.search(r"=\s*(\d+)", out)
+        if match:
+            idle_ns = int(match.group(1))
+            return idle_ns // 1_000_000_000
+
+    return -1 if is_active is None else 99999
 
 
 def _get_browser_memory() -> dict:
@@ -563,14 +667,31 @@ class MemoryGuardian:
         cooldown_path = self.log_dir / ".browser_notify_cooldown"
 
         if is_crit:
-            # CRIT: always kill renderers regardless of presence (but never main process)
+            # 少爺鐵律：PRESENT 即使 CRIT 也只通知，分頁是工作上下文不可掉。
+            # macOS jetsam 在系統真壓垮時會自己殺 renderer，guardian 不再搶先。
+            if presence == "present":
+                if _check_cooldown(cooldown_path, cooldown_min):
+                    msg = (
+                        f"記憶體緊急 — Chrome 佔 {total_gb}GB ({tab_count} tabs)\n"
+                        f"少爺在席，僅通知不殺；建議手動關分頁或暫停重活"
+                    )
+                    _send_notification("Memory Guardian ⚠️", msg, group="browser-crit-present")
+                    result["action"] = "crit_notify_only"
+                    self._log(f"  BROWSER CRIT(present): {total_gb}GB, notified only")
+                else:
+                    result["action"] = "crit_cooldown_active"
+                    self._log(f"  BROWSER CRIT(present): {total_gb}GB, cooldown active")
+                return result
+            # 不在席（brief_away / away / unknown）→ CRIT 才殺 renderer
             result["action"] = "kill_renderers"
             killed, freed = self._kill_browser_renderers(browser)
             result["killed"] = killed
             result["freed_mb"] = freed
             msg = f"記憶體緊急 — 已終止 {killed} 個 {browser} 分頁程序，釋放 ~{freed}MB"
             _send_notification("Memory Guardian ⚠️", msg, group="browser-crit")
-            self._log(f"  BROWSER CRIT: killed {killed} renderers, freed {freed}MB")
+            self._log(
+                f"  BROWSER CRIT(presence={presence}): killed {killed} renderers, freed {freed}MB"
+            )
             return result
 
         if presence == "present":
@@ -812,6 +933,141 @@ class MemoryGuardian:
 
         return result
 
+    def bloated_orphan_check(self, dry_run: bool = False) -> dict:
+        """Find PPID=1 processes with bloated physical footprint in workshop cwd.
+
+        Catches inline-python heredoc orphans that escape workshop_orphan_reaper:
+        their cmdline shows only `python3 -u` (no script path), so the reaper's
+        substring filter ('workshop/' in command) misses them — yet cwd is in
+        workshop and footprint balloons (real incident: two leaks at 30 GB each
+        pushed swap to 95% before 2026-05-01).
+        """
+        cfg = self.cfg.get("bloated_orphan", DEFAULTS["bloated_orphan"])
+        footprint_gb = cfg.get("footprint_gb", 5.0)
+        min_age_sec = cfg.get("min_age_seconds", 600)
+        cwd_match = cfg.get("cwd_match", "workshop")
+        protected = cfg.get("protected_substrings", [])
+
+        out = _run("ps -eo pid=,ppid=,command=")
+        if not out:
+            return {"checked": 0, "killed": 0, "freed_gb": 0.0, "actions": []}
+
+        candidates = []
+        for line in out.splitlines():
+            parts = line.split(None, 2)
+            if len(parts) < 3:
+                continue
+            try:
+                pid = int(parts[0])
+                ppid = int(parts[1])
+            except ValueError:
+                continue
+            if ppid != 1:
+                continue
+            cmd = parts[2]
+            if any(p in cmd for p in protected):
+                continue
+            candidates.append((pid, cmd))
+
+        actions = []
+        killed = 0
+        freed_gb = 0.0
+
+        for pid, cmd in candidates:
+            cwd = _get_process_cwd(pid)
+            if cwd_match not in cwd:
+                continue
+            age = _get_process_age(pid)
+            if age < min_age_sec:
+                continue
+            fp = _get_process_footprint_gb(pid)
+            if fp < footprint_gb:
+                continue
+
+            self._log(
+                f"  BLOATED-ORPHAN: PID {pid} footprint={fp:.1f}GB age={age}s "
+                f"cwd={cwd} cmd={cmd[:60]}"
+            )
+            action = {
+                "pid": pid,
+                "footprint_gb": round(fp, 2),
+                "age_sec": age,
+                "cwd": cwd,
+                "cmd": cmd[:120],
+            }
+            if dry_run:
+                action["killed"] = False
+            elif _kill_term(pid):
+                action["killed"] = True
+                killed += 1
+                freed_gb += fp
+                self._log(f"  BLOATED-ORPHAN KILL → PID {pid} (SIGTERM)")
+            else:
+                action["killed"] = False
+                self._log(f"  BLOATED-ORPHAN KILL FAILED → PID {pid}")
+            actions.append(action)
+
+        return {
+            "checked": len(candidates),
+            "killed": killed,
+            "freed_gb": round(freed_gb, 2),
+            "actions": actions,
+        }
+
+    def swap_check(self, user_idle: int = -1) -> dict:
+        """Watch swap pressure; trigger bloated-orphan sweep when high.
+
+        Independent of mem_level (kern.memorystatus_level) and compressed
+        memory: heavy swap usage on Apple Silicon often indicates a leak
+        that isn't visible to the existing P0–P3 ladder (RSS stays small
+        once pages are paged out, so kill heuristics never fire).
+        """
+        swap_cfg = self.cfg.get("swap", DEFAULTS["swap"])
+        warn_pct = swap_cfg.get("warn_pct", 70)
+        crit_pct = swap_cfg.get("crit_pct", 85)
+        cooldown_min = swap_cfg.get("notify_cooldown_minutes", 30)
+
+        usage = _get_swap_usage()
+        result = {
+            "status": "ok",
+            "used_pct": usage["used_pct"],
+            "used_gb": usage["used_gb"],
+            "total_gb": usage["total_gb"],
+            "thresholds": {"warn": warn_pct, "crit": crit_pct},
+        }
+
+        if usage["used_pct"] < warn_pct:
+            return result
+
+        level = "crit" if usage["used_pct"] >= crit_pct else "warn"
+        result["status"] = level
+        ts = datetime.now().strftime("%m/%d %H:%M:%S")
+        self._log(
+            f"[{ts}] SWAP {level.upper()}: used={usage['used_gb']}GB/"
+            f"{usage['total_gb']}GB ({usage['used_pct']}%)"
+        )
+
+        bloated = self.bloated_orphan_check()
+        result["bloated_orphan"] = bloated
+
+        if bloated["killed"] > 0:
+            msg = (
+                f"Swap {usage['used_pct']}% — 已終止 {bloated['killed']} 個高記憶體孤兒，"
+                f"釋放 ~{bloated['freed_gb']:.1f}GB"
+            )
+            _send_notification("Memory Guardian", msg, group="bloated-orphan")
+        elif level == "crit":
+            cooldown_path = self.log_dir / ".swap_notify_cooldown"
+            if _check_cooldown(cooldown_path, cooldown_min):
+                msg = (
+                    f"Swap 使用 {usage['used_pct']}% "
+                    f"({usage['used_gb']}/{usage['total_gb']}GB)\n"
+                    f"未發現 bloated 孤兒，請手動檢查 top processes"
+                )
+                _send_notification("Memory Guardian ⚠️", msg, group="swap-crit")
+
+        return result
+
     def _kill_expendables(self, skip_browser: bool = False) -> tuple[int, int]:
         """Kill expendable processes. Returns (killed_count, freed_mb).
 
@@ -908,15 +1164,21 @@ class MemoryGuardian:
         # OrbStack check runs unconditionally (orthogonal to mem pressure)
         result["orbstack"] = self.orbstack_check(user_idle)
 
+        # Swap pressure check (orthogonal to mem_level) — catches bloated
+        # orphans that paged out and stay invisible to RSS-based heuristics.
+        result["swap"] = self.swap_check(user_idle)
+        bloated_killed = result["swap"].get("bloated_orphan", {}).get("killed", 0)
+
         if mem_level > warn_th:
             # Memory OK — still run compressed sweep (orthogonal dimension)
             cm_result = self.compressed_sweep(user_idle)
             result["compressed_memory"] = cm_result
             compressed_gb = cm_result.get("occupied_gb", 0.0)
 
-            if result["p0_killed"] > 0:
+            acted = result["p0_killed"] > 0 or bloated_killed > 0
+            if acted:
                 result["status"] = "acted"
-                result["total_killed"] = result["p0_killed"]
+                result["total_killed"] = result["p0_killed"] + bloated_killed
                 self._write_status(mem_level, "acted", compressed_gb, user_idle)
                 self._flush_log()
             else:
@@ -932,14 +1194,23 @@ class MemoryGuardian:
         # ═══ P1: Expendable apps (WARN threshold, presence-aware) ═══
         is_crit = mem_level < crit_th
 
-        if presence == "present" and not is_crit:
-            # User is here — only notify about browser, don't kill anything
-            self._log("  --- P1: User PRESENT — notify only, skip expendable kills ---")
+        if presence == "present":
+            # 少爺鐵律：在席時 browser 永不殺（即使 CRIT，由 macOS jetsam 處理）。
+            # CRIT 時仍允許殺 non-browser expendables（LINE/VS Code 重開無損）。
+            self._log(f"  --- P1: User PRESENT (crit={is_crit}) — browser notify only ---")
             browser_info = _get_browser_memory()
             if browser_info["total_gb"] > 0:
-                browser_result = self._browser_action(presence, browser_info, False)
+                browser_result = self._browser_action(presence, browser_info, is_crit)
                 result["kills"].append(
                     {"phase": "P1", "process": "browser_notify", **browser_result}
+                )
+            if is_crit:
+                exp_killed, exp_freed = self._kill_expendables(skip_browser=True)
+                result["p1_killed"] += exp_killed
+                result["p1_freed_mb"] += exp_freed
+                self._log(
+                    f"  P1 PRESENT+CRIT: killed {exp_killed} non-browser expendables, "
+                    f"freed {exp_freed}MB"
                 )
         elif presence == "brief_away" and not is_crit:
             # User briefly away — try AppleScript tabs, don't kill processes
@@ -1055,10 +1326,16 @@ class MemoryGuardian:
                     f"(WARN only, need CRIT<{crit_th})"
                 )
 
+        bloated_killed_run = result.get("swap", {}).get("bloated_orphan", {}).get("killed", 0)
+        bloated_freed_gb = result.get("swap", {}).get("bloated_orphan", {}).get("freed_gb", 0.0)
         total_killed = (
-            result["p0_killed"] + result["p1_killed"] + result["p2_killed"] + result["p3_killed"]
+            result["p0_killed"]
+            + result["p1_killed"]
+            + result["p2_killed"]
+            + result["p3_killed"]
+            + bloated_killed_run
         )
-        total_freed = result["p0_freed_mb"] + result["p1_freed_mb"]
+        total_freed = result["p0_freed_mb"] + result["p1_freed_mb"] + int(bloated_freed_gb * 1024)
         self._log(f"[{ts}] DONE: total_killed={total_killed} freed≈{total_freed}MB")
 
         result["status"] = "acted"

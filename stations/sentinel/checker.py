@@ -124,6 +124,11 @@ LIGHT_CHECKS: list[LightCheck] = [
         url=_url("litellm", "/health/liveliness"),
         expect_contains="I'm alive!",
     ),
+    LightCheck(
+        name="ccr",
+        group="infra",
+        url=_url("ccr", "/health"),  # claude-code-router reverse proxy → LiteLLM
+    ),
     # oMLX removed — embed_worker is a stdin/stdout subprocess, not an HTTP service
     LightCheck(
         name="bark",

@@ -125,16 +125,19 @@ SERVICES = [
         "health": get("sentinel").health_url,
         "workdir": "/Users/joneshong/workshop/stations/sentinel-rs",
     },
+    # Python system-monitor retired 2026-05-01 — replaced by system-monitor-rs.
+    # Rollback: revert this block (uvicorn entry) + keep stations/system-monitor/.
+    # RSS 58 MB → 15 MB (省 73.8%), /status cached path 2 ms → 0.3 ms.
     {
         "name": "system-monitor",
-        "type": "uvicorn",
+        "type": "binary",
         "cmd": (
-            "/Users/joneshong/workshop/stations/system-monitor/.venv/bin/python3"
-            f" api.py --port {get_port('system-monitor')}"
+            "/Users/joneshong/.cargo/shared-target/release/system-monitor-rs"
+            f" serve --host 127.0.0.1 --port {get_port('system-monitor')}"
         ),
         "port": get_port("system-monitor"),
         "health": get("system-monitor").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/system-monitor",
+        "workdir": "/Users/joneshong/workshop/stations/system-monitor-rs",
     },
     # Python agent-metrics retired 2026-04-20 — replaced by agent-metrics-rs (below).
     # Kept commented as rollback reference for 30 days, remove after 2026-05-20.
@@ -156,10 +159,7 @@ SERVICES = [
     {
         "name": "agent-metrics",
         "type": "binary",
-        "cmd": (
-            "/Users/joneshong/.cargo/shared-target/release/agent-metrics-rs"
-            " serve"
-        ),
+        "cmd": ("/Users/joneshong/.cargo/shared-target/release/agent-metrics-rs serve"),
         "port": get_port("agent-metrics"),
         "health": get("agent-metrics").health_url,
         "workdir": "/Users/joneshong/workshop/stations/agent-metrics-rs",
@@ -353,6 +353,18 @@ SERVICES = [
         "cmd": "/Users/joneshong/.local/bin/litellm --config /Users/joneshong/.config/litellm/config.yaml --port 4000 --host 127.0.0.1",  # noqa: E501
         "port": 4000,
         "health": "http://127.0.0.1:4000",
+        "workdir": "/Users/joneshong",
+    },
+    {
+        "name": "ccr",
+        "type": "binary",
+        # `ccr start` self-daemonizes (CLI exits, server keeps listening).
+        # workshop_services daemon_mode runs health_check_all() every 60s and
+        # restarts via start_service when port is no longer listening, so the
+        # self-fork pattern is fine — is_running(port) skips when already up.
+        "cmd": "/Users/joneshong/Library/pnpm/ccr start",
+        "port": 3456,
+        "health": "http://127.0.0.1:3456",
         "workdir": "/Users/joneshong",
     },
     # ── External Sites ──
