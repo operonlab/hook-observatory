@@ -29,8 +29,13 @@ class MemvaultClient(BaseClient):
         block_type: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        include_invalid: bool = False,
     ) -> dict:
-        """List memory blocks with optional filters. GET /blocks"""
+        """List memory blocks with optional filters. GET /blocks
+
+        include_invalid: audit-only flag — when True, includes blocks whose
+        invalid_at is set. Default False (active blocks only).
+        """
         params: dict = {"page": page, "page_size": page_size}
         if tag:
             params["tag"] = tag
@@ -42,6 +47,8 @@ class MemvaultClient(BaseClient):
             params["date_from"] = date_from
         if date_to:
             params["date_to"] = date_to
+        if include_invalid:
+            params["include_invalid"] = "true"
         return self._get("/blocks", params)
 
     def get_block(self, block_id: str) -> dict:
@@ -73,6 +80,28 @@ class MemvaultClient(BaseClient):
         """Delete a memory block. DELETE /blocks/{id}"""
         self._delete(f"/blocks/{block_id}")
 
+    def invalidate_block(
+        self,
+        block_id: str,
+        reason: str = "manual",
+        superseded_by_id: str | None = None,
+    ) -> dict:
+        """Mark a block as invalid (sets invalid_at = now). POST /blocks/{id}/invalidate
+
+        For dream-pipeline supersedence pass superseded_by_id; for plain
+        manual invalidation leave it None.
+        """
+        body: dict = {"reason": reason}
+        if superseded_by_id:
+            body["superseded_by_id"] = superseded_by_id
+        return self._post(f"/blocks/{block_id}/invalidate", body)
+
+    def restore_block(self, block_id: str) -> dict:
+        """Undo invalidate_block — clears invalid_at / superseded_by / reason.
+        POST /blocks/{id}/restore
+        """
+        return self._post(f"/blocks/{block_id}/restore", {})
+
     # ======================== Search ========================
 
     def recall(
@@ -84,8 +113,15 @@ class MemvaultClient(BaseClient):
         scope: str | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
+        as_of: str | None = None,
     ) -> dict:
-        """Semantic search over memory blocks. GET /search"""
+        """Semantic search over memory blocks. GET /search
+
+        as_of: optional ISO8601 datetime — time-travel anchor. When set, the
+        recall sees the KG state as of that moment (excludes blocks whose
+        valid_at > as_of and whose invalid_at <= as_of). Leave None for
+        present-time view.
+        """
         params: dict = {"q": query, "top_k": top_k, "min_score": min_score}
         if include_metadata:
             params["include_metadata"] = "true"
@@ -95,6 +131,8 @@ class MemvaultClient(BaseClient):
             params["date_from"] = date_from
         if date_to:
             params["date_to"] = date_to
+        if as_of:
+            params["as_of"] = as_of
         return self._get("/search", params)
 
     def query_memory(
@@ -105,22 +143,24 @@ class MemvaultClient(BaseClient):
         load_budget: str = "standard",
         consumer: str = "human",
         top_k: int = 6,
+        as_of: str | None = None,
     ) -> dict:
         """Unified fast/slow memory query. POST /query
 
         task_mode=auto infers intent from query content via classify_query().
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
         """
-        return self._post(
-            "/query",
-            {
-                "q": query,
-                "task_mode": task_mode,
-                "thinking_mode": thinking_mode,
-                "load_budget": load_budget,
-                "consumer": consumer,
-                "top_k": top_k,
-            },
-        )
+        body: dict = {
+            "q": query,
+            "task_mode": task_mode,
+            "thinking_mode": thinking_mode,
+            "load_budget": load_budget,
+            "consumer": consumer,
+            "top_k": top_k,
+        }
+        if as_of:
+            body["as_of"] = as_of
+        return self._post("/query", body)
 
     def inject(
         self,
@@ -129,19 +169,23 @@ class MemvaultClient(BaseClient):
         thinking_mode: str = "auto",
         load_budget: str = "light",
         top_k: int = 6,
+        as_of: str | None = None,
     ) -> dict:
-        """Agent-facing fast memory payload. POST /inject"""
-        return self._post(
-            "/inject",
-            {
-                "q": query,
-                "task_mode": task_mode,
-                "thinking_mode": thinking_mode,
-                "load_budget": load_budget,
-                "consumer": "agent",
-                "top_k": top_k,
-            },
-        )
+        """Agent-facing fast memory payload. POST /inject
+
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
+        """
+        body: dict = {
+            "q": query,
+            "task_mode": task_mode,
+            "thinking_mode": thinking_mode,
+            "load_budget": load_budget,
+            "consumer": "agent",
+            "top_k": top_k,
+        }
+        if as_of:
+            body["as_of"] = as_of
+        return self._post("/inject", body)
 
     def inspect(
         self,
@@ -149,19 +193,23 @@ class MemvaultClient(BaseClient):
         task_mode: str = "reflect",
         load_budget: str = "deep",
         top_k: int = 6,
+        as_of: str | None = None,
     ) -> dict:
-        """Deep evidence inspection. POST /inspect"""
-        return self._post(
-            "/inspect",
-            {
-                "q": query,
-                "task_mode": task_mode,
-                "thinking_mode": "slow",
-                "load_budget": load_budget,
-                "consumer": "human",
-                "top_k": top_k,
-            },
-        )
+        """Deep evidence inspection. POST /inspect
+
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
+        """
+        body: dict = {
+            "q": query,
+            "task_mode": task_mode,
+            "thinking_mode": "slow",
+            "load_budget": load_budget,
+            "consumer": "human",
+            "top_k": top_k,
+        }
+        if as_of:
+            body["as_of"] = as_of
+        return self._post("/inspect", body)
 
     # ======================== Sessions ========================
 
@@ -447,13 +495,19 @@ class MemvaultClient(BaseClient):
         top_k: int = 5,
         skip_routing: bool = False,
         evaluate: str = "default",
+        as_of: str | None = None,
     ) -> dict:
-        """KG cascade recall (L2→L1→L0→Blocks). GET /kg/recall"""
+        """KG cascade recall (L2→L1→L0→Blocks). GET /kg/recall
+
+        as_of: optional ISO8601 datetime — time-travel anchor (None = present).
+        """
         params: dict = {"q": query, "top_k": top_k}
         if skip_routing:
             params["skip_routing"] = "true"
         if evaluate != "default":
             params["evaluate"] = evaluate
+        if as_of:
+            params["as_of"] = as_of
         return self._get("/kg/recall", params)
 
     # ======================== KG — Maintenance ========================

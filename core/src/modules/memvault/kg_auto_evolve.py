@@ -258,6 +258,18 @@ async def extract_triples_rlm(
 # ---------------------------------------------------------------------------
 
 
+def _content_hash(content: str) -> str:
+    """SHA256 over normalized content (stripped + collapsed whitespace).
+
+    Used as the second half of the (memory_id, content_hash) idempotency key.
+    Collapsing whitespace lets re-formatting-only edits short-circuit.
+    """
+    import hashlib
+
+    normalized = " ".join((content or "").split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 async def auto_evolve_kg(
     memory_id: str,
     content: str,
@@ -267,6 +279,11 @@ async def auto_evolve_kg(
     db: AsyncSession,
 ) -> dict[str, int]:
     """Extract triples from a new MemoryBlock and feed them into TripleService.
+
+    Idempotent: if a (memory_id, content_hash) pair is already in
+    KGAutoEvolveLog, returns the cached stats without re-extracting. If the
+    content changed (same memory_id, different hash), the old log row is
+    deleted and the new run proceeds.
 
     Calls extract_triples_from_content, then feeds valid triples through the
     existing batch_ingest pipeline (entity resolution + contradiction detection).
@@ -284,15 +301,73 @@ async def auto_evolve_kg(
         Stats dict: {"triples_extracted": N, "triples_stored": M, "contradictions_resolved": K}
     """
     # Lazy import to avoid circular dependencies at module load time
+    from sqlalchemy import delete, select
+
+    from .kg_models import KGAutoEvolveLog
     from .kg_services import TripleService
 
     stats = {"triples_extracted": 0, "triples_stored": 0, "contradictions_resolved": 0}
+    chash = _content_hash(content)
+
+    # Idempotency check — was this exact (space_id, memory_id, content_hash) already done?
+    # space_id scoping prevents cross-space pollution if the same memory_id is
+    # ever reused (defensive — should not normally happen).
+    try:
+        existing = (
+            await db.execute(
+                select(KGAutoEvolveLog).where(
+                    KGAutoEvolveLog.space_id == space_id,
+                    KGAutoEvolveLog.memory_id == memory_id,
+                    KGAutoEvolveLog.content_hash == chash,
+                    KGAutoEvolveLog.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            logger.info(
+                "KG auto-evolve: memory=%s already evolved (cached) — skip",
+                memory_id,
+            )
+            return {
+                "triples_extracted": existing.triples_extracted,
+                "triples_stored": existing.triples_stored,
+                "contradictions_resolved": existing.contradictions_resolved,
+            }
+        # Same (space_id, memory_id) with a *different* hash means the content
+        # was edited; purge the stale log row(s) so the new run records correctly.
+        await db.execute(
+            delete(KGAutoEvolveLog).where(
+                KGAutoEvolveLog.space_id == space_id,
+                KGAutoEvolveLog.memory_id == memory_id,
+            )
+        )
+    except Exception:
+        # Idempotency check is best-effort — fall through to normal path on
+        # transient DB issues (the worst case is a duplicate triple write,
+        # which batch_ingest's own dedup handles).
+        logger.debug("auto_evolve idempotency check failed (continuing)", exc_info=True)
 
     try:
         raw_triples = await extract_triples_from_content(content, block_type)
         stats["triples_extracted"] = len(raw_triples)
 
         if not raw_triples:
+            # Persist log even with zero triples — re-running on the same content
+            # should still short-circuit (no point re-calling the LLM extractor).
+            try:
+                db.add(
+                    KGAutoEvolveLog(
+                        space_id=space_id,
+                        memory_id=memory_id,
+                        content_hash=chash,
+                        triples_extracted=0,
+                        triples_stored=0,
+                        contradictions_resolved=0,
+                    )
+                )
+                await db.commit()
+            except Exception:
+                logger.debug("auto_evolve log insert (empty) failed", exc_info=True)
             return stats
 
         session_id = source_session or f"auto_evolve:{memory_id}"
@@ -337,7 +412,10 @@ async def auto_evolve_kg(
                                     id=triple.id,
                                     vector={"dense": emb},
                                     payload={
-                                        "service_id": "memvault_kg",
+                                        # MUST match triple_service.semantic_search filter
+                                        # (service_ids=["memvault-triple"]); using "memvault_kg"
+                                        # silently writes points that no read path can find.
+                                        "service_id": "memvault-triple",
                                         "entity_type": "triple",
                                         "space_id": space_id,
                                         "subject": triple.subject,
@@ -359,6 +437,22 @@ async def auto_evolve_kg(
                 logger.debug("KG auto-evolve: Qdrant indexing failed (best-effort)", exc_info=True)
         # contradictions_resolved is implicit in batch_ingest (invalidated_count not exposed);
         # we report 0 here — the invalidation events are still fired by batch_ingest internally.
+
+        # Persist idempotency log (best-effort — the run already succeeded).
+        try:
+            db.add(
+                KGAutoEvolveLog(
+                    space_id=space_id,
+                    memory_id=memory_id,
+                    content_hash=chash,
+                    triples_extracted=stats["triples_extracted"],
+                    triples_stored=stats["triples_stored"],
+                    contradictions_resolved=stats["contradictions_resolved"],
+                )
+            )
+            await db.commit()
+        except Exception:
+            logger.debug("auto_evolve log insert failed (continuing)", exc_info=True)
 
         logger.info(
             "KG auto-evolve: memory=%s block_type=%s extracted=%d stored=%d",

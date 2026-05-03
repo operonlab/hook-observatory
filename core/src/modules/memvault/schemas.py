@@ -1,10 +1,24 @@
 """Memvault Pydantic schemas — request/response types."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.shared.schemas import PaginatedResponse, SpaceScopedResponse  # noqa: F401
+
+
+def _ensure_tz_aware(value: datetime | None) -> datetime | None:
+    """Coerce naive datetime to UTC. Used by every bitemporal as_of field.
+
+    Naive datetimes silently inherit the DB session's timezone, so a hook
+    sending '2026-04-01T00:00:00' (no TZ) would mean different boundaries on
+    different machines. Better to assume UTC explicitly.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
 
 # --- Enums as string literals (lightweight, no enum import needed) ---
 
@@ -171,9 +185,11 @@ class MemoryQueryRequest(BaseModel):
         default=None,
         description=(
             "Bitemporal time-travel: return only blocks valid at this instant. "
-            "Default (None) = current view."
+            "Default (None) = current view. Naive datetimes are treated as UTC."
         ),
     )
+
+    _validate_as_of_tz = field_validator("as_of")(_ensure_tz_aware)
 
 
 class MemoryEvidenceRef(BaseModel):

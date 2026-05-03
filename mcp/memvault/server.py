@@ -18,9 +18,10 @@ Configure in ~/.claude.json:
 from asyncio import to_thread
 
 from mcp.server.fastmcp import FastMCP
+
 from sdk_client._base import APIConnectionError, APIError
-from sdk_client.memvault import MemvaultClient
 from sdk_client.mcp_helpers import mcp_error_handler
+from sdk_client.memvault import MemvaultClient
 
 mcp = FastMCP("memvault")
 client = MemvaultClient()
@@ -38,8 +39,13 @@ async def memvault_recall(
     mode: str = "default",
     since: str = "",
     before: str = "",
+    as_of: str = "",
 ) -> str:
-    """根據 query 搜尋相關記憶（keyword + semantic hybrid search with RRF）。mode='cascade' 啟用四層 Cascade Recall"""
+    """根據 query 搜尋相關記憶（keyword + semantic hybrid search with RRF）。
+
+    mode='cascade' 啟用四層 Cascade Recall。
+    as_of: ISO8601 datetime — 時間旅行（看「過去某時刻已知的事實」），空字串 = 現在視角。
+    """
     if mode == "cascade":
         return await memvault_kg_cascade_recall(query=query, top_k=max_results)
 
@@ -50,6 +56,7 @@ async def memvault_recall(
         min_score=min_score,
         date_from=since or None,
         date_to=before or None,
+        as_of=as_of or None,
     )
     results = raw.get("results", []) if isinstance(raw, dict) else raw
 
@@ -137,14 +144,19 @@ async def memvault_kg_cascade_recall(
     top_k: int = 5,
     skip_routing: bool = False,
     evaluate: str = "default",
+    as_of: str = "",
 ) -> str:
-    """Adaptive Cascade Recall：Query Router → L2/L1 Semantic + L0 Triples + Blocks → CRAG Evaluation"""
+    """Adaptive Cascade Recall：Query Router → L2/L1 Semantic + L0 Triples + Blocks → CRAG Evaluation.
+
+    as_of: ISO8601 datetime — 時間旅行（看「過去某時刻已知的事實」），空字串 = 現在視角。
+    """
     result = await to_thread(
         client.cascade,
         query,
         top_k=top_k,
         skip_routing=skip_routing,
         evaluate=evaluate,
+        as_of=as_of or None,
     )
     layers = result.get("layers_searched", [])
 

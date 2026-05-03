@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +46,7 @@ from .schemas import (
     SemanticSearchParams,  # noqa: F401 — available for future use
     SessionSummary,
     TagResponse,
+    _ensure_tz_aware,
 )
 from .services import (
     knowledge_domain_service,
@@ -74,6 +75,10 @@ async def list_blocks(
     block_type: str | None = Query(None, description="Block type filter"),
     date_from: datetime | None = Query(None, description="Filter: created_at >= date_from"),
     date_to: datetime | None = Query(None, description="Filter: created_at <= date_to"),
+    include_invalid: bool = Query(
+        False,
+        description="Audit-only: include blocks with invalid_at set (default excludes them).",
+    ),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.read"),
 ):
@@ -93,6 +98,7 @@ async def list_blocks(
             pagination,
             date_from=date_from,
             date_to=date_to,
+            include_invalid=include_invalid,
         )
     if block_type:
         return await memory_block_service.list_by_type(
@@ -102,6 +108,7 @@ async def list_blocks(
             pagination,
             date_from=date_from,
             date_to=date_to,
+            include_invalid=include_invalid,
         )
     return await memory_block_service.list(
         db,
@@ -109,6 +116,7 @@ async def list_blocks(
         pagination,
         date_from=date_from,
         date_to=date_to,
+        include_invalid=include_invalid,
     )
 
 
@@ -282,6 +290,51 @@ async def delete_block(
     if not deleted:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
     await db.commit()
+
+
+class InvalidateBlockRequest(BaseModel):
+    reason: str = "manual"
+    superseded_by_id: str | None = None
+
+
+@router.post("/blocks/{block_id}/invalidate", response_model=MemoryBlockResponse)
+async def invalidate_block_endpoint(
+    block_id: str,
+    body: InvalidateBlockRequest = Body(default_factory=InvalidateBlockRequest),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Mark a block as invalid (sets invalid_at = now). Audit / mistake correction.
+
+    For dream-pipeline supersedence pass superseded_by_id; for plain manual
+    invalidation leave it None.
+    """
+    instance = await memory_block_service.invalidate_block(
+        db,
+        block_id=block_id,
+        reason=body.reason,
+        superseded_by_id=body.superseded_by_id,
+    )
+    if instance is None:
+        raise NotFoundError("Block not found", code="memvault.block_not_found")
+    await db.commit()
+    await db.refresh(instance)
+    return memory_block_service.to_response(instance)
+
+
+@router.post("/blocks/{block_id}/restore", response_model=MemoryBlockResponse)
+async def restore_block_endpoint(
+    block_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Undo invalidate — clears invalid_at / superseded_by / invalidation_reason."""
+    instance = await memory_block_service.restore_block(db, block_id=block_id)
+    if instance is None:
+        raise NotFoundError("Block not found", code="memvault.block_not_found")
+    await db.commit()
+    await db.refresh(instance)
+    return memory_block_service.to_response(instance)
 
 
 # ======================== Sessions ========================
@@ -506,23 +559,34 @@ async def search(
         meta.routing_tags = inferred_tags if inferred_tags else None
 
         # Temporal fallback: semantic search returned 0 but temporal dates are active
-        # → list blocks in date range (temporal queries like "上週做了什麼" need listing, not matching)
+        # → list blocks in date range (temporal queries like "上週做了什麼" need listing, not matching).
+        # Bitemporal: respect as_of so time-travel /search calls don't silently
+        # leak into the present-time list path (Codex P1-6).
         if not results and expanded and expanded.temporal_from:
+            from .bitemporal_filters import active_block_filters
+            from .models import MemoryBlock
             from .schemas import SemanticSearchResult
 
-            blocks_page = await memory_block_service.list(
-                db,
-                space_id,
-                PaginationParams(page=1, page_size=top_k),
-                date_from=date_from,
-                date_to=date_to,
+            stmt = (
+                select(MemoryBlock)
+                .where(
+                    MemoryBlock.space_id == space_id,
+                    *active_block_filters(as_of=as_of),
+                )
+                .order_by(MemoryBlock.created_at.desc())
+                .limit(top_k)
             )
+            if date_from:
+                stmt = stmt.where(MemoryBlock.created_at >= date_from)
+            if date_to:
+                stmt = stmt.where(MemoryBlock.created_at <= date_to)
+            fallback_rows = (await db.execute(stmt)).scalars().all()
             results = [
                 SemanticSearchResult(
-                    block=b,
+                    block=memory_block_service.to_response(b),
                     score=1.0,
                 )
-                for b in blocks_page.items
+                for b in fallback_rows
             ]
             meta.temporal_fallback = True
 
@@ -602,6 +666,9 @@ class RecallTextRequest(BaseModel):
     prompt: str
     session_id: str | None = None
     cwd: str | None = None
+    as_of: datetime | None = None
+
+    _validate_as_of_tz = field_validator("as_of")(_ensure_tz_aware)
 
 
 @router.post("/recall/text", response_class=PlainTextResponse)
@@ -611,12 +678,18 @@ async def recall_text(body: RecallTextRequest = Body(...)) -> PlainTextResponse:
     Replaces the `recall.py` subprocess that the UserPromptSubmit hook used
     to fork. Body matches the original stdin JSON; response is plain text
     (may be empty).
+
+    as_of: optional ISO8601 datetime. When set, recall sees the KG state as
+    it was at that moment (excludes blocks whose valid_at > as_of and blocks
+    whose invalid_at <= as_of). Hook callers who want present-time view leave
+    it None.
     """
     text = await asyncio.to_thread(
         build_recall_text,
         body.prompt,
         body.session_id or "",
         body.cwd or "",
+        body.as_of,
     )
     return PlainTextResponse(content=text or "")
 

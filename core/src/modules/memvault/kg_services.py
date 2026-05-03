@@ -999,6 +999,7 @@ class CascadeRecallService:
         skip_routing: bool = False,
         evaluate: str = "default",
         mode: str = "auto",
+        as_of: datetime | None = None,
     ) -> CascadeRecallResult:
         """Cascade recall across all KG layers plus memory blocks.
 
@@ -1008,6 +1009,10 @@ class CascadeRecallService:
                       "rlm" (+RLM query decomposition), "none" (skip evaluation).
             mode: RetrievalMode — "auto" (router decides), "local" (PPR+L0+blocks),
                   "global" (L2+L1), "hybrid" (all layers).
+            as_of: Time-travel anchor. None = present time (default bitemporal guard).
+                   When set, blocks/triples ilike layers exclude rows whose valid_at >
+                   as_of or invalid_at <= as_of. Vector layers (Qdrant) currently apply
+                   only the present-time guard — full as_of for semantic search is TODO.
         """
         from .services import memory_block_service
 
@@ -1088,6 +1093,8 @@ class CascadeRecallService:
         # --- L0: Triples (semantic or text) ---
         if _should_search("triples"):
             if query_embedding:
+                # TODO(bitemporal): semantic_search reads from Qdrant which has no
+                # as_of slice; only present-time guard is applied at the result level.
                 triple_results = await triple_service.semantic_search(
                     db, space_id, query_embedding, top_k=top_k
                 )
@@ -1104,6 +1111,16 @@ class CascadeRecallService:
                     )
                     .limit(top_k)
                 )
+                # Bitemporal guard for ilike fallback: respect as_of for both
+                # transaction and validity time.
+                if as_of is None:
+                    triple_q = triple_q.where(Triple.invalid_at.is_(None))
+                else:
+                    triple_q = triple_q.where(
+                        Triple.created_at <= as_of,
+                        (Triple.invalid_at.is_(None)) | (Triple.invalid_at > as_of),
+                        (Triple.valid_at.is_(None)) | (Triple.valid_at <= as_of),
+                    )
                 triple_rows = (await db.execute(triple_q)).scalars().all()
                 triple_results = [triple_service.to_response(r) for r in triple_rows]
 
@@ -1134,6 +1151,7 @@ class CascadeRecallService:
                     query,
                     query_embedding,
                     top_k=top_k,
+                    as_of=as_of,
                 )
                 if query_embedding
                 else None
@@ -1148,6 +1166,7 @@ class CascadeRecallService:
                     query_embedding,
                     top_k=top_k,
                     query=query,
+                    as_of=as_of,
                 )
                 blocks = [sr.block for sr in search_results]
 
@@ -1165,6 +1184,7 @@ class CascadeRecallService:
                 top_k=top_k,
                 skip_routing=True,
                 evaluate=evaluate,
+                as_of=as_of,
             )
 
         # --- Phase 3: CRAG Evaluator ---
@@ -1482,10 +1502,12 @@ class CascadeRecallService:
         query: str,
         result: CascadeRecallResult,
     ) -> None:
-        """Record implicit feedback from CRAG verdict into search_feedback table.
+        """Record implicit feedback from CRAG verdict into search_feedback table
+        AND update Triple verification counters (Phase E+G).
 
-        CORRECT → positive signal for all returned entities.
-        INCORRECT → negative signal for all returned entities.
+        CORRECT → positive signal + crag_correct_count++ + last_confirmed_at = now
+        INCORRECT → negative signal + crag_incorrect_count++; if cumulative
+                   incorrect >=2 and correct == 0 → mark verification_status='disputed'
         AMBIGUOUS → skip (not enough signal).
         Uses its own DB session (fire-and-forget safe — request session may close).
         """
@@ -1506,7 +1528,11 @@ class CascadeRecallService:
         if not entity_ids:
             return
 
+        triple_ids = [t.id for t in result.triples if t.id]
+
         try:
+            from sqlalchemy import update
+
             from src.shared.database import async_session_factory
 
             from .services import search_feedback_service
@@ -1515,12 +1541,46 @@ class CascadeRecallService:
                 await search_feedback_service.record_implicit_batch(
                     db, space_id, entity_ids, query, signal
                 )
+                # Update Triple verification counters (only triples — blocks /
+                # communities have their own staleness pipelines).
+                if triple_ids:
+                    if verdict == "CORRECT":
+                        await db.execute(
+                            update(Triple)
+                            .where(Triple.id.in_(triple_ids))
+                            .values(
+                                crag_correct_count=Triple.crag_correct_count + 1,
+                                last_confirmed_at=datetime.now(UTC),
+                            )
+                        )
+                    elif verdict == "INCORRECT":
+                        await db.execute(
+                            update(Triple)
+                            .where(Triple.id.in_(triple_ids))
+                            .values(
+                                crag_incorrect_count=Triple.crag_incorrect_count + 1,
+                            )
+                        )
+                        # Auto-demote: if cumulative incorrect >= 2 and no
+                        # correct hits, mark disputed (does NOT invalidate —
+                        # that's left to stale_claims lint or human review).
+                        await db.execute(
+                            update(Triple)
+                            .where(
+                                Triple.id.in_(triple_ids),
+                                Triple.crag_incorrect_count >= 2,
+                                Triple.crag_correct_count == 0,
+                                Triple.verification_status != "disputed",
+                            )
+                            .values(verification_status="disputed")
+                        )
                 await db.commit()
             logger.debug(
-                "Implicit feedback recorded: verdict=%s signal=%s entities=%d",
+                "Implicit feedback recorded: verdict=%s signal=%s entities=%d triples=%d",
                 verdict,
                 signal,
                 len(entity_ids),
+                len(triple_ids),
             )
         except Exception:
             logger.warning("Failed to record implicit feedback", exc_info=True)

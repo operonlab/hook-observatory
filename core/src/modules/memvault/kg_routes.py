@@ -3,6 +3,8 @@
 Prefix: /api/memvault/kg (mounted via __init__.py)
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -305,6 +307,14 @@ async def cascade_recall(
     space_id: str = Query("default"),
     skip_routing: bool = Query(False, description="Bypass query router, search all layers"),
     evaluate: str = Query("default", pattern="^(default|deep|rlm|none)$"),
+    as_of: datetime | None = Query(
+        None,
+        description=(
+            "Time-travel anchor (ISO8601). Excludes blocks/triples whose valid_at > as_of "
+            "and whose invalid_at <= as_of. Vector layers (Qdrant) currently apply only "
+            "the present-time bitemporal guard — full as_of for semantic search is TODO."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     return await cascade_recall_service.recall(
@@ -314,6 +324,7 @@ async def cascade_recall(
         top_k=top_k,
         skip_routing=skip_routing,
         evaluate=evaluate,
+        as_of=as_of,
     )
 
 
@@ -998,6 +1009,75 @@ async def apply_attitude_decay(
         attitudes_updated=updated,
         half_life_days=half_life_days,
     )
+
+
+@router.get("/attitudes/relevant")
+async def attitudes_relevant(
+    q: str = Query(..., min_length=1, max_length=500),
+    top_k: int = Query(3, ge=1, le=10),
+    space_id: str = Query("default"),
+    as_of: datetime | None = Query(
+        None,
+        description="Time-travel anchor; same semantics as /kg/recall.",
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return attitude blocks (block_type='attitude') most relevant to q.
+
+    Used by recall_text builder for the 「行為提醒」section. Output shape
+    matches the consumer's expected fields: list[{fact, category, confidence}].
+    Bitemporal-aware: respects active_block_filters(as_of=...).
+    """
+    from sqlalchemy import select as _select
+
+    from .bitemporal_filters import active_block_filters
+    from .embedding import get_embedding
+    from .models import MemoryBlock
+    from .services import memory_block_service
+
+    query_emb = await get_embedding(q)
+    blocks: list[MemoryBlock] = []
+    if query_emb:
+        try:
+            results, _meta = await memory_block_service.semantic_search(
+                db,
+                space_id,
+                query_emb,
+                top_k=top_k,
+                block_type="attitude",
+                as_of=as_of,
+            )
+            blocks = [r.block for r in results]
+        except Exception:
+            blocks = []
+
+    if not blocks:
+        # ILIKE fallback (tiny corpus / no embedding) — same bitemporal predicate.
+        pattern = f"%{q}%"
+        stmt = (
+            _select(MemoryBlock)
+            .where(
+                MemoryBlock.space_id == space_id,
+                MemoryBlock.block_type == "attitude",
+                MemoryBlock.content.ilike(pattern),
+                *active_block_filters(as_of=as_of),
+            )
+            .order_by(MemoryBlock.updated_at.desc())
+            .limit(top_k)
+        )
+        blocks = list((await db.execute(stmt)).scalars().all())
+
+    out: list[dict] = []
+    for b in blocks:
+        tags = b.tags or []
+        out.append(
+            {
+                "fact": b.content or "",
+                "category": tags[0] if tags else "",
+                "confidence": b.confidence or 0.0,
+            }
+        )
+    return out
 
 
 @router.post("/attitudes/evolve", response_model=AttitudeEvolveResponse)

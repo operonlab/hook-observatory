@@ -47,13 +47,22 @@ async def check_stale_claims(
             triple_ids.add(tb)
 
     created_map: dict[str, datetime] = {}
+    confirmed_map: dict[str, datetime | None] = {}
     if triple_ids:
-        cq = select(Triple.id, Triple.created_at).where(Triple.id.in_(triple_ids))
-        for tid, created in (await db.execute(cq)).all():
+        cq = select(Triple.id, Triple.created_at, Triple.last_confirmed_at).where(
+            Triple.id.in_(triple_ids)
+        )
+        for tid, created, confirmed in (await db.execute(cq)).all():
             if created is not None:
                 created_map[tid] = created
+            confirmed_map[tid] = confirmed
 
     now = datetime.now(UTC)
+    # Triples confirmed within this window are NOT stale even if their
+    # created_at is old — last_confirmed_at is bumped by CRAG-CORRECT or by
+    # promote_unverified, so it tracks "still in active use".
+    confirm_freshness_days = max(age_days_threshold, 90)
+
     for f in base:
         if f.check != "contradictions":
             continue
@@ -74,8 +83,21 @@ async def check_stale_claims(
             # Conflict but not yet stale by the age threshold — skip
             continue
 
+        # Both sides recently confirmed → treat as still-living evidence,
+        # not stale. (Either side stale is enough to keep the finding.)
+        a_conf = confirmed_map.get(ta) if ta else None
+        b_conf = confirmed_map.get(tb) if tb else None
+
+        def _recently_confirmed(ts: datetime | None) -> bool:
+            return bool(ts and (now - ts).days < confirm_freshness_days)
+
+        if _recently_confirmed(a_conf) and _recently_confirmed(b_conf):
+            continue
+
         meta["age_days"] = age_days
         meta["age_threshold"] = age_days_threshold
+        meta["a_last_confirmed_at"] = a_conf.isoformat() if a_conf else None
+        meta["b_last_confirmed_at"] = b_conf.isoformat() if b_conf else None
         findings.append(
             LintFinding(
                 check="stale_claims",

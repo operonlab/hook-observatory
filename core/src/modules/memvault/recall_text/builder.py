@@ -146,16 +146,23 @@ def build_recall_text(
     prompt: str,
     session_id: str | None = None,
     cwd: str | None = None,
+    as_of: datetime | None = None,
 ) -> str:
-    """Return the full recall text (may be empty). Never raises."""
+    """Return the full recall text (may be empty). Never raises.
+
+    as_of: optional time-travel anchor. When set, downstream recall sees the
+    KG state as it was at that moment (excludes blocks whose valid_at > as_of
+    and blocks whose invalid_at <= as_of). Hook callers leave it None for
+    present-time view.
+    """
     try:
-        return _build(prompt or "", session_id or "", cwd or "")
+        return _build(prompt or "", session_id or "", cwd or "", as_of)
     except Exception as e:
         _log(f"Unexpected error: {e}")
         return ""
 
 
-def _build(prompt: str, session_id: str, cwd: str) -> str:
+def _build(prompt: str, session_id: str, cwd: str, as_of: datetime | None = None) -> str:
     prompt = (prompt or "").strip()
     session_id = (session_id or "").strip()
     cwd = (cwd or "").strip()
@@ -192,9 +199,13 @@ def _build(prompt: str, session_id: str, cwd: str) -> str:
     encoded_q = urllib.parse.quote(prompt)
     cascade_enabled = os.environ.get("MEMVAULT_RECALL_DEDUP") != "0"
     cache_enabled = os.environ.get("MEMVAULT_RECALL_CACHE") != "0"
+    as_of_qs = f"&as_of={urllib.parse.quote(as_of.isoformat())}" if as_of else ""
 
     # ── Primary: Cascade Recall ──────────────────────────────────────────
-    cascade_url = f"{CORE_API_URL}/api/memvault/kg/recall?q={encoded_q}&top_k=5&space_id={SPACE_ID}"
+    cascade_url = (
+        f"{CORE_API_URL}/api/memvault/kg/recall?q={encoded_q}"
+        f"&top_k=5&space_id={SPACE_ID}{as_of_qs}"
+    )
     _, cascade_body = _http_get(cascade_url, timeout=CURL_TIMEOUT)
 
     cache_stale = False
@@ -376,7 +387,10 @@ def _build(prompt: str, session_id: str, cwd: str) -> str:
 
     # ── Fallback: simple search ──────────────────────────────────────────
     if not formatted:
-        search_url = f"{CORE_API_URL}/api/memvault/search?q={encoded_q}&top_k=5&space_id={SPACE_ID}"
+        search_url = (
+            f"{CORE_API_URL}/api/memvault/search?q={encoded_q}"
+            f"&top_k=5&space_id={SPACE_ID}{as_of_qs}"
+        )
         _, search_body = _http_get(search_url, timeout=CURL_TIMEOUT)
 
         if search_body:
@@ -412,7 +426,7 @@ def _build(prompt: str, session_id: str, cwd: str) -> str:
     if _should_inject_attitudes(prompt):
         att_url = (
             f"{CORE_API_URL}/api/memvault/kg/attitudes/relevant"
-            f"?q={encoded_q}&top_k=3&space_id={SPACE_ID}"
+            f"?q={encoded_q}&top_k=3&space_id={SPACE_ID}{as_of_qs}"
         )
         _, att_body = _http_get(att_url, timeout=3)
         att_from_cache = False

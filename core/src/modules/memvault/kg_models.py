@@ -159,6 +159,69 @@ class Triple(SpaceScopedModel):
     last_accessed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Verification governance (UNVERIFIED → VERIFIED auto-promotion pipeline)
+    # — verification_status: 'unverified' (default) | 'verified' | 'disputed'
+    # — verified_at: when promoted to verified (NULL until promotion)
+    # — last_confirmed_at: latest CRAG-CORRECT or stale_claims-OK touch
+    # — crag_correct_count / crag_incorrect_count: rolling counters fed by
+    #   _record_implicit_feedback; promotion judges based on these.
+    verification_status: Mapped[str] = mapped_column(
+        String(16), server_default=text("'unverified'"), nullable=False
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    crag_correct_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    crag_incorrect_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+
+
+# ---------------------------------------------------------------------------
+# Verification governance audit logs (Phase F + G)
+# ---------------------------------------------------------------------------
+
+
+class KGAutoEvolveLog(SpaceScopedModel):
+    """Idempotency log for auto_evolve_kg — prevents duplicate triple writes
+    when the same memory_id is fed twice (e.g. dream loop replay).
+    """
+
+    __tablename__ = "kg_auto_evolve_log"
+    __table_args__ = (
+        Index("idx_auto_evolve_log_memory", "memory_id"),
+        UniqueConstraint("memory_id", "content_hash", name="uq_auto_evolve_memory_hash"),
+        {"schema": SCHEMA},
+    )
+
+    memory_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    triples_extracted: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    triples_stored: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    contradictions_resolved: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+
+
+class KGVerificationRunLog(SpaceScopedModel):
+    """Audit log for promote_unverified() runs (Phase G weekly job)."""
+
+    __tablename__ = "kg_verification_run_log"
+    __table_args__ = (
+        Index("idx_verification_run_started", "started_at"),
+        {"schema": SCHEMA},
+    )
+
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dry_run: Mapped[bool] = mapped_column(server_default=text("true"))
+    candidates_scanned: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    promoted_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    demoted_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 # ---------------------------------------------------------------------------

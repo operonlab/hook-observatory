@@ -220,17 +220,37 @@ class MemoryBlockService(
         )
 
     async def invalidate_block(
-        self, db: AsyncSession, block_id: str, superseded_by_id: str, reason: str = "superseded"
-    ) -> None:
-        """Mark a block as invalid (superseded by newer knowledge). Does NOT delete."""
+        self,
+        db: AsyncSession,
+        block_id: str,
+        reason: str = "manual",
+        superseded_by_id: str | None = None,
+    ) -> MemoryBlock | None:
+        """Mark a block as invalid. Does NOT delete.
+
+        superseded_by_id is optional — set when a newer block replaces this one
+        (dream pipeline path); leave None for plain manual invalidation
+        (audit / mistake correction path).
+        """
         from datetime import UTC, datetime
 
         block = await self.get(db, block_id)
         if not block:
-            return
+            return None
         block.invalid_at = datetime.now(UTC)
         block.superseded_by = superseded_by_id
         block.invalidation_reason = reason
+        return block
+
+    async def restore_block(self, db: AsyncSession, block_id: str) -> MemoryBlock | None:
+        """Undo invalidate_block — clear invalid_at / superseded_by / reason."""
+        block = await self.get(db, block_id)
+        if not block:
+            return None
+        block.invalid_at = None
+        block.superseded_by = None
+        block.invalidation_reason = None
+        return block
 
     @staticmethod
     def _apply_date_filter(q, date_from=None, date_to=None):
@@ -1246,6 +1266,42 @@ class SearchFeedbackService:
         )
         rows = (await db.execute(q)).all()
         return {row.entity_id: int(row.net or 0) for row in rows}
+
+    async def record_implicit_batch(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        entity_ids: list[str],
+        query: str,
+        signal: str,
+    ) -> int:
+        """Bulk-record implicit feedback (CRAG-driven) for many entities at once.
+
+        Single SQL bulk INSERT — used by kg_services._record_implicit_feedback so
+        a single CRAG verdict propagates to all returned entities without N round-trips.
+
+        Returns the number of rows inserted. Caller is responsible for db.commit().
+        """
+        if not entity_ids:
+            return 0
+        import hashlib
+
+        query_hash = hashlib.sha256(query.encode()).hexdigest()
+        rows = [
+            {
+                "space_id": space_id,
+                "entity_id": eid,
+                "query_hash": query_hash,
+                "signal": signal,
+                "feedback_source": "implicit_crag",
+            }
+            for eid in entity_ids
+        ]
+        # Use ORM bulk-insert via add_all so SpaceScopedModel defaults (uuid7 id,
+        # timestamps) fire correctly — Core insert() bypasses default factories.
+        db.add_all([SearchFeedback(**r) for r in rows])
+        await db.flush()
+        return len(rows)
 
 
 # ======================== Module-level singletons ========================
