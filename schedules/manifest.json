@@ -51,6 +51,23 @@
       "enabled": true
     },
     {
+      "name": "ws-memvault-verification-review",
+      "label": "com.joneshong.scheduler.ws-memvault-verification-review",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_verification_review.py",
+      "schedule": {
+        "calendar": {
+          "Month": 5,
+          "DayOfMonth": 17,
+          "Hour": 9,
+          "Minute": 0
+        }
+      },
+      "description": "一次性: 2026-05-17 09:00 — promote_verified 首兩週 dry_run audit log 摘要 + Bark + markdown report；跑完手動 disable",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-session-archive",
       "label": "com.joneshong.scheduler.ws-session-archive",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_session_archive.py",
