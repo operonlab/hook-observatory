@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.errors import BadRequestError, NotFoundError
 from src.shared.models import _uuid7_hex
 
+from .clock import _today
 from .models import BacklogItem, CapacityHistory, UserToggle
 from .schemas_p1 import (
     ApplyWorkflowTogglesRequest,
@@ -391,7 +392,7 @@ class CapacityService:
     ) -> CapacityBaselineResponse:
         from datetime import timedelta
 
-        cutoff = _today() - timedelta(days=window_days)
+        cutoff = _today(space_id) - timedelta(days=window_days)
         stmt = select(CapacityHistory).where(
             CapacityHistory.space_id == space_id,
             CapacityHistory.budget_type == budget_type,
