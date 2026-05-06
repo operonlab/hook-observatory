@@ -269,10 +269,11 @@ async def create_block(
 async def update_block(
     block_id: str,
     body: MemoryBlockUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
-    instance = await memory_block_service.update(db, block_id, body)
+    instance = await memory_block_service.update(db, block_id, body, space_id=space_id)
     if not instance:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
     await db.commit()
@@ -283,10 +284,11 @@ async def update_block(
 @router.delete("/blocks/{block_id}", status_code=204)
 async def delete_block(
     block_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
-    deleted = await memory_block_service.delete(db, block_id)
+    deleted = await memory_block_service.delete(db, block_id, space_id=space_id)
     if not deleted:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
     await db.commit()
@@ -301,6 +303,7 @@ class InvalidateBlockRequest(BaseModel):
 async def invalidate_block_endpoint(
     block_id: str,
     body: InvalidateBlockRequest = Body(default_factory=InvalidateBlockRequest),
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
@@ -314,6 +317,7 @@ async def invalidate_block_endpoint(
         block_id=block_id,
         reason=body.reason,
         superseded_by_id=body.superseded_by_id,
+        space_id=space_id,
     )
     if instance is None:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
@@ -325,11 +329,14 @@ async def invalidate_block_endpoint(
 @router.post("/blocks/{block_id}/restore", response_model=MemoryBlockResponse)
 async def restore_block_endpoint(
     block_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
     """Undo invalidate — clears invalid_at / superseded_by / invalidation_reason."""
-    instance = await memory_block_service.restore_block(db, block_id=block_id)
+    instance = await memory_block_service.restore_block(
+        db, block_id=block_id, space_id=space_id
+    )
     if instance is None:
         raise NotFoundError("Block not found", code="memvault.block_not_found")
     await db.commit()
@@ -778,10 +785,11 @@ async def create_domain(
 async def update_domain(
     domain_id: str,
     body: KnowledgeDomainUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
-    instance = await knowledge_domain_service.update(db, domain_id, body)
+    instance = await knowledge_domain_service.update(db, domain_id, body, space_id=space_id)
     if not instance:
         raise NotFoundError("Domain not found", code="memvault.domain_not_found")
     await db.commit()

@@ -225,6 +225,7 @@ class MemoryBlockService(
         block_id: str,
         reason: str = "manual",
         superseded_by_id: str | None = None,
+        space_id: str | None = None,
     ) -> MemoryBlock | None:
         """Mark a block as invalid. Does NOT delete.
 
@@ -234,7 +235,10 @@ class MemoryBlockService(
         """
         from datetime import UTC, datetime
 
-        block = await self.get(db, block_id)
+        if space_id:
+            block = await self.get_in_space(db, block_id, space_id)
+        else:
+            block = await self.get(db, block_id)
         if not block:
             return None
         block.invalid_at = datetime.now(UTC)
@@ -242,9 +246,14 @@ class MemoryBlockService(
         block.invalidation_reason = reason
         return block
 
-    async def restore_block(self, db: AsyncSession, block_id: str) -> MemoryBlock | None:
+    async def restore_block(
+        self, db: AsyncSession, block_id: str, space_id: str | None = None
+    ) -> MemoryBlock | None:
         """Undo invalidate_block — clear invalid_at / superseded_by / reason."""
-        block = await self.get(db, block_id)
+        if space_id:
+            block = await self.get_in_space(db, block_id, space_id)
+        else:
+            block = await self.get(db, block_id)
         if not block:
             return None
         block.invalid_at = None
