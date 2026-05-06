@@ -1,7 +1,9 @@
 """Exchange rate service — fetch and cache currency rates.
 
 Uses jsdelivr CDN (fawazahmed0/currency-api) with Redis cache (6h TTL).
-Fallback: in-memory cache if Redis unavailable.
+Fallback: in-memory cache if Redis unavailable. If the cached data is older
+than ``_STALE_MAX_AGE`` (24h), the service raises ``ExchangeRatesUnavailableError``
+so callers can return HTTP 503 instead of silently using stale-or-bogus rates.
 """
 
 import json
@@ -12,8 +14,20 @@ from typing import Any
 import httpx
 
 from sdk_client.retry import async_with_backoff
+from src.shared.errors import WorkshopError
 
 logger = logging.getLogger(__name__)
+
+
+class ExchangeRatesUnavailableError(WorkshopError):
+    """Raised when exchange rates cannot be fetched and any cached data is stale.
+
+    Mapped to HTTP 503 by the global error handler so callers can decide
+    whether to retry or surface a friendlier message to the user.
+    """
+
+    status_code = 503
+    code = "finance.exchange_rates_unavailable"
 
 # CDN API — free, no key, daily updates
 _CDN_BASE = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies"
@@ -82,12 +96,19 @@ async def get_exchange_rates() -> dict[str, Any]:
     # Fetch fresh from CDN
     try:
         data = await fetch_rates()
-    except Exception:
-        logger.warning("CDN fetch failed, returning stale cache")
+    except Exception as exc:
+        logger.warning("CDN fetch failed, considering stale cache")
         if _mem_cache and (time.time() - _mem_cache_ts) < _STALE_MAX_AGE:
-            return _mem_cache
-        logger.warning("Stale cache expired (>24h), returning hardcoded fallback")
-        return {"base": "USD", "rates": {"TWD": 31.5, "USD": 1.0}, "date": "fallback"}
+            stale = dict(_mem_cache)
+            stale["is_fallback"] = True
+            return stale
+        # Stale cache expired (>24h) or no cache at all — fail loudly.
+        # A hard-coded fallback would corrupt cross-currency totals, so
+        # raise a 503 and let the caller decide how to surface the error.
+        logger.error("exchange_rates_unavailable", stale_age=time.time() - _mem_cache_ts)
+        raise ExchangeRatesUnavailableError(
+            "Exchange rates are unavailable (CDN unreachable and cache stale)",
+        ) from exc
 
     # Store in Redis
     redis = _get_redis()
