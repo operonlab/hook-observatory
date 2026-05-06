@@ -413,3 +413,47 @@ async def stream_chat(
                 continue
 
     yield StreamBlock(type=BlockType.DONE, data={})
+
+
+# ── QA Log query helpers ──
+
+
+async def list_qa_logs(
+    db,
+    *,
+    limit: int = 50,
+    flagged: bool | None = None,
+    session_id: str | None = None,
+) -> list:
+    """Return recent QaLog records, optionally filtered."""
+    from sqlalchemy import select
+
+    from .models import QaLog
+
+    stmt = select(QaLog).order_by(QaLog.created_at.desc())
+    if flagged is not None:
+        stmt = stmt.where(QaLog.flagged == flagged)
+    if session_id is not None:
+        stmt = stmt.where(QaLog.session_id == session_id)
+    stmt = stmt.limit(max(1, min(limit, 500)))
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def flag_qa_log(db, log_id: str, *, reason: str):
+    """Mark a QaLog record as flagged with a reason. Returns updated record."""
+    from sqlalchemy import select
+
+    from src.shared.errors import NotFoundError
+
+    from .models import QaLog
+
+    result = await db.execute(select(QaLog).where(QaLog.id == log_id))
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise NotFoundError(f"QaLog {log_id} not found", code="assistant.qa_log_not_found")
+    record.flagged = True
+    record.flag_reason = reason
+    await db.commit()
+    await db.refresh(record)
+    return record
