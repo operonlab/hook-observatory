@@ -154,10 +154,13 @@ async def _build_wallets_section(
 ) -> dict:
     """Build the wallet overview section.
 
-    For each active wallet: name, current_balance, month income/expense/net.
-    Also calculates total net worth across all wallets.
+    For each active, non-deleted wallet: name, current_balance, month
+    income / expense / transfer in / transfer out / net. Net change
+    factors transfer flows so the per-wallet view matches the actual
+    balance delta over the month.
     """
-    # Fetch active wallets
+    # Fetch active wallets (deleted wallets are intentionally excluded
+    # from totals — they should not contribute to net worth)
     wallets_q = select(Wallet).where(
         Wallet.space_id == space_id,
         Wallet.is_active == True,  # noqa: E712
@@ -172,50 +175,70 @@ async def _build_wallets_section(
 
     wallet_ids = [w.id for w in wallets]
 
-    # Per-wallet income for this month
-    income_q = (
+    # Single grouped query for income / expense / transfer-out per wallet
+    flow_q = (
         select(
             Transaction.wallet_id,
+            Transaction.type,
             func.coalesce(func.sum(Transaction.amount), 0).label("total"),
         )
         .where(
             Transaction.wallet_id.in_(wallet_ids),
-            Transaction.type == "income",
+            Transaction.type.in_(("income", "expense", "transfer")),
             Transaction.status == "completed",
             Transaction.deleted_at == None,  # noqa: E711
             func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
         )
-        .group_by(Transaction.wallet_id)
+        .group_by(Transaction.wallet_id, Transaction.type)
     )
-    income_q = apply_privacy_filter(income_q, Transaction, viewer_id)
-    income_rows = (await db.execute(income_q)).all()
-    income_map = {row.wallet_id: row.total for row in income_rows}
+    flow_q = apply_privacy_filter(flow_q, Transaction, viewer_id)
+    flow_rows = (await db.execute(flow_q)).all()
 
-    # Per-wallet expense for this month (excludes transfers)
-    expense_q = (
+    income_map: dict[str, Decimal] = {}
+    expense_map: dict[str, Decimal] = {}
+    transfer_out_map: dict[str, Decimal] = {}
+    for row in flow_rows:
+        if row.type == "income":
+            income_map[row.wallet_id] = row.total or Decimal("0")
+        elif row.type == "expense":
+            expense_map[row.wallet_id] = row.total or Decimal("0")
+        elif row.type == "transfer":
+            # NOTE: source-side transfer rows live under wallet_id with
+            # the matching transfer_to_wallet_id. The destination side is
+            # a separate row also typed "transfer" — counted below.
+            transfer_out_map[row.wallet_id] = row.total or Decimal("0")
+
+    # Transfer-in per wallet (target side)
+    transfer_in_q = (
         select(
-            Transaction.wallet_id,
+            Transaction.transfer_to_wallet_id,
             func.coalesce(func.sum(Transaction.amount), 0).label("total"),
         )
         .where(
-            Transaction.wallet_id.in_(wallet_ids),
-            Transaction.type == "expense",
+            Transaction.transfer_to_wallet_id.in_(wallet_ids),
+            Transaction.type == "transfer",
             Transaction.status == "completed",
             Transaction.deleted_at == None,  # noqa: E711
             func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
         )
-        .group_by(Transaction.wallet_id)
+        .group_by(Transaction.transfer_to_wallet_id)
     )
-    expense_q = apply_privacy_filter(expense_q, Transaction, viewer_id)
-    expense_rows = (await db.execute(expense_q)).all()
-    expense_map = {row.wallet_id: row.total for row in expense_rows}
+    transfer_in_rows = (await db.execute(transfer_in_q)).all()
+    transfer_in_map = {
+        row.transfer_to_wallet_id: row.total or Decimal("0") for row in transfer_in_rows
+    }
 
     total_net_worth = Decimal("0")
     items = []
     for w in wallets:
         w_income = income_map.get(w.id, Decimal("0"))
         w_expense = expense_map.get(w.id, Decimal("0"))
-        w_net = w_income - w_expense
+        w_transfer_out = transfer_out_map.get(w.id, Decimal("0"))
+        w_transfer_in = transfer_in_map.get(w.id, Decimal("0"))
+        # Net change reflects every flow that moves the balance, not just
+        # income minus expense. Transfers are zero-sum across all wallets
+        # but non-zero per wallet.
+        w_net = w_income - w_expense + w_transfer_in - w_transfer_out
         total_net_worth += w.current_balance
         items.append(
             {
@@ -226,6 +249,8 @@ async def _build_wallets_section(
                 "current_balance": _dec(w.current_balance),
                 "month_income": _dec(w_income),
                 "month_expense": _dec(w_expense),
+                "month_transfer_in": _dec(w_transfer_in),
+                "month_transfer_out": _dec(w_transfer_out),
                 "month_net_change": _dec(w_net),
             }
         )
@@ -247,7 +272,7 @@ async def _build_categories_section(
     Each category includes: name, total, count, percentage, and budget info if available.
     Sorted by amount DESC.
     """
-    # Expense by category
+    # Expense by category — exclude soft-deleted transactions
     cat_q = (
         select(
             Transaction.category_id,
@@ -260,6 +285,7 @@ async def _build_categories_section(
             Transaction.space_id == space_id,
             Transaction.type == "expense",
             Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
             func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
         )
         .group_by(Transaction.category_id, Category.name)
@@ -320,10 +346,11 @@ async def _build_installments_section(
 
     Lists active plans with progress and counts transactions due this month.
     """
-    # Active installment plans
+    # Active, non-deleted installment plans
     plans_q = select(InstallmentPlan).where(
         InstallmentPlan.space_id == space_id,
         InstallmentPlan.status == "active",
+        InstallmentPlan.deleted_at == None,  # noqa: E711
     )
     plans_q = apply_privacy_filter(plans_q, InstallmentPlan, viewer_id)
     plans_q = plans_q.order_by(InstallmentPlan.start_date.desc())
@@ -331,10 +358,11 @@ async def _build_installments_section(
 
     items = []
     for plan in plans:
-        # Count completed installments
+        # Count completed (non-deleted) installments
         completed_q = select(func.count()).where(
             Transaction.installment_plan_id == plan.id,
             Transaction.status == "completed",
+            Transaction.deleted_at == None,  # noqa: E711
         )
         completed_count = (await db.execute(completed_q)).scalar_one()
 
@@ -357,6 +385,7 @@ async def _build_installments_section(
         Transaction.space_id == space_id,
         Transaction.status == "scheduled",
         Transaction.installment_plan_id != None,  # noqa: E711
+        Transaction.deleted_at == None,  # noqa: E711
         func.to_char(Transaction.transacted_at, "YYYY-MM") == year_month,
     )
     due_this_month = (await db.execute(due_q)).scalar_one()
@@ -380,6 +409,7 @@ async def _build_subscriptions_section(
     subs_q = select(Subscription).where(
         Subscription.space_id == space_id,
         Subscription.status == "active",
+        Subscription.deleted_at == None,  # noqa: E711
     )
     subs_q = apply_privacy_filter(subs_q, Subscription, viewer_id)
     subs_q = subs_q.order_by(Subscription.amount.desc())
