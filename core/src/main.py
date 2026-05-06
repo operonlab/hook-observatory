@@ -139,7 +139,12 @@ app.add_middleware(SessionMiddleware)
 
 # Starlette SessionMiddleware for authlib OAuth state (CSRF protection).
 # This provides request.session used by authlib's authorize_redirect/authorize_access_token.
-app.add_middleware(StarletteSessionMiddleware, secret_key=settings.secret_key)
+app.add_middleware(
+    StarletteSessionMiddleware,
+    secret_key=settings.secret_key,
+    https_only=True,
+    same_site="lax",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -180,6 +185,19 @@ async def add_security_headers(request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' wss: https:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'",
+    )
     return response
 
 

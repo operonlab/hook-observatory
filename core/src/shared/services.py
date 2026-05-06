@@ -108,9 +108,14 @@ class BaseCRUDService(Generic[ModelT, CreateT, UpdateT, ResponseT]):
     critical_events: frozenset[str] = frozenset()
 
     # --- Protected fields: never set via update() mass assignment ---
+    # `role` is included as a defence against privilege-escalation attempts on
+    # any model that happens to have a role-like attribute; models without it
+    # are unaffected (the denylist is checked against payload keys, not the
+    # model schema).
     PROTECTED_FIELDS: frozenset[str] = frozenset(
         {
             "id",
+            "role",
             "space_id",
             "created_by",
             "created_at",
