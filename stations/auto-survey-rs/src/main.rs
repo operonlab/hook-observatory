@@ -274,25 +274,40 @@ async fn cmd_run(
     let mut results: Vec<String> = Vec::new();
     let mut any_failed = false;
 
-    if let Some(url) = &attend_url {
-        println!("[auto-survey] === Attendance: {url} ===");
-        match orchestrator::run_attendance(&pool, cfg, url, dry_run).await {
-            Ok(()) => results.push("attendance: OK".to_string()),
-            Err(e) => {
-                results.push(format!("attendance: FAILED ({e})"));
-                any_failed = true;
+    match (&attend_url, &quiz_url) {
+        (Some(a), Some(q)) => {
+            println!("[auto-survey] === Combined attend+quiz pipeline ===");
+            println!("[auto-survey]   attend: {a}");
+            println!("[auto-survey]   quiz:   {q}");
+            match orchestrator::run_combined(&pool, cfg, a, q, dry_run).await {
+                Ok(()) => results.push("combined: OK".to_string()),
+                Err(e) => {
+                    results.push(format!("combined: FAILED ({e})"));
+                    any_failed = true;
+                }
             }
         }
-    }
-    if let Some(url) = &quiz_url {
-        println!("[auto-survey] === Quiz: {url} ===");
-        match orchestrator::run_quiz(&pool, cfg, url, dry_run).await {
-            Ok(()) => results.push("quiz: OK".to_string()),
-            Err(e) => {
-                results.push(format!("quiz: FAILED ({e})"));
-                any_failed = true;
+        (Some(a), None) => {
+            println!("[auto-survey] === Attendance: {a} ===");
+            match orchestrator::run_attendance(&pool, cfg, a, dry_run).await {
+                Ok(()) => results.push("attendance: OK".to_string()),
+                Err(e) => {
+                    results.push(format!("attendance: FAILED ({e})"));
+                    any_failed = true;
+                }
             }
         }
+        (None, Some(q)) => {
+            println!("[auto-survey] === Quiz: {q} ===");
+            match orchestrator::run_quiz(&pool, cfg, q, dry_run).await {
+                Ok(()) => results.push("quiz: OK".to_string()),
+                Err(e) => {
+                    results.push(format!("quiz: FAILED ({e})"));
+                    any_failed = true;
+                }
+            }
+        }
+        (None, None) => unreachable!("guarded by bail! above"),
     }
 
     let summary = results.join(" | ");

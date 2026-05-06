@@ -1,5 +1,11 @@
 //! Pipeline orchestrator — coordinates recon, analyze, and fill phases.
-//! Mirrors Python `orchestrator.py` line-for-line.
+//!
+//! Architecture:
+//! - `run_attendance` / `run_quiz`: single-survey path with parallel fan-out.
+//!   Quiz path uses pathfinder gate (score must hit 100 before others run).
+//! - `run_combined`: per-person attend+quiz pipeline. Pathfinder gates the
+//!   quiz answers, then remaining people fan out (each runs attend → quiz
+//!   sequentially within their own task).
 
 use crate::analyzer::{analyze_quiz, is_transient_error, reanalyze_wrong};
 use crate::config::Settings;
@@ -9,35 +15,131 @@ use crate::playwright::{cleanup_session, create_session};
 use crate::recon::{classify_subjects, recon_survey, save_survey};
 use anyhow::{Context, Result};
 use rand::seq::SliceRandom;
-use rand::Rng;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use tokio::time::{sleep, Duration};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
+use tokio::time::{sleep, Duration, Instant};
 
-/// Phase 1 (recon) + Phase 2 (analyze) max retry attempts.
-/// Phase 3 (fill) is NEVER retried here — individual fill errors are
-/// handled inside `filler::fill_form` to prevent double-submission.
 const RECON_ANALYZE_MAX_ATTEMPTS: u32 = 2;
+/// Pathfinder retry cap when score < 100. Each retry re-analyzes wrong
+/// answers and resubmits (after deleting the previous submission row).
+const PATHFINDER_MAX_ATTEMPTS: u32 = 3;
 
 // ── Public entry points ───────────────────────────────────────────────────────
 
 pub async fn run_attendance(pool: &SqlitePool, cfg: &Settings, url: &str, dry_run: bool) -> Result<()> {
-    run_pipeline(pool, cfg, url, "attendance", dry_run).await
+    let people = fetch_active_people(pool).await?;
+    if people.is_empty() {
+        tracing::info!("No active people found. Import with: auto-survey-rs people import <csv>");
+        return Ok(());
+    }
+    tracing::info!("Found {} active people", people.len());
+
+    let (survey, _) = recon_and_analyze(pool, cfg, url, "attendance").await?;
+    if dry_run {
+        tracing::info!("Dry run — skipping form filling");
+        return Ok(());
+    }
+
+    let started = Instant::now();
+    parallel_fill(pool, cfg, &survey, &people, None, cfg.concurrency).await;
+    log_budget("attendance", started, cfg.time_budget_secs);
+    print_summary(pool, &survey).await;
+    Ok(())
 }
 
 pub async fn run_quiz(pool: &SqlitePool, cfg: &Settings, url: &str, dry_run: bool) -> Result<()> {
-    run_pipeline(pool, cfg, url, "quiz", dry_run).await
+    let people = fetch_active_people(pool).await?;
+    if people.is_empty() {
+        tracing::info!("No active people found. Import with: auto-survey-rs people import <csv>");
+        return Ok(());
+    }
+    tracing::info!("Found {} active people", people.len());
+
+    let (survey, mut answers) = recon_and_analyze(pool, cfg, url, "quiz").await?;
+    if dry_run {
+        tracing::info!("Dry run — skipping form filling");
+        return Ok(());
+    }
+
+    let mut shuffled = people;
+    shuffled.shuffle(&mut rand::thread_rng());
+    let scout = shuffled[0].clone();
+
+    let started = Instant::now();
+    answers = pathfinder_quiz_loop(pool, cfg, &survey, &scout, answers).await?;
+
+    let remaining: Vec<Person> = shuffled.iter().skip(1).cloned().collect();
+    parallel_fill(pool, cfg, &survey, &remaining, Some(&answers), cfg.concurrency).await;
+    log_budget("quiz", started, cfg.time_budget_secs);
+    print_summary(pool, &survey).await;
+    Ok(())
+}
+
+/// Combined attend + quiz with per-person pipeline.
+///
+/// Stages:
+/// 1. Recon attend + recon quiz (+ analyze) in parallel — `tokio::try_join!`.
+/// 2. Pathfinder runs quiz only and must reach score 100 (re-analyze + retry
+///    up to `PATHFINDER_MAX_ATTEMPTS`). Gate blocks fan-out until 100 (or
+///    retries exhausted).
+/// 3. Fan-out (semaphore-bounded `JoinSet`):
+///    - Pathfinder task: attend only (quiz already done).
+///    - Other tasks: attend → quiz sequentially within the task.
+pub async fn run_combined(
+    pool: &SqlitePool,
+    cfg: &Settings,
+    attend_url: &str,
+    quiz_url: &str,
+    dry_run: bool,
+) -> Result<()> {
+    let people = fetch_active_people(pool).await?;
+    if people.is_empty() {
+        tracing::info!("No active people found.");
+        return Ok(());
+    }
+    tracing::info!("Found {} active people", people.len());
+
+    // Stage 1: recon both surveys + analyze quiz, in parallel.
+    tracing::info!("Stage 1: Recon attend + quiz in parallel");
+    let attend_fut = recon_and_analyze(pool, cfg, attend_url, "attendance");
+    let quiz_fut = recon_and_analyze(pool, cfg, quiz_url, "quiz");
+    let ((attend_survey, _), (quiz_survey, mut answers)) =
+        tokio::try_join!(attend_fut, quiz_fut)?;
+
+    if dry_run {
+        tracing::info!("Dry run — skipping form filling");
+        return Ok(());
+    }
+
+    let started = Instant::now();
+
+    // Stage 2: pathfinder gate on quiz.
+    let mut shuffled = people;
+    shuffled.shuffle(&mut rand::thread_rng());
+    let scout = shuffled[0].clone();
+    tracing::info!("Stage 2: Pathfinder gate — {} runs quiz first", scout.name);
+    answers = pathfinder_quiz_loop(pool, cfg, &quiz_survey, &scout, answers).await?;
+
+    // Stage 3: fan-out per-person pipeline.
+    let remaining: Vec<Person> = shuffled.iter().skip(1).cloned().collect();
+    tracing::info!(
+        "Stage 3: Fan-out (concurrency={}, remaining={}, +1 pathfinder attend)",
+        cfg.concurrency,
+        remaining.len()
+    );
+    fan_out_pipeline(pool, cfg, &attend_survey, &quiz_survey, &scout, &remaining, &answers).await;
+
+    log_budget("combined", started, cfg.time_budget_secs);
+    print_summary(pool, &attend_survey).await;
+    print_summary(pool, &quiz_survey).await;
+    Ok(())
 }
 
 // ── recon_and_analyze ─────────────────────────────────────────────────────────
 
-/// Phase 1 (recon) + Phase 2 (analyze) wrapped in one retry unit.
-///
-/// Both phases are read-only against SurveyCake and idempotent against the DB
-/// (upsert Survey by URL). We retry together so that a fresh browser session +
-/// fresh LLM client are used on each attempt.
-///
-/// Mirrors Python `_recon_and_analyze(db, url, survey_type)`.
 pub async fn recon_and_analyze(
     pool: &SqlitePool,
     cfg: &Settings,
@@ -48,9 +150,10 @@ pub async fn recon_and_analyze(
 
     for attempt in 1..=RECON_ANALYZE_MAX_ATTEMPTS {
         tracing::info!(
-            "Phase 1: Recon — extracting form structure... (attempt {}/{})",
+            "Phase 1: Recon — extracting form structure... (attempt {}/{}, type={})",
             attempt,
-            RECON_ANALYZE_MAX_ATTEMPTS
+            RECON_ANALYZE_MAX_ATTEMPTS,
+            survey_type
         );
 
         match do_recon_analyze(pool, cfg, url, survey_type).await {
@@ -119,132 +222,227 @@ async fn do_recon_analyze(
     Ok((survey, answers))
 }
 
-// ── run_pipeline ──────────────────────────────────────────────────────────────
+// ── pathfinder_quiz_loop ──────────────────────────────────────────────────────
 
-/// Full pipeline: recon → analyze → fill (with pathfinder logic).
-/// Mirrors Python `_run_pipeline(db, url, survey_type, dry_run)`.
-async fn run_pipeline(
+/// Run quiz for the pathfinder. If score < 100, re-analyze wrong answers,
+/// delete the old submission, and retry up to `PATHFINDER_MAX_ATTEMPTS`.
+/// Returns the (possibly updated) answers map for downstream fan-out.
+async fn pathfinder_quiz_loop(
     pool: &SqlitePool,
     cfg: &Settings,
-    url: &str,
-    survey_type: &str,
-    dry_run: bool,
-) -> Result<()> {
-    let people = fetch_active_people(pool).await?;
-    if people.is_empty() {
-        tracing::info!("No active people found. Import with: auto-survey-rs people import <csv>");
-        return Ok(());
-    }
-    tracing::info!("Found {} active people", people.len());
+    survey: &Survey,
+    scout: &Person,
+    mut answers: HashMap<String, String>,
+) -> Result<HashMap<String, String>> {
+    for attempt in 1..=PATHFINDER_MAX_ATTEMPTS {
+        tracing::info!(
+            "  Pathfinder {} attempt {}/{}",
+            scout.name, attempt, PATHFINDER_MAX_ATTEMPTS
+        );
 
-    // Phase 1 + Phase 2 (retriable — read-only, idempotent)
-    let (survey, mut answers) = recon_and_analyze(pool, cfg, url, survey_type).await?;
+        fill_one_person_inner(pool, cfg, survey, scout, Some(&answers)).await;
 
-    if dry_run {
-        tracing::info!("Dry run — skipping form filling");
-        return Ok(());
-    }
+        let Some(sub) =
+            fetch_submission_for(pool, &survey.id.to_string(), &scout.id.to_string()).await?
+        else {
+            tracing::warn!("  Pathfinder submission row missing — proceeding with current answers");
+            return Ok(answers);
+        };
 
-    // Phase 3: Fill
-    tracing::info!("Phase 3: Fill — submitting forms...");
+        let _ = mark_pathfinder(pool, &sub.id.to_string()).await;
 
-    // Shuffle people — first becomes pathfinder (HANDOFF quirk 5)
-    let mut people = people;
-    people.shuffle(&mut rand::thread_rng());
+        if sub.status != "success" {
+            tracing::warn!(
+                "  Pathfinder failed: status={} err={:?} — proceeding (gate forced open)",
+                sub.status, sub.error_message
+            );
+            return Ok(answers);
+        }
 
-    let remaining = if survey_type == "quiz" && !answers.is_empty() {
-        let scout = &people[0];
-        tracing::info!("Pathfinder: {} goes first...", scout.name);
-        fill_one_person(pool, cfg, &survey, scout, Some(&answers)).await;
-
-        // Mark as pathfinder (HANDOFF quirk 4)
-        let sub = fetch_submission_for(pool, &survey.id.to_string(), &scout.id.to_string()).await?;
-        if let Some(ref s) = sub {
-            mark_pathfinder(pool, &s.id.to_string()).await.ok();
-
-            if s.status == "success" {
-                if let Some(score) = s.score {
-                    tracing::info!("  Pathfinder score: {}", score);
-                    if score < 100 {
-                        tracing::info!("  Score < 100 — re-analyzing wrong answers...");
-                        let all_subjects: Vec<String> = answers.keys().cloned().collect();
-                        let new_answers = reanalyze_wrong(pool, survey.id, &all_subjects, cfg).await?;
-                        let updated = new_answers.len();
-                        answers.extend(new_answers);
-                        tracing::info!("  Updated {} answers", updated);
-                    }
-                } else {
-                    tracing::info!("  Could not extract score — proceeding with current answers");
-                }
+        match sub.score {
+            Some(100) => {
+                tracing::info!("  Pathfinder score 100 — gate open");
+                return Ok(answers);
+            }
+            Some(s) if attempt < PATHFINDER_MAX_ATTEMPTS => {
+                tracing::info!("  Pathfinder score {} — re-analyzing wrong answers and retrying", s);
+                let all_subjects: Vec<String> = answers.keys().cloned().collect();
+                let new_answers = reanalyze_wrong(pool, survey.id, &all_subjects, cfg).await?;
+                let updated = new_answers.len();
+                answers.extend(new_answers);
+                tracing::info!("  Updated {} answers", updated);
+                // Allow re-fill on next attempt — fill_form short-circuits on success rows.
+                delete_submission(pool, &sub.id.to_string()).await?;
+            }
+            Some(s) => {
+                tracing::warn!(
+                    "  Pathfinder score {} after {} attempts — gate forced open",
+                    s, PATHFINDER_MAX_ATTEMPTS
+                );
+                return Ok(answers);
+            }
+            None => {
+                tracing::warn!("  Pathfinder score not extracted — gate forced open");
+                return Ok(answers);
             }
         }
+    }
+    Ok(answers)
+}
 
-        &people[1..]
-    } else {
-        &people[..]
-    };
+// ── parallel_fill ─────────────────────────────────────────────────────────────
 
-    // Fill remaining people (HANDOFF quirk 6: stagger delay; quirk 7: skip already-success)
-    for (i, person) in remaining.iter().enumerate() {
-        let existing = fetch_submission_for(pool, &survey.id.to_string(), &person.id.to_string()).await?;
-        if matches!(existing.as_ref().map(|s| s.status.as_str()), Some("success")) {
-            tracing::info!(
-                "  [{}/{}] {} — already submitted, skipping",
-                i + 1,
-                remaining.len(),
-                person.name
-            );
-            continue;
-        }
+/// Fan out submissions for one survey across `people` concurrently.
+async fn parallel_fill(
+    pool: &SqlitePool,
+    cfg: &Settings,
+    survey: &Survey,
+    people: &[Person],
+    answers: Option<&HashMap<String, String>>,
+    concurrency: usize,
+) {
+    if people.is_empty() {
+        return;
+    }
+    let n = concurrency.max(1).min(people.len());
+    let sem = Arc::new(Semaphore::new(n));
+    let mut joinset: JoinSet<String> = JoinSet::new();
+    let answers = answers.cloned();
 
-        // Stagger delay between submissions (not before the first one)
-        if i > 0 {
-            let delay = rand::thread_rng().gen_range(cfg.min_delay..=cfg.max_delay);
-            tracing::info!("  Waiting {}s before next submission...", delay);
-            sleep(Duration::from_secs(delay)).await;
-        }
-
-        tracing::info!("  [{}/{}] {}...", i + 1, remaining.len(), person.name);
-        let ans_opt = if survey_type == "quiz" { Some(&answers) } else { None };
-        fill_one_person(pool, cfg, &survey, person, ans_opt).await;
-
-        if let Ok(Some(sub)) =
-            fetch_submission_for(pool, &survey.id.to_string(), &person.id.to_string()).await
-        {
-            let score_str = sub
-                .score
-                .map(|s| format!(" (score: {})", s))
-                .unwrap_or_default();
-            let err_str = sub
-                .error_message
-                .as_deref()
-                .map(|e| format!(" — {e}"))
-                .unwrap_or_default();
-            tracing::info!("    Result: {}{}{}", sub.status, score_str, err_str);
-        }
+    for person in people.iter().cloned() {
+        let permit = sem
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("semaphore closed");
+        let pool = pool.clone();
+        let cfg = cfg.clone();
+        let survey = survey.clone();
+        let answers = answers.clone();
+        joinset.spawn(async move {
+            let _permit = permit;
+            fill_one_person_inner(&pool, &cfg, &survey, &person, answers.as_ref()).await;
+            person.name
+        });
     }
 
-    print_summary(pool, &survey).await;
-    Ok(())
+    while let Some(res) = joinset.join_next().await {
+        if let Err(e) = res {
+            tracing::error!("  task join error: {}", e);
+        }
+    }
+}
+
+// ── fan_out_pipeline (combined attend + quiz) ─────────────────────────────────
+
+/// Pathfinder spawns an attend-only task. Each non-pathfinder person spawns a
+/// task that runs attend → quiz sequentially.
+async fn fan_out_pipeline(
+    pool: &SqlitePool,
+    cfg: &Settings,
+    attend_survey: &Survey,
+    quiz_survey: &Survey,
+    scout: &Person,
+    remaining: &[Person],
+    answers: &HashMap<String, String>,
+) {
+    let total = remaining.len() + 1;
+    let n = cfg.concurrency.max(1).min(total);
+    let sem = Arc::new(Semaphore::new(n));
+    let mut joinset: JoinSet<String> = JoinSet::new();
+
+    {
+        let permit = sem
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("semaphore closed");
+        let pool = pool.clone();
+        let cfg = cfg.clone();
+        let attend_survey = attend_survey.clone();
+        let scout = scout.clone();
+        joinset.spawn(async move {
+            let _permit = permit;
+            fill_one_person_inner(&pool, &cfg, &attend_survey, &scout, None).await;
+            format!("{} (pathfinder/attend)", scout.name)
+        });
+    }
+
+    for person in remaining.iter().cloned() {
+        let permit = sem
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("semaphore closed");
+        let pool = pool.clone();
+        let cfg = cfg.clone();
+        let attend_survey = attend_survey.clone();
+        let quiz_survey = quiz_survey.clone();
+        let answers = answers.clone();
+        joinset.spawn(async move {
+            let _permit = permit;
+            fill_one_person_inner(&pool, &cfg, &attend_survey, &person, None).await;
+            fill_one_person_inner(&pool, &cfg, &quiz_survey, &person, Some(&answers)).await;
+            person.name
+        });
+    }
+
+    while let Some(res) = joinset.join_next().await {
+        if let Err(e) = res {
+            tracing::error!("  task join error: {}", e);
+        }
+    }
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-/// Fill form for one person — creates its own browser session.
-/// Mirrors Python `_fill_one_person`.
-async fn fill_one_person(
+async fn fill_one_person_inner(
     pool: &SqlitePool,
     cfg: &Settings,
     survey: &Survey,
     person: &Person,
     answers: Option<&HashMap<String, String>>,
 ) {
+    tracing::info!("  [{}] {} — submitting...", survey.survey_type, person.name);
     let pw = create_session(cfg.clone()).await;
     let result = fill_form(pw.as_ref(), pool, survey, person, answers).await;
     pw.close().await.ok();
     cleanup_session(pw.as_ref());
+
     if let Err(e) = result {
-        tracing::error!("fill_form error for {}: {}", person.name, e);
+        tracing::error!("    fill_form error for {}: {}", person.name, e);
+        return;
+    }
+
+    if let Ok(Some(sub)) =
+        fetch_submission_for(pool, &survey.id.to_string(), &person.id.to_string()).await
+    {
+        let score_str = sub.score.map(|s| format!(" (score: {})", s)).unwrap_or_default();
+        let err_str = sub
+            .error_message
+            .as_deref()
+            .map(|e| format!(" — {e}"))
+            .unwrap_or_default();
+        tracing::info!(
+            "    [{}] {} → {}{}{}",
+            survey.survey_type, person.name, sub.status, score_str, err_str
+        );
+    }
+}
+
+fn log_budget(label: &str, started: Instant, budget_secs: u64) {
+    let elapsed = started.elapsed().as_secs_f64();
+    let over = elapsed > budget_secs as f64;
+    if over {
+        tracing::warn!(
+            "[{}] elapsed {:.1}s — over budget {}s",
+            label, elapsed, budget_secs
+        );
+    } else {
+        tracing::info!(
+            "[{}] elapsed {:.1}s (budget {}s)",
+            label, elapsed, budget_secs
+        );
     }
 }
 
@@ -359,6 +557,13 @@ async fn mark_pathfinder(pool: &SqlitePool, submission_id: &str) -> Result<()> {
     Ok(())
 }
 
+async fn delete_submission(pool: &SqlitePool, submission_id: &str) -> Result<()> {
+    sqlx::query!("DELETE FROM submissions WHERE id = ?", submission_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 async fn print_summary(pool: &SqlitePool, survey: &Survey) {
     let survey_id = survey.id.to_string();
     let Ok(subs) = sqlx::query!(
@@ -375,7 +580,10 @@ async fn print_summary(pool: &SqlitePool, survey: &Survey) {
     let failed = subs.iter().filter(|s| s.status == "failed").count();
 
     tracing::info!("{}", "=".repeat(50));
-    tracing::info!("Summary: {}/{} success, {} failed", success, total, failed);
+    tracing::info!(
+        "[{}] Summary: {}/{} success, {} failed",
+        survey.survey_type, success, total, failed
+    );
 
     if survey.survey_type == "quiz" {
         let scores: Vec<i32> = subs
@@ -395,7 +603,6 @@ async fn print_summary(pool: &SqlitePool, survey: &Survey) {
 }
 
 fn type_name_of_error(e: &anyhow::Error) -> String {
-    // Best-effort: extract type from Debug output first line
     let dbg = format!("{e:?}");
     dbg.lines().next().unwrap_or("Error").to_string()
 }
