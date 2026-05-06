@@ -13,6 +13,8 @@ pub struct Settings {
 
     pub min_delay: u64,
     pub max_delay: u64,
+    pub concurrency: usize,
+    pub time_budget_secs: u64,
     pub headless: bool,
 
     pub camoufox_cli: String,
@@ -60,6 +62,8 @@ impl Settings {
 
             min_delay: env_parse("AUTO_SURVEY_MIN_DELAY", 5),
             max_delay: env_parse("AUTO_SURVEY_MAX_DELAY", 15),
+            concurrency: env_parse("AUTO_SURVEY_CONCURRENCY", 12usize),
+            time_budget_secs: env_parse("AUTO_SURVEY_TIME_BUDGET", 300u64),
             headless: env_bool("AUTO_SURVEY_HEADLESS", true),
 
             camoufox_cli: env_or("AUTO_SURVEY_CAMOUFOX_CLI", "camoufox-cli"),
