@@ -151,6 +151,7 @@ async def _build_wallets_section(
     space_id: str,
     year_month: str,
     viewer_id: str | None,
+    base_currency: str = "TWD",
 ) -> dict:
     """Build the wallet overview section.
 
@@ -158,7 +159,11 @@ async def _build_wallets_section(
     income / expense / transfer in / transfer out / net. Net change
     factors transfer flows so the per-wallet view matches the actual
     balance delta over the month.
+
+    ``total_net_worth`` is converted to ``base_currency`` so wallets
+    holding USD/JPY/etc. don't get summed naively against TWD.
     """
+    from .exchange import ExchangeRatesUnavailableError, get_exchange_rates
     # Fetch active wallets (deleted wallets are intentionally excluded
     # from totals — they should not contribute to net worth)
     wallets_q = select(Wallet).where(
@@ -228,7 +233,29 @@ async def _build_wallets_section(
         row.transfer_to_wallet_id: row.total or Decimal("0") for row in transfer_in_rows
     }
 
+    # Pull rates once. If the rate feed is unavailable we still produce
+    # the per-wallet rows but mark total_net_worth as unavailable rather
+    # than silently summing mixed currencies.
+    rates: dict[str, Decimal] = {}
+    rates_available = True
+    try:
+        rates_data = await get_exchange_rates()
+        rates = {k: Decimal(str(v)) for k, v in rates_data.get("rates", {}).items()}
+    except ExchangeRatesUnavailableError:
+        rates_available = False
+        logger.warning("net_worth_rates_unavailable", year_month=year_month)
+
+    def _to_base(amount: Decimal, currency: str) -> Decimal:
+        if currency == base_currency:
+            return amount
+        src = rates.get(currency)
+        tgt = rates.get(base_currency)
+        if not src or not tgt or src == 0:
+            return amount  # best-effort; flagged via base_currency_partial below
+        return (amount / src) * tgt
+
     total_net_worth = Decimal("0")
+    converted_all = True
     items = []
     for w in wallets:
         w_income = income_map.get(w.id, Decimal("0"))
@@ -239,7 +266,14 @@ async def _build_wallets_section(
         # income minus expense. Transfers are zero-sum across all wallets
         # but non-zero per wallet.
         w_net = w_income - w_expense + w_transfer_in - w_transfer_out
-        total_net_worth += w.current_balance
+        if rates_available:
+            converted = _to_base(w.current_balance, w.currency)
+            if w.currency != base_currency and not rates.get(w.currency):
+                converted_all = False
+            total_net_worth += converted
+        else:
+            total_net_worth += w.current_balance  # mixed currencies — see flag
+            converted_all = False
         items.append(
             {
                 "wallet_id": w.id,
@@ -258,6 +292,10 @@ async def _build_wallets_section(
     return {
         "items": items,
         "total_net_worth": _dec(total_net_worth),
+        "base_currency": base_currency,
+        "rates_available": rates_available,
+        # False = some wallets weren't converted (missing rate or stale feed).
+        "currencies_fully_converted": converted_all,
     }
 
 
