@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import platform
 import subprocess
 import sys
@@ -24,6 +25,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -289,17 +292,30 @@ def _detect_cuda_gpu(info: SystemInfo) -> None:
     info.gpu = GPUInfo(name=name, vram_mb=vram_mb, compute_type="cuda")
 
 
+_VRAM_UNIT_MAP = {
+    "KB": 1.0 / 1024,
+    "MB": 1.0,
+    "GB": 1024.0,
+    "TB": 1024.0 * 1024,
+}
+
+
 def _parse_vram_mb(vram_str: str) -> float:
-    """Parse "8 GB" or "1536 MB" → float MB."""
+    """Parse "8 GB" or "1536 MB" → float MB.
+
+    Returns 0.0 for unparseable input or unknown units (after logging the
+    unknown unit so future audits can spot quietly mishandled entries).
+    """
     parts = vram_str.strip().split()
     if len(parts) < 2:
         return 0.0
     try:
         value = float(parts[0])
         unit = parts[1].upper()
-        if unit == "GB":
-            return value * 1024
-        return value  # assume MB
+        if unit not in _VRAM_UNIT_MAP:
+            logger.warning("hardware_profile: unknown VRAM unit %r in %r", unit, vram_str)
+            return 0.0
+        return value * _VRAM_UNIT_MAP[unit]
     except ValueError:
         return 0.0
 
@@ -373,17 +389,23 @@ def compare_profiles(baseline: HardwareProfile, target: HardwareProfile) -> str:
         for key in common_keys:
             br = b_bench[key]
             tr = t_bench[key]
-            ratio = tr.latency_ms / br.latency_ms if br.latency_ms > 0 else 0.0
-            flag = " ⚠️" if ratio > 2.0 else ("  ✅" if ratio < 0.5 else "")
+            ratio: float | None = (
+                tr.latency_ms / br.latency_ms if br.latency_ms > 0 else None
+            )
+            ratio_display = f"{ratio:.2f}x" if ratio is not None else "N/A"
+            flag = (
+                " ⚠️" if ratio is not None and ratio > 2.0
+                else ("  ✅" if ratio is not None and ratio < 0.5 else "")
+            )
 
             lines.append(
                 f"| {br.task_type} | {br.model} "
                 f"| {br.latency_ms:.1f} | {tr.latency_ms:.1f} "
-                f"| {ratio:.2f}x{flag} "
+                f"| {ratio_display}{flag} "
                 f"| {br.throughput:.1f}/s | {tr.throughput:.1f}/s |"
             )
 
-            if ratio > 2.0:
+            if ratio is not None and ratio > 2.0:
                 anomalies.append(
                     f"`{br.task_type}/{br.model}`: target is {ratio:.1f}x slower "
                     f"({tr.latency_ms:.1f}ms vs {br.latency_ms:.1f}ms). "
