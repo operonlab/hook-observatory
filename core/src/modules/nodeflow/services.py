@@ -85,20 +85,29 @@ class FlowService(BaseCRUDService[Flow, FlowCreate, FlowUpdate, FlowResponse]):
             edges=[edge_service.to_response(e) for e in instance.edges if e.deleted_at is None],
         )
 
-    async def get_detail(self, db: AsyncSession, flow_id: str) -> FlowDetailResponse:
+    async def get_detail(
+        self, db: AsyncSession, flow_id: str, space_id: str | None = None
+    ) -> FlowDetailResponse:
         q = (
             select(Flow)
             .where(Flow.id == flow_id)
             .options(selectinload(Flow.nodes), selectinload(Flow.edges))
         )
+        if space_id is not None:
+            q = q.where(Flow.space_id == space_id)
         result = await db.execute(q)
         flow = result.scalar_one_or_none()
         if not flow or flow.deleted_at is not None:
             raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
         return self.to_detail_response(flow)
 
-    async def activate(self, db: AsyncSession, flow_id: str) -> FlowResponse:
-        flow = await db.get(Flow, flow_id)
+    async def activate(
+        self, db: AsyncSession, flow_id: str, space_id: str | None = None
+    ) -> FlowResponse:
+        if space_id:
+            flow = await self.get_in_space(db, flow_id, space_id)
+        else:
+            flow = await db.get(Flow, flow_id)
         if not flow or flow.deleted_at is not None:
             raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
         if flow.status == "active":
@@ -118,8 +127,13 @@ class FlowService(BaseCRUDService[Flow, FlowCreate, FlowUpdate, FlowResponse]):
             logger.warning("Failed to publish FLOW_ACTIVATED event", exc_info=True)
         return self.to_response(flow)
 
-    async def pause(self, db: AsyncSession, flow_id: str) -> FlowResponse:
-        flow = await db.get(Flow, flow_id)
+    async def pause(
+        self, db: AsyncSession, flow_id: str, space_id: str | None = None
+    ) -> FlowResponse:
+        if space_id:
+            flow = await self.get_in_space(db, flow_id, space_id)
+        else:
+            flow = await db.get(Flow, flow_id)
         if not flow or flow.deleted_at is not None:
             raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
         validate_transition(FlowLifecycle, flow.status, "paused", "Flow")
@@ -214,6 +228,10 @@ class EdgeService:
     async def create(
         self, db: AsyncSession, space_id: str, data: EdgeCreate, user_id: str | None = None
     ) -> Edge:
+        # IDOR guard: ensure parent flow belongs to this space
+        flow = await db.get(Flow, data.flow_id)
+        if not flow or flow.deleted_at is not None or flow.space_id != space_id:
+            raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
         edge = Edge(
             id=_uuid7_hex(),
             space_id=space_id,
@@ -228,13 +246,23 @@ class EdgeService:
         await db.refresh(edge)
         return edge
 
-    async def delete(self, db: AsyncSession, edge_id: str) -> None:
+    async def delete(self, db: AsyncSession, edge_id: str, space_id: str | None = None) -> None:
         edge = await db.get(Edge, edge_id)
-        if edge:
-            await db.delete(edge)
-            await db.flush()
+        if edge is None:
+            return
+        if space_id is not None and edge.space_id != space_id:
+            return
+        await db.delete(edge)
+        await db.flush()
 
-    async def list_by_flow(self, db: AsyncSession, flow_id: str) -> list[EdgeResponse]:
+    async def list_by_flow(
+        self, db: AsyncSession, flow_id: str, space_id: str | None = None
+    ) -> list[EdgeResponse]:
+        # IDOR guard: when space_id provided, ensure flow belongs to space
+        if space_id is not None:
+            flow = await db.get(Flow, flow_id)
+            if not flow or flow.deleted_at is not None or flow.space_id != space_id:
+                return []
         q = select(Edge).where(Edge.flow_id == flow_id)
         q = _soft_delete_filter(q, Edge)
         rows: Sequence[Edge] = (await db.execute(q)).scalars().all()
@@ -324,12 +352,16 @@ class FlowRunService:
             page_size=p.page_size,
         )
 
-    async def get_detail(self, db: AsyncSession, flow_run_id: str) -> FlowRunDetailResponse:
+    async def get_detail(
+        self, db: AsyncSession, flow_run_id: str, space_id: str | None = None
+    ) -> FlowRunDetailResponse:
         q = (
             select(FlowRun)
             .where(FlowRun.id == flow_run_id)
             .options(selectinload(FlowRun.node_run_logs))
         )
+        if space_id is not None:
+            q = q.where(FlowRun.space_id == space_id)
         result = await db.execute(q)
         run = result.scalar_one_or_none()
         if not run:
