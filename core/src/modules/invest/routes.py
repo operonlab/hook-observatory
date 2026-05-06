@@ -97,10 +97,11 @@ async def update_account(
 @router.get("/accounts/{account_id}/summary", response_model=AccountSummaryResponse)
 async def get_account_summary(
     account_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("invest.read"),
 ):
-    return await account_service.get_summary(db, account_id)
+    return await account_service.get_summary(db, account_id, space_id)
 
 
 # ======================== Positions ========================
@@ -139,10 +140,11 @@ async def create_position(
 async def update_position_price(
     position_id: str,
     data: PositionPriceUpdate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("invest.write"),
 ):
-    instance = await position_service.update_price(db, position_id, data)
+    instance = await position_service.update_price(db, position_id, data, space_id=space_id)
     await db.commit()
     return position_service.to_response(instance)
 

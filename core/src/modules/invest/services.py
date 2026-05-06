@@ -111,13 +111,16 @@ class AccountService(BaseCRUDService[Account, AccountCreate, AccountUpdate, Acco
             position_count=len(positions),
         )
 
-    async def get_summary(self, db: AsyncSession, account_id: str) -> AccountSummaryResponse:
-        account = await self.get(db, account_id)
+    async def get_summary(
+        self, db: AsyncSession, account_id: str, space_id: str
+    ) -> AccountSummaryResponse:
+        account = await self.get_in_space(db, account_id, space_id)
         if not account:
             raise NotFoundError("Account not found", code="invest.account_not_found")
 
         q = select(Position).where(
             Position.account_id == account_id,
+            Position.space_id == space_id,
             Position.deleted_at == None,  # noqa: E711
         )
         positions: Sequence[Position] = (await db.execute(q)).scalars().all()
@@ -182,8 +185,9 @@ class PositionService(BaseCRUDService[Position, PositionCreate, PositionUpdate, 
         db: AsyncSession,
         position_id: str,
         data: PositionPriceUpdate,
+        space_id: str,
     ) -> Position:
-        pos = await self.get(db, position_id)
+        pos = await self.get_in_space(db, position_id, space_id)
         if not pos:
             raise NotFoundError("Position not found", code="invest.position_not_found")
         pos.current_price = data.price
