@@ -263,6 +263,15 @@ def main() -> None:
 5. **共同成果** — 完成了什麼有意義的功能或修復
 6. **使用者偏好** — 工作流程偏好、工具選擇、命名慣例
 
+## 高價值信號識別（signal_type 欄位）
+識別每個 block 是否屬於以下高價值互動模式：
+- **correction**: 使用者明確糾正 AI 的行為或認知。觸發詞：「不對」、「不是這樣」、「錯了」、「你搞錯了」、"no not that"、"that's wrong"、"stop doing X"
+- **preference_confirmed**: 使用者明確確認或肯定某做法。觸發詞：「對，就是這樣」、「perfect」、「exactly」、「keep doing that」、「就這樣」
+- **repeated_pattern**: 本次 session 提到的主題/問題/解法曾在對話歷史中多次出現（暗示此為長期模式）
+- **architecture_decision**: 明確的技術或架構決定，包含選擇理由。觸發詞：「決定用 X 不用 Y」、「我們選擇」、「架構上要」、"we decided"、"the reason we chose"
+
+如果一個 block 不屬於上述任何類別，signal_type 設為 null。
+
 ## 輸入說明
 - [THINKING] 標記的段落是 AI 的內部推理，包含最深層的技術分析和決策推理
 - [TOOL:*] 標記顯示實際執行的操作和檔案路徑
@@ -284,6 +293,7 @@ def main() -> None:
     {{
       "topic": "簡短主題（5-15字）",
       "block_type": "technical | decision | preference | insight | pattern | skill",
+      "signal_type": "correction | preference_confirmed | repeated_pattern | architecture_decision | null",
       "content": "用完整的自然語句描述。包含因果關係和上下文（為什麼這樣做、遇到什麼問題、怎麼解決）。保留具體的檔案路徑、函數名、版本號、錯誤訊息。",
       "tags": ["具體標籤", "工具名", "模組名"],
       "search_keywords": ["關鍵搜尋詞", "中英文都要", "技術術語原文保留"],
@@ -305,6 +315,13 @@ def main() -> None:
 - `insight`: 跨領域洞察、模式識別、趨勢觀察
 - `pattern`: 反覆出現的問題或解決模式
 - `skill`: 使用者展現的具體技能、熟練度、學習過程（如 CLI 進階用法、特定框架深度使用、調優技巧）
+
+### signal_type（可選，高價值互動信號）
+- `correction`: 使用者糾正了 AI 的認知或行為（對 AI 學習最有價值）
+- `preference_confirmed`: 使用者明確確認某做法正確（強化學習信號）
+- `repeated_pattern`: 本 session 的主題在此前對話中曾反覆出現
+- `architecture_decision`: 明確的技術架構決定，有選擇理由
+- null: 無特定高價值信號（大多數 block）
 
 ### tags（3-12 個）
 - 必須包含：涉及的工具名、模組名、語言名（如 python, react, psycopg3, sentinel）
