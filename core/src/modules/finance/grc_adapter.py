@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
@@ -67,7 +68,9 @@ class FinanceGRCAdapter:
             {
                 "id": t.id,
                 "type": t.type,
-                "amount": str(t.amount),
+                # Keep amount as Decimal — never coerce to float (precision leak).
+                # Callers that need str/JSON should serialize at the boundary.
+                "amount": t.amount if t.amount is not None else Decimal("0"),
                 "description": t.description,
                 "merchant": t.merchant,
                 "category_id": t.category_id,
@@ -92,7 +95,9 @@ class FinanceGRCAdapter:
                 content=b.get("description") or b.get("merchant") or "",
                 metadata={
                     "type": b.get("type", "expense"),
-                    "amount": b.get("amount", 0.0),
+                    # Preserve Decimal — float default would silently corrupt
+                    # downstream amounts. Default Decimal("0") keeps the type.
+                    "amount": b.get("amount", Decimal("0")),
                     "category_id": b.get("category_id"),
                     "category_name": b.get("category_name"),
                     "has_description": bool(b.get("description")),
