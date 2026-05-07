@@ -79,3 +79,9 @@ stations/rlm/target/
 # Voice-gateway binary models + WASM (managed externally)
 stations/voice-gateway/models/
 stations/voice-gateway/static/sherpa-onnx-wasm-kws-main.*
+
+# Codex CLI working dir (per-machine config, not source)
+.codex/
+
+# Memvault debug captures (raw HTML response bodies from manual testing)
+memvault_*.html
