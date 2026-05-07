@@ -8,7 +8,26 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
+
+// stripEmoji removes emoji and other non-pronounceable Unicode marks
+// (Symbol-other, Symbol-modifier, Format) so TTS engines don't read them as
+// "EIGHT SPOKED ASTERISK" etc. Whitespace runs left behind get folded.
+func stripEmoji(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.In(r, unicode.So, unicode.Sk, unicode.Cf) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(b.String(), " "))
+}
 
 // intermediateRE matches tail patterns in the assistant's last message that
 // signal work-in-progress rather than completion.  Direct port of the Python
@@ -54,10 +73,10 @@ func IsIntermediate(msg string) bool {
 
 // BuildStopMessage assembles the "少爺，…任務完成了" announcement.
 func BuildStopMessage() string {
-	if summary := getTaskSummary(); summary != "" {
+	if summary := stripEmoji(getTaskSummary()); summary != "" {
 		return "少爺，" + summary + "的任務完成了"
 	}
-	if label := getLabel(); label != "" {
+	if label := stripEmoji(getLabel()); label != "" {
 		return "少爺，" + label + "任務完成了"
 	}
 	return "少爺，任務完成了"
@@ -186,9 +205,7 @@ func isWordChar(r rune) bool {
 	if r >= 'A' && r <= 'Z' {
 		return true
 	}
-	// Treat CJK as word characters so Chinese titles pass through.
-	if r > 0x7F {
-		return true
-	}
-	return false
+	// Pass real letters/digits through (CJK, kana, hangul, …) but NOT
+	// symbols/emoji — those need to be trimmed from pane-title prefixes.
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
 }

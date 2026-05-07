@@ -30,8 +30,8 @@ import (
 var (
 	TTSURL       = envOr("CLAUDE_TTS_URL", "http://localhost:10201/synthesize")
 	TTSEngine    = envOr("CLAUDE_TTS_ENGINE", "edge")
-	TTSVoice     = envOr("CLAUDE_TTS_VOICE", "zh-CN-YunjianNeural")
-	Voice        = envOr("CLAUDE_VOICE_ID", "zh-CN-YunjianNeural") // edge-tts fallback
+	TTSVoice     = envOr("CLAUDE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
+	Voice        = envOr("CLAUDE_VOICE_ID", "zh-CN-XiaoxiaoNeural") // edge-tts fallback
 	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")              // edge-tts fallback
 	PlaybackVol  = envOr("CLAUDE_VOICE_VOLUME", "0.4")
 	WebuiURL     = envOr("TMUX_WEBUI_URL", "http://127.0.0.1:10105")

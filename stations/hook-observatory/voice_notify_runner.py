@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 """
+*** LEGACY PANIC-FALLBACK ONLY — DO NOT use as the canonical TTS path. ***
+
+Authoritative TTS implementation lives in the Go hook-dispatcher:
+    ~/workshop/stations/hook-dispatcher/internal/handlers/voicenotify/
+This script is invoked solely when the Go binary panics and exec's the
+Python fallback. Edits here will not affect normal TTS behaviour.
+
 Standalone runner for voice_notify handler.
 
 Invoked by the Go hook-dispatcher to fire ONLY the voice_notify handler —

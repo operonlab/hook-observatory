@@ -1,4 +1,16 @@
 """
+=========================================================================
+*** DEPRECATED — DO NOT EDIT ***  Source of truth has moved to Go.
+=========================================================================
+Authoritative implementation:
+    ~/workshop/stations/hook-dispatcher/internal/handlers/voicenotify/
+
+This Python module is retained ONLY as a panic-fallback for the Go
+hook-dispatcher binary (via voice_notify_runner.py). It is never invoked
+during normal operation. Edits made here will not affect TTS behaviour —
+fix the Go port and `make install` instead.
+=========================================================================
+
 Voice notification handler with async TTS queue.
 
 Events:
