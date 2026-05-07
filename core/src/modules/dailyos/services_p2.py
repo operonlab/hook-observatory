@@ -1412,6 +1412,65 @@ class RitualService:
             evening_checklist=evening_checklist,
         )
 
+    async def complete_morning_ritual(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        user_id: str | None = None,
+    ) -> RitualStatusResponse:
+        """Mark today's morning ritual as completed.
+
+        Step 6 audit finding: ritual state was previously read by
+        get_ritual_status but never written. This method (and its evening
+        counterpart) are the missing write side.
+        """
+        await self._mark_ritual_complete(db, space_id, "morning", user_id=user_id)
+        return await self.get_ritual_status(db, space_id)
+
+    async def complete_evening_ritual(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        user_id: str | None = None,
+    ) -> RitualStatusResponse:
+        """Mark today's evening ritual as completed."""
+        await self._mark_ritual_complete(db, space_id, "evening", user_id=user_id)
+        return await self.get_ritual_status(db, space_id)
+
+    async def _mark_ritual_complete(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        slot: str,
+        user_id: str | None = None,
+    ) -> None:
+        """Write ritual completion marker into today's DailyPlan.method_state."""
+        if slot not in ("morning", "evening"):
+            raise BadRequestError(
+                f"Invalid ritual slot: {slot}", code="dailyos.invalid_ritual_slot"
+            )
+
+        # Lazy import — daily_plan_service lives in services.py and importing it
+        # at module top creates a circular dep with this file.
+        from .services import daily_plan_service
+
+        plan = await daily_plan_service.get_or_create_today(db, space_id, user_id=user_id)
+        method_state = dict(plan.method_state or {})
+        ritual_state = dict(method_state.get("ritual", {}))
+
+        now_iso = datetime.now(UTC).isoformat()
+        if slot == "morning":
+            ritual_state["morning_completed"] = True
+            ritual_state["morning_completed_at"] = now_iso
+        else:
+            ritual_state["evening_completed"] = True
+            ritual_state["evening_completed_at"] = now_iso
+
+        method_state["ritual"] = ritual_state
+        plan.method_state = method_state
+        plan.updated_at = datetime.now(UTC)
+        await db.flush()
+
 
 # ======================== Singletons ========================
 
