@@ -1,43 +1,10 @@
 package handlers
 
 import (
-	"os"
-	"regexp"
 	"strings"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
 )
-
-// anIsLiteLLMProxy detects the cc-llm scenario where ANTHROPIC_BASE_URL points
-// at the local LiteLLM proxy (port 4000). Third-party models routed through
-// LiteLLM (minimax, glm, kimi, ...) cannot follow the kebab-case `name`
-// convention; blocking them produces an empty tool_use_id that crashes strict
-// adapters with "tool result's tool id() not found". Auto-fill instead.
-func anIsLiteLLMProxy() bool {
-	base := os.Getenv("ANTHROPIC_BASE_URL")
-	return strings.Contains(base, "127.0.0.1:4000") || strings.Contains(base, "localhost:4000")
-}
-
-var anWordRe = regexp.MustCompile(`[a-z]+`)
-
-func anDeriveName(prompt, subagentType string) string {
-	words := anWordRe.FindAllString(strings.ToLower(prompt), -1)
-	if len(words) > 3 {
-		words = words[:3]
-	}
-	if len(words) == 0 {
-		words = []string{"run", "task"}
-	}
-	suffix := subagentType
-	if suffix == "" {
-		suffix = "agent"
-	}
-	name := strings.Join(words, "-") + "-" + suffix
-	if len(name) > 60 {
-		name = name[:60]
-	}
-	return name
-}
 
 func init() {
 	core.Register("PreToolUse", core.Entry{
@@ -48,51 +15,40 @@ func init() {
 	})
 }
 
-// agentNamingHandle is the Go port of handlers/agent_naming.py.
+// agentNamingHandle validates Agent tool calls and suggests specialized
+// subagent types based on prompt keywords.
 //
-// Enforces that every Agent tool call has a descriptive `name` parameter
-// (kebab-case verb-noun). Suggests a specialized subagent_type when keyword
-// matching finds a better fit than general-purpose.
+// History: this handler used to require a top-level `name` parameter
+// (kebab-case verb-noun). That was unsatisfiable — Claude Code's Agent
+// tool schema declares `additionalProperties: false` and does not list
+// `name`, so the field is filtered before the hook ever sees it. The
+// check blocked every Agent call indefinitely. The schema-legal
+// `description` field (required, "3-5 word description of the task")
+// now carries that role; we no longer reject calls for missing `name`.
 func agentNamingHandle(_, toolName string, toolInput map[string]any, _ string) core.HookResult {
 	if toolName != "Agent" {
 		return core.Allow()
 	}
 
-	name := strings.TrimSpace(anGetString(toolInput, "name"))
+	description := strings.TrimSpace(anGetString(toolInput, "description"))
 	subagentType := strings.TrimSpace(anGetString(toolInput, "subagent_type"))
 	prompt := anGetString(toolInput, "prompt")
 
-	// Rule 1: name is mandatory
-	if name == "" {
-		// cc-llm / LiteLLM scenario: third-party model can't follow our
-		// kebab-case convention. Auto-fill a derived name instead of blocking,
-		// because blocking produces an empty tool_use_id that crashes strict
-		// models like minimax-m2.7 with "tool result's tool id() not found".
-		if anIsLiteLLMProxy() {
-			patched := make(map[string]any, len(toolInput)+1)
-			for k, v := range toolInput {
-				patched[k] = v
-			}
-			patched["name"] = anDeriveName(prompt, subagentType)
-			return core.HookResult{UpdatedInput: patched}
-		}
+	if description == "" {
 		return core.Block(
-			`Agent must have a ` + "`name`" + ` parameter (kebab-case verb-noun, ` +
-				`e.g. name: "scan-auth-routes"). Add a descriptive name and retry.`,
+			"Agent tool call is missing `description` (required by schema). " +
+				"Provide a short 3-5 word task description and retry.",
 		)
 	}
 
-	// Rule 2: if using a specialized type (not general-purpose / empty), allow silently
 	if subagentType != "" && subagentType != "general-purpose" {
 		return core.Allow()
 	}
 
-	// Rule 3: general-purpose with MCP need → allow silently
 	if anNeedsMCP(prompt) {
 		return core.Allow()
 	}
 
-	// Rule 4: suggest a better type if keyword matches
 	if suggested := anSuggestType(prompt); suggested != "" {
 		return core.Message(
 			"💡 Consider using `subagent_type: \"" + suggested + "\"` for this task " +
@@ -106,7 +62,6 @@ func agentNamingHandle(_, toolName string, toolInput map[string]any, _ string) c
 
 // ---------------------------------------------------------------------------
 // Keyword mapping — ordered by specificity, first match wins.
-// Mirrors Python KEYWORD_MAP exactly.
 // ---------------------------------------------------------------------------
 
 type anKeywordEntry struct {

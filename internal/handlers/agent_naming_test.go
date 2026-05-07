@@ -8,7 +8,7 @@ import (
 func TestAgentNamingNonAgentTool(t *testing.T) {
 	// Edge: non-Agent tool → always allow
 	res := agentNamingHandle("PreToolUse", "Bash",
-		map[string]any{"name": "", "prompt": "do something"},
+		map[string]any{"description": "", "prompt": "do something"},
 		"",
 	)
 	if res.IsBlock() {
@@ -16,35 +16,39 @@ func TestAgentNamingNonAgentTool(t *testing.T) {
 	}
 }
 
-func TestAgentNamingMissingNameBlocks(t *testing.T) {
-	// Error path: no name → block
+func TestAgentNamingMissingDescriptionBlocks(t *testing.T) {
+	// Error path: schema requires description; reject if missing
 	res := agentNamingHandle("PreToolUse", "Agent",
 		map[string]any{"prompt": "implement the feature"},
 		"",
 	)
 	if !res.IsBlock() {
-		t.Errorf("missing name should block, got decision=%q", res.Decision)
+		t.Errorf("missing description should block, got decision=%q", res.Decision)
 	}
-	if !strings.Contains(res.Reason, "name") {
-		t.Errorf("block reason should mention 'name', got %q", res.Reason)
+	if !strings.Contains(res.Reason, "description") {
+		t.Errorf("block reason should mention 'description', got %q", res.Reason)
 	}
 }
 
-func TestAgentNamingEmptyNameBlocks(t *testing.T) {
-	// Error path: empty name → block
+func TestAgentNamingEmptyDescriptionBlocks(t *testing.T) {
+	// Error path: empty/whitespace description → block
 	res := agentNamingHandle("PreToolUse", "Agent",
-		map[string]any{"name": "   ", "prompt": "implement the feature"},
+		map[string]any{"description": "   ", "prompt": "implement the feature"},
 		"",
 	)
 	if !res.IsBlock() {
-		t.Errorf("empty name should block, got decision=%q", res.Decision)
+		t.Errorf("empty description should block, got decision=%q", res.Decision)
 	}
 }
 
 func TestAgentNamingSpecializedTypeAllows(t *testing.T) {
 	// Rule 2: specialized subagent_type → allow silently
 	res := agentNamingHandle("PreToolUse", "Agent",
-		map[string]any{"name": "scan-routes", "subagent_type": "explorer", "prompt": "explore codebase"},
+		map[string]any{
+			"description":   "scan auth routes",
+			"subagent_type": "explorer",
+			"prompt":        "explore codebase",
+		},
 		"",
 	)
 	if res.IsBlock() || res.Message != "" {
@@ -56,7 +60,7 @@ func TestAgentNamingMCPKeywordAllows(t *testing.T) {
 	// Rule 3: MCP keywords → allow silently even as general-purpose
 	res := agentNamingHandle("PreToolUse", "Agent",
 		map[string]any{
-			"name":          "mcp-task",
+			"description":   "MCP task",
 			"subagent_type": "general-purpose",
 			"prompt":        "use mcpproxy to retrieve_tools and call_tool",
 		},
@@ -70,7 +74,10 @@ func TestAgentNamingMCPKeywordAllows(t *testing.T) {
 func TestAgentNamingKeywordSuggestsType(t *testing.T) {
 	// Rule 4: keyword match → message with suggestion
 	res := agentNamingHandle("PreToolUse", "Agent",
-		map[string]any{"name": "do-stuff", "prompt": "implement the authentication feature"},
+		map[string]any{
+			"description": "do stuff",
+			"prompt":      "implement the authentication feature",
+		},
 		"",
 	)
 	if res.IsBlock() {
@@ -85,9 +92,12 @@ func TestAgentNamingKeywordSuggestsType(t *testing.T) {
 }
 
 func TestAgentNamingNoKeywordAllows(t *testing.T) {
-	// Happy path: name present, no special keyword → allow with no message
+	// Happy path: description present, no special keyword → allow with no message
 	res := agentNamingHandle("PreToolUse", "Agent",
-		map[string]any{"name": "my-task", "prompt": "do something unusual"},
+		map[string]any{
+			"description": "my task",
+			"prompt":      "do something unusual",
+		},
 		"",
 	)
 	if res.IsBlock() {
@@ -97,7 +107,10 @@ func TestAgentNamingNoKeywordAllows(t *testing.T) {
 
 func TestAgentNamingSuggestBrowser(t *testing.T) {
 	res := agentNamingHandle("PreToolUse", "Agent",
-		map[string]any{"name": "scrape-site", "prompt": "use playwright to scrape the website"},
+		map[string]any{
+			"description": "scrape site",
+			"prompt":      "use playwright to scrape the website",
+		},
 		"",
 	)
 	if res.Message == "" {
@@ -105,5 +118,22 @@ func TestAgentNamingSuggestBrowser(t *testing.T) {
 	}
 	if !strings.Contains(res.Message, "browser") {
 		t.Errorf("expected 'browser' in suggestion, got %q", res.Message)
+	}
+}
+
+// Regression: schema declares additionalProperties:false, so any `name`
+// field is filtered out before the hook runs. Even if a `name` somehow
+// arrives, it must not affect the decision — only `description` matters.
+func TestAgentNamingIgnoresNameField(t *testing.T) {
+	res := agentNamingHandle("PreToolUse", "Agent",
+		map[string]any{
+			"name":        "legacy-name",
+			"description": "regression check",
+			"prompt":      "do something unusual",
+		},
+		"",
+	)
+	if res.IsBlock() {
+		t.Errorf("presence of legacy `name` should not affect decision, got block: %q", res.Reason)
 	}
 }
