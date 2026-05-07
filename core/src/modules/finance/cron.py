@@ -17,11 +17,28 @@ from uuid_utils import uuid7
 
 from src.events.bus import Event, event_bus
 from src.events.types import FinanceEvents
+from src.shared.services import _pending_events
 
 from .models import InstallmentPlan, Subscription, Transaction, Wallet
 from .services import _adjust_wallet_balance, wallet_service
 
 logger = structlog.get_logger()
+
+
+def _emit_event(event: Event) -> None:
+    """Accumulate event for post-commit publish, or fire-and-forget if no accumulator.
+
+    Inside an HTTP request, the event_accumulator middleware sets up a
+    pending list; events appended here are published only after
+    ``db.commit()`` returns successfully. Outside of a request (e.g.
+    direct CLI / scheduler invocation) we fall back to fire-and-forget
+    so the call site stays consistent.
+    """
+    pending = _pending_events.get(None)
+    if pending is not None:
+        pending.append((event, False))
+        return
+    event_bus.publish_fire_and_forget(event)
 
 
 async def process_installment_due(db: AsyncSession, space_id: str) -> int:
@@ -86,7 +103,10 @@ async def process_installment_due(db: AsyncSession, space_id: str) -> int:
         affected_plan_ids.add(txn.installment_plan_id)
         processed += 1
 
-        await event_bus.publish(
+        # Defer publish until after commit — subscribers may read the
+        # transaction back via a fresh DB session and would otherwise see
+        # stale data.
+        _emit_event(
             Event(
                 type=FinanceEvents.INSTALLMENT_DUE,
                 data={
@@ -120,7 +140,7 @@ async def process_installment_due(db: AsyncSession, space_id: str) -> int:
             plan.status = "completed"
             await db.flush()
 
-            await event_bus.publish(
+            _emit_event(
                 Event(
                     type=FinanceEvents.INSTALLMENT_COMPLETED,
                     data={
@@ -272,7 +292,9 @@ async def process_subscription_billing(db: AsyncSession, space_id: str) -> int:
             await db.flush()
             processed += 1
 
-            await event_bus.publish(
+            # Defer publish until after commit — subscribers must not see
+            # the renewal event before the new transaction row is durable.
+            _emit_event(
                 Event(
                     type=FinanceEvents.SUBSCRIPTION_RENEWED,
                     data={

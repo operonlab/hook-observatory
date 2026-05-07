@@ -339,10 +339,13 @@ async def sync_wallet(
 @router.get("/wallets/{wallet_id}/reconcile", response_model=ReconcileResponse)
 async def reconcile_wallet(
     wallet_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    return await wallet_service.reconcile(db, wallet_id, user_id=user.get("id"))
+    return await wallet_service.reconcile(
+        db, wallet_id, user_id=user.get("id"), space_id=space_id
+    )
 
 
 @router.get(
@@ -350,13 +353,17 @@ async def reconcile_wallet(
 )
 async def list_wallet_snapshots(
     wallet_id: str,
+    space_id: str = Query("default"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
     return await wallet_service.list_snapshots(
-        db, wallet_id, PaginationParams(page=page, page_size=page_size)
+        db,
+        wallet_id,
+        PaginationParams(page=page, page_size=page_size),
+        space_id=space_id,
     )
 
 
@@ -365,10 +372,13 @@ async def diff_wallet_snapshots(
     wallet_id: str,
     from_v: int = Query(..., description="From version number"),
     to_v: int = Query(..., description="To version number"),
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    return await wallet_service.diff_snapshots(db, wallet_id, from_v, to_v)
+    return await wallet_service.diff_snapshots(
+        db, wallet_id, from_v, to_v, space_id=space_id
+    )
 
 
 @router.get("/wallets/{wallet_id}/snapshots/gap-analysis", response_model=GapAnalysisResponse)
@@ -376,10 +386,13 @@ async def gap_analysis(
     wallet_id: str,
     from_v: int = Query(..., description="From version number"),
     to_v: int = Query(..., description="To version number"),
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("finance.read"),
 ):
-    return await wallet_service.gap_analysis(db, wallet_id, from_v, to_v)
+    return await wallet_service.gap_analysis(
+        db, wallet_id, from_v, to_v, space_id=space_id
+    )
 
 
 # ======================== Categories ========================

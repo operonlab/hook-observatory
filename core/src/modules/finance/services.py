@@ -447,7 +447,10 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         user_id: str | None = None,
     ) -> WalletSnapshotResponse:
         """Record synced balance and update wallet.current_balance."""
-        wallet = await db.get(Wallet, wallet_id)
+        # Space-scoped fetch prevents IDOR — without this, a caller in
+        # space A could sync a wallet belonging to space B by guessing
+        # its UUID.
+        wallet = await self.get_in_space(db, wallet_id, space_id)
         if not wallet:
             raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
 
@@ -506,9 +509,19 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         db: AsyncSession,
         wallet_id: str,
         user_id: str | None = None,
+        *,
+        space_id: str | None = None,
     ) -> ReconcileResponse:
-        """Return reconciliation summary: current vs calculated balance."""
-        wallet = await db.get(Wallet, wallet_id)
+        """Return reconciliation summary: current vs calculated balance.
+
+        ``space_id`` is required for IDOR protection at the route layer;
+        it is keyword-only and defaults to None for backward compat with
+        cron / CLI callers that already trust the wallet_id.
+        """
+        if space_id is not None:
+            wallet = await self.get_in_space(db, wallet_id, space_id)
+        else:
+            wallet = await db.get(Wallet, wallet_id)
         if not wallet:
             raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
 
@@ -571,9 +584,19 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         db: AsyncSession,
         wallet_id: str,
         pagination: PaginationParams | None = None,
+        *,
+        space_id: str | None = None,
     ) -> PaginatedResponse[WalletSnapshotResponse]:
-        """List snapshot history for a wallet (version DESC)."""
-        wallet = await db.get(Wallet, wallet_id)
+        """List snapshot history for a wallet (version DESC).
+
+        Pass ``space_id`` to scope the wallet check to the caller's
+        space (IDOR protection). When omitted (legacy callers) the
+        wallet is fetched without a space check.
+        """
+        if space_id is not None:
+            wallet = await self.get_in_space(db, wallet_id, space_id)
+        else:
+            wallet = await db.get(Wallet, wallet_id)
         if not wallet:
             raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
 
@@ -638,8 +661,19 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         wallet_id: str,
         from_v: int,
         to_v: int,
+        *,
+        space_id: str | None = None,
     ) -> SnapshotDiffResponse:
-        """Compute diff between two snapshot versions."""
+        """Compute diff between two snapshot versions.
+
+        ``space_id`` enforces IDOR boundary — callers in space A cannot
+        read snapshots from space B's wallets even if they guess the
+        wallet_id and version numbers.
+        """
+        if space_id is not None:
+            wallet = await self.get_in_space(db, wallet_id, space_id)
+            if not wallet:
+                raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
         from_snap, to_snap = await self._get_snapshot_pair(db, wallet_id, from_v, to_v)
 
         balance_delta = to_snap.synced_balance - from_snap.synced_balance
@@ -669,8 +703,17 @@ class WalletService(BaseCRUDService[Wallet, WalletCreate, WalletUpdate, WalletRe
         wallet_id: str,
         from_v: int,
         to_v: int,
+        *,
+        space_id: str | None = None,
     ) -> GapAnalysisResponse:
-        """Sandwich reconciliation: snapshot delta vs transaction sum."""
+        """Sandwich reconciliation: snapshot delta vs transaction sum.
+
+        ``space_id`` scopes the wallet existence check (IDOR guard).
+        """
+        if space_id is not None:
+            wallet = await self.get_in_space(db, wallet_id, space_id)
+            if not wallet:
+                raise NotFoundError("Wallet not found", code="finance.wallet_not_found")
         from_snap, to_snap = await self._get_snapshot_pair(db, wallet_id, from_v, to_v)
 
         snapshot_delta = to_snap.synced_balance - from_snap.synced_balance
@@ -1694,11 +1737,13 @@ class TransferService:
 
         txn_at = transacted_at or datetime.now(UTC)
 
-        # Lock wallets in sorted order to prevent deadlocks
+        # Lock wallets in sorted order to prevent deadlocks. Both wallets
+        # must belong to the caller's space — otherwise an attacker who
+        # guessed a wallet_id from another space could siphon funds.
         sorted_ids = sorted([from_wallet_id, to_wallet_id])
         for wid in sorted_ids:
             w = await db.get(Wallet, wid, with_for_update=True)
-            if not w:
+            if not w or w.space_id != space_id or w.deleted_at is not None:
                 raise NotFoundError(f"Wallet {wid} not found", code="finance.wallet_not_found")
 
         # Create outgoing transaction
