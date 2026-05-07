@@ -283,6 +283,37 @@ async def _gather_signal(
         except Exception:
             logger.debug("dream.gather_signal: PPR centrality failed", exc_info=True)
 
+    # --- Signal-type scan: collect blocks with high-value interaction patterns ---
+    # Values: correction | preference_confirmed | repeated_pattern | architecture_decision
+    signal_types = ("correction", "preference_confirmed", "repeated_pattern", "architecture_decision")
+    signal_blocks: dict[str, list] = {st: [] for st in signal_types}
+    try:
+        t_sig = time.monotonic()
+        from .bitemporal_filters import active_block_filters as _active_filters
+
+        sq = (
+            select(MemoryBlock)
+            .where(
+                MemoryBlock.space_id == space_id,
+                MemoryBlock.signal_type.in_(signal_types),
+                *_active_filters(),
+            )
+            .order_by(MemoryBlock.created_at.desc())
+            .limit(200)
+        )
+        sig_rows = (await db.execute(sq)).scalars().all()
+        for blk in sig_rows:
+            st = blk.signal_type
+            if st in signal_blocks:
+                signal_blocks[st].append(blk)
+        logger.info(
+            "dream.gather_signal: signal_type scan %.2fs (n=%d)",
+            time.monotonic() - t_sig,
+            len(sig_rows),
+        )
+    except Exception:
+        logger.debug("dream.gather_signal: signal_type scan failed", exc_info=True)
+
     return {
         "new_blocks_since_last": new_blocks,
         "total_new": sum(new_blocks.values()),
@@ -291,6 +322,8 @@ async def _gather_signal(
         "hub_entities": hub_entities,
         "orphan_entities": orphan_entities,
         "_findings": resolvable,  # internal, passed to consolidate
+        "_signal_blocks": signal_blocks,  # internal, passed to consolidate
+        "signal_counts": {st: len(blks) for st, blks in signal_blocks.items()},
     }
 
 
@@ -682,6 +715,172 @@ async def _consolidate(
 
     except Exception as e:
         logger.warning("dream.consolidate.content_normalize failed: %s", e)
+
+    # --- 3d. Signal-type dispatch ---
+    # Processes blocks flagged by extract.py as high-value interaction patterns.
+    # dry_run: only logs actions, no actual DB mutations.
+    signal_blocks: dict[str, list] = signal.get("_signal_blocks", {})
+    result["signal_dispatched"] = {
+        "correction": 0,
+        "preference_confirmed": 0,
+        "repeated_pattern_promoted": 0,
+        "architecture_decision_created": 0,
+    }
+    try:
+        from src.shared.embedding import get_embedding as _get_embedding
+
+        from .bitemporal_filters import active_block_filters
+
+        # helpers: cosine similarity
+        def _cosine(a: list[float], b: list[float]) -> float:
+            dot = sum(x * y for x, y in zip(a, b, strict=False))
+            na = sum(x * x for x in a) ** 0.5
+            nb = sum(x * x for x in b) ** 0.5
+            return dot / (na * nb) if na and nb else 0.0
+
+        # ---- correction: find most-similar existing memory, update + confidence +0.05 ----
+        for blk in signal_blocks.get("correction", []):
+            try:
+                emb = await _get_embedding(blk.content or "")
+                if emb is None:
+                    continue
+                cq = (
+                    select(MemoryBlock)
+                    .where(
+                        MemoryBlock.space_id == space_id,
+                        *active_block_filters(),
+                        MemoryBlock.id != blk.id,
+                        MemoryBlock.block_type.in_(["knowledge", "general"]),
+                    )
+                    .limit(50)
+                )
+                candidates = (await db.execute(cq)).scalars().all()
+                best: MemoryBlock | None = None
+                best_sim = 0.0
+                for cand in candidates:
+                    cand_emb = await _get_embedding(cand.content or "")
+                    if cand_emb is None:
+                        continue
+                    sim = _cosine(emb, cand_emb)
+                    if sim > best_sim:
+                        best_sim = sim
+                        best = cand
+                if best and best_sim > 0.7:
+                    logger.info(
+                        "dream.signal.correction blk=%s → updates best=%s (sim=%.3f) dry=%s",
+                        blk.id,
+                        best.id,
+                        best_sim,
+                        dry_run,
+                    )
+                    if not dry_run:
+                        best.content = blk.content
+                        new_conf = min(1.0, (best.confidence or 0.5) + 0.05)
+                        best.confidence = new_conf
+                        await db.flush()
+                    result["signal_dispatched"]["correction"] += 1
+            except Exception as exc:
+                logger.warning("dream.signal.correction failed for blk=%s: %s", blk.id, exc)
+
+        # ---- preference_confirmed: boost confidence +0.1 (max 1.0) on similar existing memories ----
+        for blk in signal_blocks.get("preference_confirmed", []):
+            try:
+                emb = await _get_embedding(blk.content or "")
+                if emb is None:
+                    continue
+                pq = (
+                    select(MemoryBlock)
+                    .where(
+                        MemoryBlock.space_id == space_id,
+                        *active_block_filters(),
+                        MemoryBlock.id != blk.id,
+                    )
+                    .limit(50)
+                )
+                candidates = (await db.execute(pq)).scalars().all()
+                for cand in candidates:
+                    cand_emb = await _get_embedding(cand.content or "")
+                    if cand_emb is None:
+                        continue
+                    sim = _cosine(emb, cand_emb)
+                    if sim > 0.8:
+                        logger.info(
+                            "dream.signal.preference_confirmed blk=%s → boost cand=%s (sim=%.3f) dry=%s",
+                            blk.id,
+                            cand.id,
+                            sim,
+                            dry_run,
+                        )
+                        if not dry_run:
+                            cand.confidence = min(1.0, (cand.confidence or 0.5) + 0.1)
+                            await db.flush()
+                        result["signal_dispatched"]["preference_confirmed"] += 1
+            except Exception as exc:
+                logger.warning(
+                    "dream.signal.preference_confirmed failed for blk=%s: %s", blk.id, exc
+                )
+
+        # ---- repeated_pattern: session_count >= 3 → promote tier to 'core' ----
+        # 'core' is used as the high-tier value; block_type stays unchanged.
+        # We track promotion via a tags sentinel "tier:core" to avoid a new column.
+        for blk in signal_blocks.get("repeated_pattern", []):
+            try:
+                if (blk.session_count or 1) >= 3:
+                    existing_tags: list[str] = list(blk.tags or [])
+                    if "tier:core" not in existing_tags:
+                        logger.info(
+                            "dream.signal.repeated_pattern blk=%s session_count=%d → tier:core dry=%s",
+                            blk.id,
+                            blk.session_count,
+                            dry_run,
+                        )
+                        if not dry_run:
+                            blk.tags = existing_tags + ["tier:core"]
+                            await db.flush()
+                        result["signal_dispatched"]["repeated_pattern_promoted"] += 1
+            except Exception as exc:
+                logger.warning(
+                    "dream.signal.repeated_pattern failed for blk=%s: %s", blk.id, exc
+                )
+
+        # ---- architecture_decision: create a new attitude block (kind='tech_choice') ----
+        for blk in signal_blocks.get("architecture_decision", []):
+            try:
+                existing_tags = list(blk.tags or [])
+                if "dream:arch_attitude_created" in existing_tags:
+                    continue  # idempotent — skip already-processed blocks
+
+                logger.info(
+                    "dream.signal.architecture_decision blk=%s → attitude block dry=%s",
+                    blk.id,
+                    dry_run,
+                )
+                if not dry_run:
+                    from uuid_extensions import uuid7str
+
+                    attitude_content = f"[架構決策] {(blk.content or '')[:300]}"
+                    new_attitude = MemoryBlock(
+                        id=uuid7str(),
+                        space_id=space_id,
+                        created_by=blk.created_by,
+                        content=attitude_content,
+                        block_type="attitude",
+                        tags=["tech_choice", "architecture"],
+                        confidence=blk.confidence or 0.8,
+                        source_session=blk.source_session,
+                    )
+                    db.add(new_attitude)
+                    # Mark source block to prevent re-creation on next dream
+                    blk.tags = existing_tags + ["dream:arch_attitude_created"]
+                    await db.flush()
+                result["signal_dispatched"]["architecture_decision_created"] += 1
+            except Exception as exc:
+                logger.warning(
+                    "dream.signal.architecture_decision failed for blk=%s: %s", blk.id, exc
+                )
+
+    except Exception as e:
+        logger.warning("dream.consolidate.signal_dispatch failed: %s", e)
 
     return result
 

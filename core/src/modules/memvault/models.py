@@ -53,6 +53,15 @@ class MemoryBlock(SpaceScopedModel):
     fold_id: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     content_hash: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(32), server_default=text("'active'"), nullable=False)
+    # Dream Phase 2 signal extraction — set by extract.py when the block originates
+    # from a high-value interaction pattern in the session transcript.
+    # Values: correction | preference_confirmed | repeated_pattern | architecture_decision | NULL
+    signal_type: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, index=True
+    )
+    # Cross-session occurrence count — incremented by dream _gather_signal when detecting
+    # repeated_pattern signals across multiple sessions for the same content cluster.
+    session_count: Mapped[int] = mapped_column(Integer, server_default=text("1"))
 
 
 class BlockArchive(Base):
