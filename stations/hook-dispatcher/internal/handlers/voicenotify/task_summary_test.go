@@ -308,6 +308,13 @@ func TestIsSystemPrompt_MatchesKnownHarnessTemplates(t *testing.T) {
 		// Case-insensitive
 		"GENERATE A SESSION TITLE",
 		"summarize the conversation",
+		// memvault refine / extract / progressive-snapshot pipelines
+		// (mcp/memvault/scripts/{extract,extract_progressive}.py spawn
+		// `claude -p` with these system-role openings).
+		"你是對話記憶提煉專家。分析以下 Claude Code 工作 session transcript",
+		"你是記憶品質審查員。以下是從 Claude Code 對話中提煉的記憶 JSON。",
+		"你是對話記憶的中途快照員。這是一個進行中的 Claude Code session",
+		"你是態度提取專家。從以下記憶 blocks 中提取使用者的偏好",
 	}
 	for _, in := range cases {
 		t.Run(in, func(t *testing.T) {
@@ -325,6 +332,10 @@ func TestIsSystemPrompt_RejectsHumanPrompts(t *testing.T) {
 		"generate-session.sh 這個檔在哪",
 		"Could you generate a test for this?",  // human-phrased, not template
 		"請 summarize 這個 PR 給我聽",            // mixed but human
+		// "你是 X" prefix but not a system role — must NOT trigger Guard 0.6.
+		"你是怎麼處理 cache 的",
+		"你是不是該重啟 redis 看看",
+		"你是少爺的程式秘書嗎",
 		"",
 	}
 	for _, in := range cases {
