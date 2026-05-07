@@ -447,6 +447,10 @@ func progressiveExtractInProc(rawInput string) {
 		filteredEnv = append(filteredEnv, e)
 	}
 	filteredEnv = sessionNamerReplaceEnv(filteredEnv, "MEMVAULT_SKIP_RECALL", "1")
+	// Suppress voicenotify TTS in the spawned `claude -p` sub-session — its
+	// Stop hook would otherwise read the system-prompt opening
+	// ("你是對話記憶的中途快照員 …") aloud as the master pane's task summary.
+	filteredEnv = sessionNamerReplaceEnv(filteredEnv, "CLAUDE_VOICE", "0")
 
 	t0 := time.Now()
 	r := core.RunCmdWithEnv(
