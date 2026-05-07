@@ -18,6 +18,7 @@ from src.shared.models import _uuid7_hex
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
+from .clock import _today
 from .models import ActivitySpan, DailyPlan, Method, MethodSelection, RecurringItem, TaskGroup
 from .schemas import (
     ActivitySpanResponse,
@@ -569,7 +570,9 @@ class DailyPlanService:
         context: str = "default",
     ) -> DailyPlan:
         """Convenience wrapper: get or create plan for today."""
-        return await self.get_or_create_for_date(db, space_id, _today(), user_id, context)
+        return await self.get_or_create_for_date(
+            db, space_id, _today(space_id), user_id, context
+        )
 
     async def get_date_range_stats(
         self,

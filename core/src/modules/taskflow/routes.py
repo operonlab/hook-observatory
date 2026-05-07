@@ -245,11 +245,17 @@ async def list_subtasks(
 async def transition_task_status(
     task_id: str,
     data: StatusTransitionRequest,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("taskflow.write"),
 ):
     task = await task_service.transition_status(
-        db, task_id, data.status, user_id=user.get("id"), comment=data.comment
+        db,
+        task_id,
+        data.status,
+        user_id=user.get("id"),
+        comment=data.comment,
+        space_id=space_id,
     )
     await db.commit()
     return task_service.to_response(task)
@@ -261,23 +267,27 @@ async def transition_task_status(
 @router.get("/tasks/{task_id}/updates", response_model=PaginatedResponse[TaskUpdateResponse])
 async def list_task_updates(
     task_id: str,
+    space_id: str = Query("default"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("taskflow.read"),
 ):
     params = PaginationParams(page=page, page_size=page_size)
-    return await task_service.list_updates(db, task_id, params)
+    return await task_service.list_updates(db, task_id, params, space_id=space_id)
 
 
 @router.post("/tasks/{task_id}/updates", response_model=TaskUpdateResponse, status_code=201)
 async def add_task_update(
     task_id: str,
     data: TaskUpdateCreate,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("taskflow.write"),
 ):
-    update = await task_service.add_update(db, task_id, data, user_id=user.get("id"))
+    update = await task_service.add_update(
+        db, task_id, data, user_id=user.get("id"), space_id=space_id
+    )
     await db.commit()
     return task_service._update_to_response(update)
 

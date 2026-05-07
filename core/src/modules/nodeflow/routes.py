@@ -60,7 +60,7 @@ async def get_flow(
     flow = await flow_service.get_in_space(db, flow_id, space_id)
     if not flow:
         raise NotFoundError("Flow not found", code="nodeflow.flow_not_found")
-    return await flow_service.get_detail(db, flow_id)
+    return await flow_service.get_detail(db, flow_id, space_id=space_id)
 
 
 @router.post("/flows", response_model=FlowResponse, status_code=201)
@@ -95,10 +95,11 @@ async def update_flow(
 @router.post("/flows/{flow_id}/activate", response_model=FlowResponse)
 async def activate_flow(
     flow_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.write"),
 ):
-    result = await flow_service.activate(db, flow_id)
+    result = await flow_service.activate(db, flow_id, space_id=space_id)
     await db.commit()
     return result
 
@@ -106,10 +107,11 @@ async def activate_flow(
 @router.post("/flows/{flow_id}/pause", response_model=FlowResponse)
 async def pause_flow(
     flow_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.write"),
 ):
-    result = await flow_service.pause(db, flow_id)
+    result = await flow_service.pause(db, flow_id, space_id=space_id)
     await db.commit()
     return result
 
@@ -143,6 +145,7 @@ async def trigger_flow(
 @router.get("/flows/{flow_id}/nodes", response_model=list[NodeResponse])
 async def list_nodes(
     flow_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.read"),
 ):
@@ -150,7 +153,16 @@ async def list_nodes(
 
     from .models import Node
 
-    q = select(Node).where(Node.flow_id == flow_id, Node.deleted_at == None)  # noqa: E711
+    # IDOR guard: verify flow belongs to this space first
+    flow = await flow_service.get_in_space(db, flow_id, space_id)
+    if not flow:
+        return []
+
+    q = select(Node).where(
+        Node.flow_id == flow_id,
+        Node.space_id == space_id,
+        Node.deleted_at == None,  # noqa: E711
+    )
     rows = (await db.execute(q)).scalars().all()
     return [node_service.to_response(n) for n in rows]
 
@@ -187,10 +199,13 @@ async def update_node(
 @router.delete("/nodes/{node_id}", status_code=204)
 async def delete_node(
     node_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.write"),
 ):
-    await node_service.soft_delete(db, node_id, user_id=user.get("id"))
+    # Note: previous code called node_service.soft_delete (does not exist).
+    # Use BaseCRUDService.delete with space_id IDOR guard.
+    await node_service.delete(db, node_id, user_id=user.get("id"), space_id=space_id)
     await db.commit()
 
 
@@ -200,10 +215,11 @@ async def delete_node(
 @router.get("/flows/{flow_id}/edges", response_model=list[EdgeResponse])
 async def list_edges(
     flow_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.read"),
 ):
-    return await edge_service.list_by_flow(db, flow_id)
+    return await edge_service.list_by_flow(db, flow_id, space_id=space_id)
 
 
 @router.post("/edges", response_model=EdgeResponse, status_code=201)
@@ -221,10 +237,11 @@ async def create_edge(
 @router.delete("/edges/{edge_id}", status_code=204)
 async def delete_edge(
     edge_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.write"),
 ):
-    await edge_service.delete(db, edge_id)
+    await edge_service.delete(db, edge_id, space_id=space_id)
     await db.commit()
 
 
@@ -248,10 +265,11 @@ async def list_flow_runs(
 @router.get("/flow-runs/{flow_run_id}", response_model=FlowRunDetailResponse)
 async def get_flow_run(
     flow_run_id: str,
+    space_id: str = Query("default"),
     db: AsyncSession = Depends(get_db),
     user: dict = require_permission("nodeflow.read"),
 ):
-    return await flow_run_service.get_detail(db, flow_run_id)
+    return await flow_run_service.get_detail(db, flow_run_id, space_id=space_id)
 
 
 # ======================== Registry ========================

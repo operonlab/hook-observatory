@@ -161,8 +161,12 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
         new_status: str,
         user_id: str | None = None,
         comment: str | None = None,
+        space_id: str | None = None,
     ) -> Task:
-        task = await self.get(db, task_id)
+        if space_id:
+            task = await self.get_in_space(db, task_id, space_id)
+        else:
+            task = await self.get(db, task_id)
         if not task:
             raise NotFoundError("Task not found", code="taskflow.task_not_found")
 
@@ -227,8 +231,12 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
         task_id: str,
         data: TaskUpdateCreate,
         user_id: str | None = None,
+        space_id: str | None = None,
     ) -> TaskUpdateModel:
-        task = await self.get(db, task_id)
+        if space_id:
+            task = await self.get_in_space(db, task_id, space_id)
+        else:
+            task = await self.get(db, task_id)
         if not task:
             raise NotFoundError("Task not found", code="taskflow.task_not_found")
 
@@ -260,8 +268,17 @@ class TaskService(BaseCRUDService[Task, TaskCreate, TaskUpdate, TaskResponse]):
         db: AsyncSession,
         task_id: str,
         pagination: PaginationParams | None = None,
+        space_id: str | None = None,
     ) -> PaginatedResponse[TaskUpdateResponse]:
         p = pagination or PaginationParams()
+
+        # IDOR guard: when space_id provided, verify task belongs to space
+        if space_id:
+            parent = await self.get_in_space(db, task_id, space_id)
+            if not parent:
+                return PaginatedResponse[TaskUpdateResponse](
+                    items=[], total=0, page=p.page, page_size=p.page_size
+                )
 
         count_q = (
             select(func.count())

@@ -370,3 +370,36 @@ async def get_ritual_status(
 ):
     """Get today's ritual completion status."""
     return await ritual_service.get_ritual_status(db, space_id)
+
+
+@router_p2.post("/ritual/morning/complete", response_model=RitualStatusResponse)
+async def complete_morning_ritual(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    """Mark today's morning ritual as completed (write side of the ritual state).
+
+    Closes the read/write asymmetry from the audit: get_ritual_status had no
+    counterpart that actually wrote completion, so the status would never
+    advance even when the user finished the ritual.
+    """
+    result = await ritual_service.complete_morning_ritual(
+        db, space_id, user_id=user.get("id")
+    )
+    await db.commit()
+    return result
+
+
+@router_p2.post("/ritual/evening/complete", response_model=RitualStatusResponse)
+async def complete_evening_ritual(
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("dailyos.write"),
+):
+    """Mark today's evening ritual as completed."""
+    result = await ritual_service.complete_evening_ritual(
+        db, space_id, user_id=user.get("id")
+    )
+    await db.commit()
+    return result
