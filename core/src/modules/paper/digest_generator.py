@@ -124,6 +124,22 @@ _DIGEST_TOOL: dict = {
 _UNKNOWN_MODEL = "claude-haiku-unknown"
 
 
+def _sanitize_for_xml(text: str) -> str:
+    """Defence-in-depth against prompt injection via title/abstract.
+
+    Replaces literal `<` / `>` so that user-supplied content cannot forge
+    a closing `</title>` / `</abstract>` tag and break out of the structured
+    block, then drop instruction-like markers (`[INST]`, `</s>`, `<system>`)
+    that some LLMs treat as control sequences.
+    """
+    if not text:
+        return ""
+    cleaned = text.replace("<", "&lt;").replace(">", "&gt;")
+    for marker in ("[INST]", "[/INST]", "</s>", "<s>", "<|im_start|>", "<|im_end|>"):
+        cleaned = cleaned.replace(marker, marker.replace("<", "&lt;").replace(">", "&gt;"))
+    return cleaned
+
+
 # ── Core extraction function ──────────────────────────────────────────────────
 
 
@@ -151,9 +167,11 @@ async def generate_digest(
 
     paper_id = arxiv_id or title[:40]
 
+    safe_title = _sanitize_for_xml(title)
+    safe_abstract = _sanitize_for_xml(abstract)
     user_message = f"""<paper_metadata>
-<title>{title}</title>
-<abstract>{abstract}</abstract>
+<title>{safe_title}</title>
+<abstract>{safe_abstract}</abstract>
 </paper_metadata>
 
 Extract a structured digest for Workshop relevance. Be concrete and specific.
@@ -309,7 +327,7 @@ async def generate_digest_rlm(
     )
     engine = RLMEngine(config)
 
-    context = f"Title: {title}\n\nAbstract:\n{abstract}"
+    context = f"Title: {_sanitize_for_xml(title)}\n\nAbstract:\n{_sanitize_for_xml(abstract)}"
 
     try:
         result = engine.completion(prompt=_RLM_DECOMPOSE_PROMPT, context=context)
