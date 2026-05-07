@@ -35,7 +35,7 @@ var (
 	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")              // edge-tts fallback
 	PlaybackVol  = envOr("CLAUDE_VOICE_VOLUME", "0.4")
 	WebuiURL     = envOr("TMUX_WEBUI_URL", "http://127.0.0.1:10105")
-	DebounceTTL  = envOrInt("CLAUDE_VOICE_DEBOUNCE", 10)
+	DebounceTTL  = envOrInt("CLAUDE_VOICE_DEBOUNCE", 20)
 	SettleWindow = envOrInt("CLAUDE_VOICE_SETTLE", 8)
 )
 
