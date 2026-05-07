@@ -288,3 +288,122 @@ func TestHandleUserPromptSubmit_BadJSONNoPanic(t *testing.T) {
 	// success = no panic
 }
 
+// ---------------------------------------------------------------------------
+// IsSystemPrompt — host-harness template detection (cmux auto-titling, …)
+// ---------------------------------------------------------------------------
+
+func TestIsSystemPrompt_MatchesKnownHarnessTemplates(t *testing.T) {
+	cases := []string{
+		// cmux ≥0.63 workspace auto-titling
+		"Generate a session title and pick an icon for the following conversation.",
+		"Generate a concise title under 6 words for the chat below.",
+		"Generate a brief one-line summary",
+		// IDE summarization templates
+		"Summarize the following conversation in 2 sentences.",
+		"Summarize the above chat",
+		// Other auto-naming templates
+		"Create a title for this session",
+		"Create a name for the workspace",
+		"Suggest a title for this conversation",
+		// Case-insensitive
+		"GENERATE A SESSION TITLE",
+		"summarize the conversation",
+	}
+	for _, in := range cases {
+		t.Run(in, func(t *testing.T) {
+			if !IsSystemPrompt(in) {
+				t.Errorf("expected system-prompt match, got false for %q", in)
+			}
+		})
+	}
+}
+
+func TestIsSystemPrompt_RejectsHumanPrompts(t *testing.T) {
+	cases := []string{
+		"幫我修 voice_notify 的 emoji 過濾 bug",
+		"我想加 UserPromptSubmit hook",
+		"generate-session.sh 這個檔在哪",
+		"Could you generate a test for this?",  // human-phrased, not template
+		"請 summarize 這個 PR 給我聽",            // mixed but human
+		"",
+	}
+	for _, in := range cases {
+		t.Run(in, func(t *testing.T) {
+			if IsSystemPrompt(in) {
+				t.Errorf("expected NOT system-prompt, got true for %q", in)
+			}
+		})
+	}
+}
+
+func TestIsSystemPrompt_TakesFirstLineOnly(t *testing.T) {
+	// Multi-line input with template on line 1 → match.
+	if !IsSystemPrompt("Generate a session title for the following.\n\n<chat dump>") {
+		t.Error("expected match on first line")
+	}
+	// Template on line 2 → ignore (system prompts always lead with template).
+	if IsSystemPrompt("這是我的問題\nGenerate a session title please") {
+		t.Error("expected no match when template is not on first line")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SystemMarkerPath / HandleUserPromptSubmit — marker round-trip
+// ---------------------------------------------------------------------------
+
+func TestSystemMarkerPath_Priority(t *testing.T) {
+	t.Setenv("TMUX_PANE", "%4")
+	if got := SystemMarkerPath("019dfff5abc"); got != "/tmp/claude-system-4.marker" {
+		t.Errorf("TMUX_PANE present: got %q", got)
+	}
+	t.Setenv("TMUX_PANE", "")
+	if got := SystemMarkerPath("019dfff5abc"); got != "/tmp/claude-system-019d.marker" {
+		t.Errorf("session fallback: got %q", got)
+	}
+	t.Setenv("TMUX_PANE", "")
+	if got := SystemMarkerPath("abc"); got != "" {
+		t.Errorf("session_id < 4 chars: should return empty, got %q", got)
+	}
+}
+
+func TestHandleUserPromptSubmit_SystemPromptDropsMarkerNoTaskFile(t *testing.T) {
+	t.Setenv("TMUX_PANE", "%test-cmux")
+	taskPath := "/tmp/claude-task-test-cmux.txt"
+	markerPath := "/tmp/claude-system-test-cmux.marker"
+	defer func() {
+		os.Remove(taskPath)
+		os.Remove(markerPath)
+	}()
+	os.Remove(taskPath)
+	os.Remove(markerPath)
+
+	HandleUserPromptSubmit(`{"prompt":"Generate a session title and pick an icon for the chat below.","session_id":"019dfff5"}`)
+
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Errorf("expected marker file at %s, stat err: %v", markerPath, err)
+	}
+	if _, err := os.Stat(taskPath); !os.IsNotExist(err) {
+		t.Errorf("expected NO task summary file (system prompt should short-circuit), but it exists")
+	}
+}
+
+func TestHandleUserPromptSubmit_HumanPromptWritesTaskNoMarker(t *testing.T) {
+	t.Setenv("TMUX_PANE", "%test-human")
+	taskPath := "/tmp/claude-task-test-human.txt"
+	markerPath := "/tmp/claude-system-test-human.marker"
+	defer func() {
+		os.Remove(taskPath)
+		os.Remove(markerPath)
+	}()
+	os.Remove(taskPath)
+	os.Remove(markerPath)
+
+	HandleUserPromptSubmit(`{"prompt":"幫我修 cmux 雙播 TTS 的 bug","session_id":"019dfff5"}`)
+
+	if _, err := os.Stat(taskPath); err != nil {
+		t.Errorf("expected task file at %s, stat err: %v", taskPath, err)
+	}
+	if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
+		t.Errorf("human prompt should NOT create marker, but it exists")
+	}
+}
