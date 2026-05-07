@@ -83,6 +83,17 @@ func Handle(eventType, toolName string, rawInput string) {
 			debugLog("Stop", ident, "skip_teammate", agentType, msgTail)
 			return
 		}
+		// Guard 0.6: skip host-harness background sessions (cmux auto-titling
+		// etc.). Marker is dropped by HandleUserPromptSubmit when the inbound
+		// prompt matches a system-prompt template; consumed once here so the
+		// Stop event silently disappears instead of producing duplicate TTS.
+		if mp := SystemMarkerPath(sessionID); mp != "" {
+			if _, err := os.Stat(mp); err == nil {
+				_ = os.Remove(mp)
+				debugLog("Stop", ident, "skip_system_session", "", msgTail)
+				return
+			}
+		}
 		// Guard 1: skip re-entrant stop hook.
 		if boolField(data, "stop_hook_active") {
 			debugLog("Stop", ident, "skip_reentrant", "", msgTail)

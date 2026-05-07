@@ -39,6 +39,56 @@ var sensitiveRegexes = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+`),
 }
 
+// systemPromptRegexes match prompts emitted by host harnesses (cmux, IDE
+// integrations, automation pipelines) rather than by 少爺. cmux ≥0.63 spawns a
+// background Claude session per workspace to auto-name the tab, sending
+// templates like "Generate a session title and ..." — its Stop event would
+// otherwise trigger a duplicate "任務完成了" announcement on top of the human
+// session's own Stop.
+//
+// Match → suppress the summary AND drop a marker file so the Stop handler can
+// skip TTS for that session entirely (see SystemMarkerPath / Guard 0.6).
+var systemPromptRegexes = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^generate (?:a |an |the )?(?:session |conversation |chat |workspace )?title`),
+	regexp.MustCompile(`(?i)^generate (?:a |an )?(?:concise|short|brief|one[- ]?line)`),
+	regexp.MustCompile(`(?i)^summari[sz]e (?:the )?(?:following|conversation|above|chat|session)`),
+	regexp.MustCompile(`(?i)^create (?:a |an )?(?:title|summary|name|label) for`),
+	regexp.MustCompile(`(?i)^suggest (?:a |an )?(?:title|name|label)`),
+}
+
+// IsSystemPrompt returns true when prompt looks like a host-harness template
+// (cmux auto-titling, IDE summarization, etc.) that should never produce a
+// 少爺-facing TTS announcement.
+func IsSystemPrompt(prompt string) bool {
+	first := strings.TrimSpace(prompt)
+	if first == "" {
+		return false
+	}
+	if idx := strings.IndexByte(first, '\n'); idx >= 0 {
+		first = strings.TrimSpace(first[:idx])
+	}
+	for _, re := range systemPromptRegexes {
+		if re.MatchString(first) {
+			return true
+		}
+	}
+	return false
+}
+
+// SystemMarkerPath resolves the per-session marker file used to flag a Stop
+// event as belonging to a host-harness background session. Path layout mirrors
+// TaskSummaryFilePath so reader (Guard 0.6) and writer (HandleUserPromptSubmit)
+// always agree.
+func SystemMarkerPath(sessionID string) string {
+	if pane := os.Getenv("TMUX_PANE"); pane != "" {
+		return "/tmp/claude-system-" + strings.ReplaceAll(pane, "%", "") + ".marker"
+	}
+	if len(sessionID) >= 4 {
+		return "/tmp/claude-system-" + sessionID[:4] + ".marker"
+	}
+	return ""
+}
+
 const (
 	taskSummaryMaxRunes         = 30
 	taskSummaryMinRunes         = 6
@@ -179,12 +229,23 @@ func WriteTaskSummary(path, summary string) {
 // HandleUserPromptSubmit is the package entrypoint called by the
 // handlers-package thin wrapper. Parses the raw JSON, runs the pipeline,
 // writes the summary file. Fail-open on every error.
+//
+// System-prompt short-circuit: if the prompt matches a host-harness template
+// (cmux auto-titling, etc.), drop a marker file and stop. The marker is
+// consumed once by Guard 0.6 in the Stop handler so the background session's
+// Stop event is silently dropped instead of producing a duplicate TTS.
 func HandleUserPromptSubmit(rawJSON string) {
 	var data struct {
 		Prompt    string `json:"prompt"`
 		SessionID string `json:"session_id"`
 	}
 	if err := json.Unmarshal([]byte(rawJSON), &data); err != nil {
+		return
+	}
+	if IsSystemPrompt(data.Prompt) {
+		if mp := SystemMarkerPath(data.SessionID); mp != "" {
+			_ = os.WriteFile(mp, []byte{}, 0o644)
+		}
 		return
 	}
 	summary := TaskSummaryFromPrompt(data.Prompt)
