@@ -54,6 +54,13 @@ var systemPromptRegexes = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)^summari[sz]e (?:the )?(?:following|conversation|above|chat|session)`),
 	regexp.MustCompile(`(?i)^create (?:a |an )?(?:title|summary|name|label) for`),
 	regexp.MustCompile(`(?i)^suggest (?:a |an )?(?:title|name|label)`),
+	// memvault refine / extract / progressive-snapshot pipelines spawn
+	// `claude -p` with prompts that open with 「你是…記憶/態度…員/專家」.
+	// Without this guard, the master pane's task-summary file gets stomped
+	// with the system role description ("記憶品質審查員。以下是…") and
+	// the next Stop announces it as 少爺's task.
+	regexp.MustCompile(`^你是(?:對話)?記憶`),
+	regexp.MustCompile(`^你是態度`),
 }
 
 // IsSystemPrompt returns true when prompt looks like a host-harness template
