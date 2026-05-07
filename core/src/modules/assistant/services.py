@@ -109,10 +109,10 @@ def _persist_qa_log(
     try:
         import asyncio as _asyncio
 
-        from src.shared.database import get_engine
         from sqlalchemy import text as _text
-
         from uuid_utils import uuid7
+
+        from src.shared.database import get_engine
 
         record_id = uuid7().hex
         sql = _text(
@@ -328,21 +328,21 @@ def _iter_chat(prompt: str, *, session_id: str = "") -> Generator[_DeltaEvent, N
 
 
 # ── Public async API ──
-# Architectural note: TMUX_TARGET is a single shared tmux window. All requests
-# are serialized via _lock to prevent cross-request pollution. _REQUEST_QUEUE
-# provides bounded overflow protection: at most 5 pending requests; excess
-# requests are fast-failed immediately. Per-request windows would improve
-# isolation further but add complexity; acceptable for solo-dev use.
-_lock = asyncio.Lock()
-_REQUEST_QUEUE: asyncio.Queue[tuple] = asyncio.Queue(maxsize=5)
+# Architectural note: TMUX_TARGET is a single shared tmux window.
+# Per-session locks (_session_locks) ensure the same session_id is serialized
+# while different sessions may proceed concurrently (within the single tmux
+# window; TMUX_TARGET itself serializes them via _iter_chat's sequential send).
+# A global semaphore (_global_sem) caps total concurrent waiters to prevent DoS.
+_session_locks: dict[str, asyncio.Lock] = {}
+_global_sem = asyncio.Semaphore(5)  # max 5 concurrent waiters across all sessions
 
 
 async def stream_chat(
     messages: list[dict], *, session_id: str | None = None
 ) -> AsyncGenerator[StreamBlock, None]:
     """Stream CC one-shot response as SSE events."""
-    # Fast-fail if queue is full (> 5 pending requests)
-    if _REQUEST_QUEUE.full():
+    # Fast-fail if global semaphore is exhausted (> 5 concurrent waiters)
+    if _global_sem.locked():
         yield StreamBlock(type=BlockType.ERROR, data={"message": "助手請求佇列已滿，請稍後再試"})
         return
 
@@ -373,7 +373,12 @@ async def stream_chat(
             # None 作為結束信號
             loop.call_soon_threadsafe(queue.put_nowait, None)
 
-    async with _lock:
+    # Per-session lock: same session_id is serialized; different sessions
+    # may proceed concurrently — bounded by _global_sem to cap total in-flight
+    # work and to give the fast-fail check above a meaningful signal.
+    sid_for_lock = sid or "_anon"
+    session_lock = _session_locks.setdefault(sid_for_lock, asyncio.Lock())
+    async with _global_sem, session_lock:
         # 在背景線程啟動 blocking generator
         asyncio.get_event_loop().run_in_executor(None, _run_iter)
 
