@@ -82,15 +82,19 @@ func BuildStopMessage() string {
 	return "少爺，任務完成了"
 }
 
-// getTaskSummary reads (and unlinks) the one-shot task state file written by
-// Claude per rules/voice-state.md.
+// getTaskSummary reads (and unlinks) the one-shot task state file.
+//
+// File path resolution shares TaskSummaryFilePath() with the writer side so
+// reader and writer never disagree:
+//   - TMUX_PANE present → /tmp/claude-task-{pane}.txt
+//   - else CLAUDE_SESSION_ID present → /tmp/claude-task-{sid[:4]}.txt
+//     (matches statusline.sh:97 ${SESSION_ID:0:4})
+//   - else → no summary, fall back to label
 func getTaskSummary() string {
-	pane := os.Getenv("TMUX_PANE")
-	if pane == "" {
+	path := TaskSummaryFilePath(os.Getenv("CLAUDE_SESSION_ID"))
+	if path == "" {
 		return ""
 	}
-	paneSafe := strings.ReplaceAll(pane, "%", "")
-	path := "/tmp/claude-task-" + paneSafe + ".txt"
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
