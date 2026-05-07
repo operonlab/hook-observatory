@@ -1,4 +1,4 @@
-"""Assistant module routes — SSE streaming chat endpoint."""
+"""Assistant module routes — SSE streaming chat endpoint + QA log management."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from src.shared.deps import get_db, require_permission
 from src.shared.sse import format_sse
 
 from .context_builder import build_context
-from .schemas import ChatRequest
-from .services import stream_chat
+from .schemas import ChatRequest, FlagRequest, QaLogResponse
+from .services import flag_qa_log, list_qa_logs, stream_chat
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,31 @@ async def chat(
             yield format_sse(block)
 
     return EventSourceResponse(event_generator())
+
+
+@router.get("/qa-logs", response_model=list[QaLogResponse])
+async def get_qa_logs(
+    limit: int = 50,
+    flagged: bool | None = None,
+    session_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("admin.read"),
+):
+    """List recent QA log records (admin view). Filterable by flagged status and session_id."""
+    records = await list_qa_logs(db, limit=limit, flagged=flagged, session_id=session_id)
+    return [QaLogResponse.model_validate(r) for r in records]
+
+
+@router.post("/qa-logs/{log_id}/flag", response_model=QaLogResponse)
+async def flag_log(
+    log_id: str,
+    body: FlagRequest,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("admin.write"),
+):
+    """Flag a QA log record as a bad answer."""
+    record = await flag_qa_log(db, log_id, reason=body.reason)
+    return QaLogResponse.model_validate(record)
 
 
 @router.get("/status")

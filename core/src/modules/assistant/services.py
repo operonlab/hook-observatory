@@ -17,6 +17,9 @@ from tmux_lib.cc_reader import iter_cc_response, resolve_session_jsonl, strip_cc
 from tmux_lib.cli_session import is_shell
 from tmux_lib.primitives import send_enter, send_text, tmux_check, tmux_ok
 
+# ── DB persistence (lazy import to avoid circular deps at module load) ──
+_db_available = True
+
 logger = logging.getLogger(__name__)
 
 # ── Config ──
@@ -90,6 +93,63 @@ def _log_chat(
             for line in response.splitlines():
                 f.write(f"  {line}\n")
             f.write(f"  ⏱ {duration_s:.1f}s\n")
+
+
+def _persist_qa_log(
+    *,
+    session_id: str,
+    question: str,
+    answer: str,
+    duration_ms: int,
+) -> None:
+    """Write QA record to DB (runs in a thread — never blocks the SSE stream)."""
+    global _db_available
+    if not _db_available:
+        return
+    try:
+        import asyncio as _asyncio
+
+        from src.shared.database import get_engine
+        from sqlalchemy import text as _text
+
+        from uuid_utils import uuid7
+
+        record_id = uuid7().hex
+        sql = _text(
+            """
+            INSERT INTO assistant.qa_log
+                (id, session_id, question, answer, duration_ms, flagged)
+            VALUES
+                (:id, :session_id, :question, :answer, :duration_ms, false)
+            """
+        )
+        params = {
+            "id": record_id,
+            "session_id": session_id or None,
+            "question": question,
+            "answer": answer,
+            "duration_ms": duration_ms,
+        }
+
+        engine = get_engine()
+
+        async def _insert():
+            async with engine.begin() as conn:
+                await conn.execute(sql, params)
+
+        # Run in a new event loop if called from a non-async context (thread)
+        try:
+            loop = _asyncio.get_event_loop()
+            if loop.is_running():
+                _asyncio.ensure_future(_insert())
+            else:
+                loop.run_until_complete(_insert())
+        except RuntimeError:
+            _asyncio.run(_insert())
+
+    except Exception:
+        logger.warning("assistant: qa_log DB persist failed", exc_info=True)
+        _db_available = False
 
 
 def _ensure_assistant_window() -> bool:
@@ -230,7 +290,19 @@ def _iter_chat(prompt: str, *, session_id: str = "") -> Generator[_DeltaEvent, N
             yield _DeltaEvent(tool_progress=delta.tool_label)
         if delta.is_done:
             elapsed = time.time() - t0
+            duration_ms = int(elapsed * 1000)
             _log_chat(session_id=session_id, response=full_text, duration_s=elapsed)
+            # Dual-write to DB — fire and forget, never blocks SSE stream
+            threading.Thread(
+                target=_persist_qa_log,
+                kwargs={
+                    "session_id": session_id,
+                    "question": prompt,
+                    "answer": full_text,
+                    "duration_ms": duration_ms,
+                },
+                daemon=True,
+            ).start()
             _touch_assistant_last_used()
             logger.info("assistant: done, %d chars, %.1fs", sent_len, elapsed)
             yield _DeltaEvent(is_done=True)
@@ -238,9 +310,20 @@ def _iter_chat(prompt: str, *, session_id: str = "") -> Generator[_DeltaEvent, N
 
     # Timeout
     elapsed = time.time() - t0
+    duration_ms = int(elapsed * 1000)
     if full_text and len(full_text) > sent_len:
         yield _DeltaEvent(text_delta=full_text[sent_len:])
         _log_chat(session_id=session_id, response=full_text, duration_s=elapsed)
+        threading.Thread(
+            target=_persist_qa_log,
+            kwargs={
+                "session_id": session_id,
+                "question": prompt,
+                "answer": full_text,
+                "duration_ms": duration_ms,
+            },
+            daemon=True,
+        ).start()
     yield _DeltaEvent(is_done=True)
 
 
@@ -330,3 +413,47 @@ async def stream_chat(
                 continue
 
     yield StreamBlock(type=BlockType.DONE, data={})
+
+
+# ── QA Log query helpers ──
+
+
+async def list_qa_logs(
+    db,
+    *,
+    limit: int = 50,
+    flagged: bool | None = None,
+    session_id: str | None = None,
+) -> list:
+    """Return recent QaLog records, optionally filtered."""
+    from sqlalchemy import select
+
+    from .models import QaLog
+
+    stmt = select(QaLog).order_by(QaLog.created_at.desc())
+    if flagged is not None:
+        stmt = stmt.where(QaLog.flagged == flagged)
+    if session_id is not None:
+        stmt = stmt.where(QaLog.session_id == session_id)
+    stmt = stmt.limit(max(1, min(limit, 500)))
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def flag_qa_log(db, log_id: str, *, reason: str):
+    """Mark a QaLog record as flagged with a reason. Returns updated record."""
+    from sqlalchemy import select
+
+    from src.shared.errors import NotFoundError
+
+    from .models import QaLog
+
+    result = await db.execute(select(QaLog).where(QaLog.id == log_id))
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise NotFoundError(f"QaLog {log_id} not found", code="assistant.qa_log_not_found")
+    record.flagged = True
+    record.flag_reason = reason
+    await db.commit()
+    await db.refresh(record)
+    return record
