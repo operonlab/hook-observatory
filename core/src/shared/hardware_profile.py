@@ -292,30 +292,30 @@ def _detect_cuda_gpu(info: SystemInfo) -> None:
     info.gpu = GPUInfo(name=name, vram_mb=vram_mb, compute_type="cuda")
 
 
-_VRAM_UNIT_MAP = {
-    "KB": 1.0 / 1024,
-    "MB": 1.0,
-    "GB": 1024.0,
-    "TB": 1024.0 * 1024,
-}
-
-
 def _parse_vram_mb(vram_str: str) -> float:
     """Parse "8 GB" or "1536 MB" → float MB.
 
-    Returns 0.0 for unparseable input or unknown units (after logging the
-    unknown unit so future audits can spot quietly mishandled entries).
+    Supported units: GB, MB, TB, KB.
+    Unknown units log a warning and return 0.0 instead of silently assuming MB.
     """
+    _UNIT_TO_MB: dict[str, float] = {
+        "TB": 1024 * 1024,
+        "GB": 1024.0,
+        "MB": 1.0,
+        "KB": 1 / 1024,
+    }
     parts = vram_str.strip().split()
     if len(parts) < 2:
         return 0.0
     try:
         value = float(parts[0])
         unit = parts[1].upper()
-        if unit not in _VRAM_UNIT_MAP:
-            logger.warning("hardware_profile: unknown VRAM unit %r in %r", unit, vram_str)
+        if unit not in _UNIT_TO_MB:
+            logger.warning(
+                "_parse_vram_mb: unknown unit %r in %r — returning 0.0", parts[1], vram_str
+            )
             return 0.0
-        return value * _VRAM_UNIT_MAP[unit]
+        return value * _UNIT_TO_MB[unit]
     except ValueError:
         return 0.0
 
@@ -389,19 +389,19 @@ def compare_profiles(baseline: HardwareProfile, target: HardwareProfile) -> str:
         for key in common_keys:
             br = b_bench[key]
             tr = t_bench[key]
-            ratio: float | None = (
-                tr.latency_ms / br.latency_ms if br.latency_ms > 0 else None
-            )
-            ratio_display = f"{ratio:.2f}x" if ratio is not None else "N/A"
-            flag = (
-                " ⚠️" if ratio is not None and ratio > 2.0
-                else ("  ✅" if ratio is not None and ratio < 0.5 else "")
-            )
+            # ratio is None when baseline latency is 0 (division undefined)
+            ratio: float | None = tr.latency_ms / br.latency_ms if br.latency_ms > 0 else None
+            if ratio is None:
+                ratio_str = "N/A"
+                flag = ""
+            else:
+                flag = " ⚠️" if ratio > 2.0 else ("  ✅" if ratio < 0.5 else "")
+                ratio_str = f"{ratio:.2f}x"
 
             lines.append(
                 f"| {br.task_type} | {br.model} "
                 f"| {br.latency_ms:.1f} | {tr.latency_ms:.1f} "
-                f"| {ratio_display}{flag} "
+                f"| {ratio_str}{flag} "
                 f"| {br.throughput:.1f}/s | {tr.throughput:.1f}/s |"
             )
 
