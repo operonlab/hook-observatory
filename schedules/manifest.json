@@ -93,7 +93,7 @@
           "Minute": 0
         }
       },
-      "description": "每週日 4AM: 清除 trivial sessions (age > 7d, size < 3KB or quality_score < 0.15)",
+      "description": "每週日 4AM: 清除 trivial sessions (age 大於 7d, size 小於 3KB or quality_score 小於 0.15)",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
@@ -778,6 +778,18 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "obsidian-workshop-autocommit",
+      "label": "com.joneshong.scheduler.obsidian-workshop-autocommit",
+      "command": "/bin/bash /Users/joneshong/.local/bin/obsidian-workshop-autocommit.sh",
+      "schedule": {
+        "interval": 1800
+      },
+      "description": "[DISABLED 2026-05-08] 每 30 分鐘 auto-commit Obsidian workshop vault → GitHub。launchd 因 macOS TCC 限制無法訪問 iCloud Drive 容器，改用 Obsidian Git plugin 為主排程。詳見 vault/2-permanent/launchd-icloud-tcc.md。要 enable 需先給 /bin/zsh Full Disk Access。",
+      "category": "personal",
+      "type": "periodic",
+      "enabled": false
     }
   ]
 }
