@@ -744,16 +744,19 @@ class MemoryBlockService(
                 .limit(top_k)
             )
         else:
-            # English: use tsvector + ts_rank_cd
-            # When HyDE keywords are available, combine them with original query
+            # Non-CJK path: use tsvector + ts_rank_cd
+            # 2026-05-08：analyzer 從 'english' 改為 'simple' —— 'english' 對中文不分詞，
+            # 中文化後 BM25 channel 會歸零；'simple' 純 unicode tokenize + lowercase，
+            # 對混排 query / HyDE 英文 keyword 搜中文 content 也不卡死。
+            # 對應 GIN index：CREATE INDEX ... USING gin(to_tsvector('simple', content))
             search_text = query
             if keywords:
                 # Merge HyDE keywords into the search text for richer tsvector matching
                 extra_terms = " ".join(kw for kw in keywords if kw.lower() not in query.lower())
                 if extra_terms:
                     search_text = f"{query} {extra_terms}"
-            ts_query = func.plainto_tsquery("english", search_text)
-            ts_vector = func.to_tsvector("english", MemoryBlock.content)
+            ts_query = func.plainto_tsquery("simple", search_text)
+            ts_vector = func.to_tsvector("simple", MemoryBlock.content)
             rank = func.ts_rank_cd(ts_vector, ts_query).label("rank")
             q = (
                 select(MemoryBlock, rank)

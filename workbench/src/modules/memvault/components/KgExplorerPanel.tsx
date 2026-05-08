@@ -472,10 +472,10 @@ function TripleTable() {
                   borderColor: 'var(--surface0)',
                 }}
               >
-                {/* Chinese display (if available) */}
-                {t.display_zh && (
-                  <p className="text-xs mb-1" style={{ color: 'var(--text)' }}>
-                    {t.display_zh}
+                {/* Raw quote (原文錨，2026-05-08 envelope 重構) */}
+                {t.raw_quote && (
+                  <p className="text-xs mb-1 italic" style={{ color: 'var(--subtext1)' }}>
+                    “{t.raw_quote}”
                   </p>
                 )}
                 {/* Triple SPO */}
