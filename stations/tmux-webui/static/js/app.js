@@ -575,6 +575,9 @@ function renderPanes(panes) {
   const existingIds = new Set(Object.keys(S.paneEls));
   const newIds = new Set(panes.map(p => p.id));
 
+  // Skeleton/welcome placeholders linger in DOM and render as ghost panes — clear before mounting real panes
+  container.querySelectorAll('.skeleton-loading, .welcome').forEach(el => el.remove());
+
   for (const gone of existingIds) {
     if (!newIds.has(gone)) { S.paneEls[gone].box.remove(); delete S.paneEls[gone]; delete S.paneInfo[gone]; delete S.paneInputs[gone]; }
   }
