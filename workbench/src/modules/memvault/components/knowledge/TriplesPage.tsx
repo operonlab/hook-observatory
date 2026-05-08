@@ -160,9 +160,9 @@ function TripleRow({ triple: t, onDelete }: { triple: Triple; onDelete: (id: str
       className="group rounded-lg border p-3 transition-colors"
       style={{ backgroundColor: 'var(--base)', borderColor: 'var(--surface0)' }}
     >
-      {t.display_zh && (
-        <p className="text-xs mb-1.5 leading-relaxed" style={{ color: 'var(--text)' }}>
-          {t.display_zh}
+      {t.raw_quote && (
+        <p className="text-xs mb-1.5 leading-relaxed italic" style={{ color: 'var(--subtext1)' }}>
+          “{t.raw_quote}”
         </p>
       )}
       <div className="flex items-baseline gap-2 flex-wrap">

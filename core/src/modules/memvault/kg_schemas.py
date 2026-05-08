@@ -42,6 +42,30 @@ class TripleCreate(BaseModel):
     )
     timestamp: datetime | None = None
     topic: str | None = Field(default=None, max_length=500)
+    # Envelope (2026-05-08 中文化重構)
+    kind: str = Field(default="event", max_length=16)
+    # event | state | belief | commitment | annotation
+    modality: str | None = Field(default=None, max_length=16)
+    # observed | planned | desired | hypothesized | regretted | retracted
+    polarity: str | None = Field(default=None, max_length=16)
+    raw_quote: str | None = None
+    temporal: dict | None = None
+    attribution: dict | None = None
+    speaker_id: str | None = Field(
+        default=None,
+        max_length=32,
+        validation_alias=AliasChoices("speaker_id", "speaker"),
+    )
+    refs_triple_id: str | None = Field(
+        default=None,
+        max_length=32,
+        validation_alias=AliasChoices("refs_triple_id", "refs"),
+    )
+    confidence: float | None = None
+    # Carry-fields → batch_ingest 寫入 extra_metadata
+    tags: list[str] | None = None
+    signal_type: str | None = None
+    extra_metadata: dict | None = None
 
 
 class TripleBatchCreate(BaseModel):
@@ -60,7 +84,17 @@ class TripleResponse(SpaceScopedResponse):
     source_session: str | None = None
     timestamp: datetime | None = None
     topic: str | None = None
-    display_zh: str | None = None
+    # Envelope (2026-05-08 中文化重構)
+    kind: str = "event"
+    modality: str | None = None
+    polarity: str | None = None
+    raw_quote: str | None = None
+    temporal: dict | None = None
+    attribution: dict | None = None
+    speaker_id: str | None = None
+    refs_triple_id: str | None = None
+    confidence: float | None = None
+    extra_metadata: dict | None = None
     # Edge invalidation
     valid_at: datetime | None = None
     invalid_at: datetime | None = None

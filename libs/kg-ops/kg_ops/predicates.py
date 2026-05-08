@@ -74,6 +74,74 @@ PREDICATE_ALIASES: dict[str, str] = {
     "equivalent_to": "maps_to",
     "corresponds_to": "maps_to",
     "translates_to": "maps_to",
+    # ---------------------------------------------------------------------
+    # 中文 alias（subject/object 中文化重構，2026-05-08）
+    # 讓 LLM 看到中文動詞時有路可選，不必再被迫翻譯成英文
+    # ---------------------------------------------------------------------
+    # Dependency
+    "使用": "uses",
+    "用": "uses",
+    "用到": "uses",
+    "採用": "uses",
+    "需要": "requires",
+    "得要": "requires",
+    "必須有": "requires",
+    "依賴": "depends_on",
+    "靠": "depends_on",
+    # Configuration
+    "設定為": "configured_with",
+    "搭配": "configured_with",
+    "格式是": "format_is",
+    "結構是": "format_is",
+    "預設是": "default_is",
+    "預設值": "default_is",
+    # Causality
+    "造成": "causes",
+    "導致": "causes",
+    "引發": "causes",
+    "讓": "causes",
+    "防止": "prevents",
+    "避免": "prevents",
+    "擋住": "prevents",
+    "修復": "fixes",
+    "修": "fixes",
+    "解決": "fixes",
+    "啟用": "enables",
+    "開啟": "enables",
+    "讓...能夠": "enables",
+    # Prescriptive
+    "該": "should",
+    "應該": "should",
+    "建議": "should",
+    "不該": "should_NOT",
+    "不應該": "should_NOT",
+    "禁止": "should_NOT",
+    "別": "should_NOT",
+    # Pattern
+    "模式是": "pattern_is",
+    "套路是": "pattern_is",
+    "走法是": "pattern_is",
+    "流程是": "flow_is",
+    "實作為": "implemented_as",
+    "做成": "implemented_as",
+    # Decision
+    "選用": "chosen_over",
+    "捨棄改用": "chosen_over",
+    "替換成": "chosen_over",
+    "原因是": "reason_for",
+    "因為": "reason_for",
+    "理由是": "reason_for",
+    # Effect
+    "提升": "improves",
+    "改善": "improves",
+    "讓...更好": "improves",
+    "降低": "degrades",
+    "削弱": "degrades",
+    "讓...變差": "degrades",
+    # Mapping
+    "對應到": "maps_to",
+    "等於": "maps_to",
+    "對應": "maps_to",
 }
 
 

@@ -26,7 +26,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.shared.models import SpaceScopedModel
@@ -137,7 +137,31 @@ class Triple(SpaceScopedModel):
     predicate: Mapped[str] = mapped_column(String(100))
     object: Mapped[str] = mapped_column(Text)
     topic: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    display_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ---- Envelope (2026-05-08 中文化重構：subject/object 改中文 surface form) ----
+    # subject/object/topic/raw_quote 直存中文，display_zh 反譯欄位廢除
+    kind: Mapped[str] = mapped_column(
+        String(16), server_default=text("'event'"), nullable=False
+    )  # event | state | belief | commitment | annotation
+    modality: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # epistemic: observed | planned | desired | hypothesized | regretted | retracted
+    polarity: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # positive | negative | neutral
+    raw_quote: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 原文片段（保命用）
+    temporal: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # {at: ISO, since: ISO, until: ISO, relative: "兩週前"}
+    attribution: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # {cause, evidence, lesson}
+    speaker_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 預設 'self'，引用他人觀點時填 'other' 或 actor id
+    refs_triple_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey(f"{SCHEMA}.triples.id"), nullable=True
+    )  # annotation 自指 / 糾正鏈
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # 0.0-1.0 LLM 抽取信心
+    extra_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 接 LLM 輸出的 tags / signal_type / 其他半結構
+    # ---- /Envelope ----
     # Edge invalidation (Graphiti-inspired temporal validity)
     valid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     invalid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

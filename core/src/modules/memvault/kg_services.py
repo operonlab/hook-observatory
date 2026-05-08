@@ -95,7 +95,17 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             source_session=instance.source_session,
             timestamp=instance.timestamp,
             topic=instance.topic,
-            display_zh=instance.display_zh,
+            # Envelope (2026-05-08 中文化重構)
+            kind=instance.kind,
+            modality=instance.modality,
+            polarity=instance.polarity,
+            raw_quote=instance.raw_quote,
+            temporal=instance.temporal,
+            attribution=instance.attribution,
+            speaker_id=instance.speaker_id,
+            refs_triple_id=instance.refs_triple_id,
+            confidence=instance.confidence,
+            extra_metadata=instance.extra_metadata,
             valid_at=instance.valid_at,
             invalid_at=instance.invalid_at,
             invalidated_by=instance.invalidated_by,
@@ -125,6 +135,15 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             topic = batch.topic or item.topic
             timestamp = batch.timestamp or item.timestamp
 
+            # Envelope: tags / signal_type 折進 extra_metadata，
+            # 既有 extra_metadata（如有）保留並合併
+            extra_metadata = dict(item.extra_metadata or {})
+            if item.tags:
+                extra_metadata["tags"] = item.tags
+            if item.signal_type:
+                extra_metadata["signal_type"] = item.signal_type
+            extra_metadata = extra_metadata or None
+
             triple = Triple(
                 space_id=space_id,
                 source_session=batch.session_id,
@@ -133,6 +152,17 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
                 object=object_text,
                 topic=topic,
                 timestamp=timestamp,
+                # Envelope columns (2026-05-08 中文化重構)
+                kind=item.kind or "event",
+                modality=item.modality,
+                polarity=item.polarity,
+                raw_quote=item.raw_quote,
+                temporal=item.temporal,
+                attribution=item.attribution,
+                speaker_id=item.speaker_id,
+                refs_triple_id=item.refs_triple_id,
+                confidence=item.confidence,
+                extra_metadata=extra_metadata,
             )
             # embedding column removed (Qdrant migration) — indexed via Qdrant after flush
             db.add(triple)

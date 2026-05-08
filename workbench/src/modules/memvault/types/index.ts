@@ -127,7 +127,17 @@ export interface Triple {
   source_session: string | null
   timestamp: string | null
   topic: string | null
-  display_zh: string | null
+  // Envelope (2026-05-08 中文化重構)
+  kind: string
+  modality: string | null
+  polarity: string | null
+  raw_quote: string | null
+  temporal: Record<string, unknown> | null
+  attribution: Record<string, unknown> | null
+  speaker_id: string | null
+  refs_triple_id: string | null
+  confidence: number | null
+  extra_metadata: Record<string, unknown> | null
 }
 
 export interface Community {
