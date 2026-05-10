@@ -41,6 +41,7 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "docvault.read",
         "docvault.write",
         "assistant.read",
+        "assistant.write",
         "plugin.use",
         "profile.read",
         "profile.write",
