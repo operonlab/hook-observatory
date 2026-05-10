@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Port registry
 sys.path.insert(
-    0, str(Path(__file__).resolve().parent.parent / "libs" / "python" / "src")
+    0, str(Path(__file__).resolve().parent.parent / "libs" / "sdk-client")
 )
 from sdk_client.port_registry import all_ports
 

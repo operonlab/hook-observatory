@@ -333,6 +333,14 @@ LIGHT_CHECKS: list[LightCheck] = [
     ),
     # ── security ──
     LightCheck(
+        name="schema-drift",
+        group="system",
+        command="/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/check_schema_drift.py --check",
+        expect_contains="PASS",
+        timeout=15,
+        optional=True,
+    ),
+    LightCheck(
         name="port-security",
         group="system",
         command="/Users/joneshong/.local/bin/python3 /Users/joneshong/workshop/scripts/port_audit.py --check",

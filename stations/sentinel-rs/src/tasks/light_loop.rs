@@ -1,4 +1,4 @@
-use crate::checker::{self, registry::CHECKS};
+use crate::checker::{self, registry::all_checks};
 use crate::models::CheckResult;
 use crate::sse::SseHub;
 use crate::state::InterventionEngine;
@@ -30,7 +30,7 @@ pub async fn run(
             _ = ticker.tick() => {
                 let results = checker::run_all(&client).await;
                 let healthy = results.iter().filter(|r| r.status.is_ok()).count();
-                tracing::info!(healthy, total = CHECKS.len(), "light check cycle");
+                tracing::info!(healthy, total = all_checks().len(), "light check cycle");
 
                 for r in &results {
                     engine.update_light(&r.service, r.status, r.response_ms);
@@ -79,7 +79,7 @@ pub fn build_status_payload(engine: &InterventionEngine) -> serde_json::Value {
     let services: Vec<serde_json::Value> = trackers
         .iter()
         .map(|t| {
-            let group = crate::checker::registry::CHECKS
+            let group = all_checks()
                 .iter()
                 .find(|c| c.name == t.service)
                 .map(|c| c.group)

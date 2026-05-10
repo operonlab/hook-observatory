@@ -3,7 +3,7 @@ pub mod frontend;
 pub mod simple_restart;
 
 use crate::checker;
-use crate::checker::registry::CHECKS;
+use crate::checker::registry::all_checks;
 use crate::config::Config;
 use crate::models::now_epoch;
 use crate::{notify, push};
@@ -139,7 +139,7 @@ impl Remediator {
 
     async fn verify_recovered(&self, service: &str) -> bool {
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-        if let Some(check) = CHECKS.iter().find(|c| c.name == service) {
+        if let Some(check) = all_checks().iter().find(|c| c.name == service) {
             let result = checker::run_one(&self.http, check).await;
             if result.status.is_ok() {
                 self.engine.update_light(service, result.status, result.response_ms);

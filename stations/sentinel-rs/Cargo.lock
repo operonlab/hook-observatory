@@ -1952,6 +1952,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workshop-port-registry",
  "workshop-sqlite-pool",
 ]
 
@@ -3375,6 +3376,14 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
+]
+
+[[package]]
+name = "workshop-port-registry"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
 ]
 
 [[package]]
