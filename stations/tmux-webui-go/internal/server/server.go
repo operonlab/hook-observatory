@@ -1,15 +1,4 @@
 // Package server wires the HTTP routes for tmux-webui.
-//
-// v0 covers the read-only HTTP surface that the frontend hits before
-// the WebSocket connects: GET /api/sessions, /api/sessions/{name}/panes,
-// /api/sessions/{name}/windows, plus the PWA shell (index, sw.js,
-// manifest, icons, /static/*).
-//
-// Stubs (501 Not Implemented) reserve the slots for routes that need
-// later phases: /ws, /api/autocomplete, /api/upload, /api/relay,
-// /api/relay/check, /api/tts/push, /api/tts/{id}.
-//
-// Uses Go 1.22+ ServeMux pattern routes — no third-party HTTP framework.
 package server
 
 import (
@@ -19,22 +8,56 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/operonlab/tmux-webui/internal/autocomplete"
 	"github.com/operonlab/tmux-webui/internal/buildinfo"
 	"github.com/operonlab/tmux-webui/internal/config"
+	"github.com/operonlab/tmux-webui/internal/metrics"
+	"github.com/operonlab/tmux-webui/internal/prefix"
 	"github.com/operonlab/tmux-webui/internal/pwa"
 	"github.com/operonlab/tmux-webui/internal/tmuxctl"
+	"github.com/operonlab/tmux-webui/internal/tts"
+	"github.com/operonlab/tmux-webui/internal/upload"
+	"github.com/operonlab/tmux-webui/internal/ws"
 )
 
 type Server struct {
-	cfg *config.Config
-	tx  *tmuxctl.Client
+	cfg    *config.Config
+	tx     *tmuxctl.Client
+	hub    *ws.Hub
+	ac     *autocomplete.Engine
+	prov   metrics.Provider
+	upload *upload.Handler
+	tts    *tts.Store
 }
 
 func New(cfg *config.Config, tx *tmuxctl.Client) *Server {
-	return &Server{cfg: cfg, tx: tx}
+	pc := prefix.New(tx)
+	hub := ws.NewHub(cfg, tx, pc)
+
+	ac := autocomplete.New(autocomplete.Options{ClaudeDir: cfg.Autocomplete.ClaudeDir})
+
+	var prov metrics.Provider = metrics.NewStub()
+	if cfg.Metrics.Provider == "http" && cfg.Metrics.URL != "" {
+		prov = metrics.NewHTTP(cfg.Metrics.URL)
+	}
+
+	return &Server{
+		cfg:    cfg,
+		tx:     tx,
+		hub:    hub,
+		ac:     ac,
+		prov:   prov,
+		upload: upload.New(cfg.UploadDir, 50<<20),
+		tts:    tts.NewStore(),
+	}
 }
 
-// Mux returns the configured HTTP handler.
+func (s *Server) Close() {
+	if s.ac != nil {
+		s.ac.Close()
+	}
+}
+
 func (s *Server) Mux() http.Handler {
 	mux := http.NewServeMux()
 
@@ -53,18 +76,29 @@ func (s *Server) Mux() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{name}/panes", s.handleListPanes)
 	mux.HandleFunc("GET /api/sessions/{name}/windows", s.handleListWindows)
 
-	// Build/version info — useful for the frontend to detect deploys.
+	// Build/version info
 	mux.HandleFunc("GET /api/version", s.handleVersion)
 
-	// Stubs (later phases)
-	mux.HandleFunc("/ws", notImplemented("/ws — WebSocket pending Phase 1.8"))
-	mux.HandleFunc("/api/autocomplete", notImplemented("/api/autocomplete — pending Phase 1.7"))
-	mux.HandleFunc("/api/autocomplete/refresh", notImplemented("/api/autocomplete/refresh — pending Phase 1.7"))
-	mux.HandleFunc("/api/upload", notImplemented("/api/upload — pending Phase 1.6"))
+	// Metrics (REST snapshot for non-ws polling)
+	mux.HandleFunc("GET /api/metrics", s.handleMetrics)
+
+	// WebSocket
+	mux.Handle("/ws", s.hub.UpgradeHandler())
+
+	// Autocomplete
+	mux.HandleFunc("GET /api/autocomplete", s.handleAutocomplete)
+	mux.HandleFunc("GET /api/autocomplete/refresh", s.handleAutocompleteRefresh)
+
+	// Upload (50MB cap inside handler)
+	mux.Handle("POST /api/upload", s.upload.HTTP())
+
+	// TTS push + serve
+	mux.Handle("POST /api/tts/push", s.tts.PushHandler(s.hub.BroadcastTTS))
+	mux.Handle("GET /api/tts/{id}", s.tts.GetHandler())
+
+	// Optional/relay (Phase 1.9)
 	mux.HandleFunc("/api/relay", notImplemented("/api/relay — optional, pending Phase 1.9"))
 	mux.HandleFunc("/api/relay/check", notImplemented("/api/relay/check — optional, pending Phase 1.9"))
-	mux.HandleFunc("/api/tts/push", notImplemented("/api/tts/push — pending Phase 1.6"))
-	mux.HandleFunc("/api/tts/{id}", notImplemented("/api/tts — pending Phase 1.6"))
 
 	return logRequests(mux)
 }
@@ -73,12 +107,9 @@ func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	sessions, err := s.tx.ListSessions(ctx)
-	if err != nil {
+	if err != nil || sessions == nil {
 		writeJSON(w, http.StatusOK, []any{})
 		return
-	}
-	if sessions == nil {
-		sessions = []tmuxctl.Session{}
 	}
 	writeJSON(w, http.StatusOK, sessions)
 }
@@ -115,6 +146,26 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, s.prov.Collect(ctx))
+}
+
+func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	t := r.URL.Query().Get("type")
+	items := s.ac.Complete(q, t)
+	if items == nil {
+		items = []autocomplete.Item{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) handleAutocompleteRefresh(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.ac.Refresh())
+}
+
 func notImplemented(reason string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, reason, http.StatusNotImplemented)
@@ -127,8 +178,6 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-// logRequests is a minimal access log middleware (stdlib log via fmt to stderr).
-// Replaced with structured slog in a later phase.
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

@@ -49,6 +49,7 @@ func main() {
 
 	tx := tmuxctl.New()
 	srv := server.New(cfg, tx)
+	defer srv.Close()
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpSrv := &http.Server{
