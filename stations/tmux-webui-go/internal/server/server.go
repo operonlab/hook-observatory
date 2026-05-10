@@ -208,3 +208,8 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.status = code
 	s.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap exposes the underlying ResponseWriter so http.NewResponseController
+// (used by coder/websocket for Hijack) can reach the real Hijacker. Without
+// this, WS upgrade returns 501 because the middleware hides the interface.
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }

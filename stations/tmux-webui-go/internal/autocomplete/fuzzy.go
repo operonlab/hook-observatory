@@ -3,40 +3,39 @@ package autocomplete
 import "strings"
 
 // fuzzyScore returns a numeric match quality between query and text.
-// Scoring mirrors the Python _fuzzy_score implementation:
+// 1:1 port of stations/tmux-webui/autocomplete.py:_fuzzy_score:
 //
-//	>= 1000 : exact prefix match (1000 - len(text) for tie-breaking)
-//	>= 500  : substring match   (500  - index of match for tie-breaking)
-//	1..N    : subsequence match (number of matched characters)
-//	-1      : no match
+//	1000 : exact prefix match
+//	500  : substring match
+//	1..N : subsequence match (count of query chars found in order)
+//	-1   : no match (query couldn't fit as a subsequence)
+//	0    : empty query
+//
+// Position-aware tie-breaking is intentionally NOT applied (would diverge
+// from Python and surprise users porting from the old backend). v0.2 may
+// add a configurable ranking strategy.
 func fuzzyScore(query, text string) int {
 	if query == "" {
-		return 100
+		return 0
 	}
 	q := strings.ToLower(query)
 	t := strings.ToLower(text)
 
-	// Exact prefix match.
 	if strings.HasPrefix(t, q) {
-		return 1000 - len(t)
+		return 1000
+	}
+	if strings.Contains(t, q) {
+		return 500
 	}
 
-	// Substring match.
-	if idx := strings.Index(t, q); idx >= 0 {
-		return 500 - idx
-	}
-
-	// Subsequence match: advance through query chars in order.
 	qi := 0
-	score := 0
 	for _, ch := range t {
 		if qi < len(q) && ch == rune(q[qi]) {
 			qi++
-			score++
 		}
 	}
 	if qi == len(q) {
-		return score
+		return qi
 	}
 	return -1
 }

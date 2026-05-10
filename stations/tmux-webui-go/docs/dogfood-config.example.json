@@ -1,0 +1,26 @@
+{
+  "_comment": "Workshop dogfood config — copy to ~/.config/tmux-webui/config.json on the Mac that runs the Workshop monolith. OSS users should NOT enable these toggles; the defaults (auto-created on first run) are appropriate for them.",
+
+  "host": "127.0.0.1",
+  "port": 9527,
+  "poll_interval": 0.4,
+  "metrics_interval": 5.0,
+  "capture_lines": 150,
+
+  "upload_dir": "/Users/joneshong/workshop/outputs/tmux-webui-uploads",
+
+  "autocomplete": {
+    "claude_dir": "/Users/joneshong/.claude"
+  },
+
+  "metrics": {
+    "provider": "http",
+    "url": "http://127.0.0.1:10103/sysmon/current"
+  },
+
+  "relay": {
+    "pane_pool_script": "/Users/joneshong/.claude/skills/tmux-relay/scripts/pane_pool.sh",
+    "relay_script": "/Users/joneshong/.claude/skills/tmux-relay/scripts/relay.sh",
+    "signal_dir": "/Users/joneshong/workshop/outputs/relay/signals"
+  }
+}
