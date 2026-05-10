@@ -1,0 +1,76 @@
+version: 2
+project_name: tmux-webui
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: tmux-webui
+    main: ./cmd/tmux-webui
+    binary: tmux-webui
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/operonlab/tmux-webui/internal/buildinfo.Version={{.Version}}
+      - -X github.com/operonlab/tmux-webui/internal/buildinfo.GitHash={{.ShortCommit}}
+      - -X github.com/operonlab/tmux-webui/internal/buildinfo.BuildDate={{.Date}}
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+brews:
+  - name: tmux-webui
+    repository:
+      owner: operonlab
+      name: homebrew-tap
+      branch: main
+    homepage: "https://github.com/operonlab/tmux-webui"
+    description: "Web UI for tmux — your panes in any browser, with PWA + LAN/QR access"
+    license: "MIT"
+    install: |
+      bin.install "tmux-webui"
+    test: |
+      system "#{bin}/tmux-webui", "version"
+    dependencies:
+      - name: tmux
+
+release:
+  github:
+    owner: operonlab
+    name: tmux-webui
+  draft: true
+  prerelease: auto
+  name_template: "v{{.Version}}"
