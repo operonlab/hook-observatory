@@ -14,6 +14,7 @@ import (
 	"github.com/operonlab/tmux-webui/internal/metrics"
 	"github.com/operonlab/tmux-webui/internal/prefix"
 	"github.com/operonlab/tmux-webui/internal/pwa"
+	"github.com/operonlab/tmux-webui/internal/relay"
 	"github.com/operonlab/tmux-webui/internal/tmuxctl"
 	"github.com/operonlab/tmux-webui/internal/tts"
 	"github.com/operonlab/tmux-webui/internal/upload"
@@ -28,6 +29,7 @@ type Server struct {
 	prov   metrics.Provider
 	upload *upload.Handler
 	tts    *tts.Store
+	relay  *relay.Dispatcher // nil when relay disabled
 }
 
 func New(cfg *config.Config, tx *tmuxctl.Client) *Server {
@@ -41,6 +43,10 @@ func New(cfg *config.Config, tx *tmuxctl.Client) *Server {
 		prov = metrics.NewHTTP(cfg.Metrics.URL)
 	}
 
+	rly, _ := relay.New(cfg.Relay.PaneScript, cfg.Relay.RelayScript, cfg.Relay.SignalDir)
+	// New returns nil when both scripts are empty (disabled by default for OSS).
+	// Real config errors (paths set but files missing) are logged and treated as disabled.
+
 	return &Server{
 		cfg:    cfg,
 		tx:     tx,
@@ -49,6 +55,7 @@ func New(cfg *config.Config, tx *tmuxctl.Client) *Server {
 		prov:   prov,
 		upload: upload.New(cfg.UploadDir, 50<<20),
 		tts:    tts.NewStore(),
+		relay:  rly,
 	}
 }
 
@@ -96,9 +103,14 @@ func (s *Server) Mux() http.Handler {
 	mux.Handle("POST /api/tts/push", s.tts.PushHandler(s.hub.BroadcastTTS))
 	mux.Handle("GET /api/tts/{id}", s.tts.GetHandler())
 
-	// Optional/relay (Phase 1.9)
-	mux.HandleFunc("/api/relay", notImplemented("/api/relay — optional, pending Phase 1.9"))
-	mux.HandleFunc("/api/relay/check", notImplemented("/api/relay/check — optional, pending Phase 1.9"))
+	// Relay (optional; nil when scripts not configured)
+	if s.relay != nil {
+		mux.Handle("POST /api/relay", s.relay.DispatchHandler())
+		mux.Handle("GET /api/relay/check", s.relay.CheckHandler())
+	} else {
+		mux.HandleFunc("/api/relay", notImplemented("/api/relay — disabled (config.relay scripts not set)"))
+		mux.HandleFunc("/api/relay/check", notImplemented("/api/relay/check — disabled (config.relay scripts not set)"))
+	}
 
 	return logRequests(mux)
 }
