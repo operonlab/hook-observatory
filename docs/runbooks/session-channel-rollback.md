@@ -1,10 +1,12 @@
-# Session Channel — Rollback Runbook (v2 → v1)
+# Session Channel — Rollback Runbook
 
 > 適用版本：session-channel v0.2 (Wave 1-5, Streams 原生 consumer group)
 > 對應計畫：`docs/plans/session-channel-team-parity-v2.md` § 五 風險與 Rollback
-> 最後更新：2026-04-25
+> 最後更新：2026-05-10
 
-本 runbook 提供三層 rollback 策略，從最快（feature flag 30 秒）到最徹底（Redis state restore + git revert，~20 分鐘）。**先試 Tier 1，不行才升級。**
+> ⚠️ **Tier 1 已失效（2026-05-10）**：`BOARD_V2` feature flag 已從 `config.py` 移除，`board_lua.py` v1 路徑亦已刪除。下方 Tier 1 章節保留供歷史參考，**實務上請直接從 Tier 2（Git Revert）開始**。原因：v1 Lua CAS 早在 v2 穩定後即進入 placeholder 狀態，flag 切換實際無 v1 程式碼可運行，留著是「假的安全網」。要 rollback 就 `git revert` 整段 v2 commits 然後重啟。
+
+本 runbook 提供分層 rollback 策略，從快（git revert，~5 分鐘）到最徹底（Redis state restore，~20 分鐘）。
 
 ---
 
@@ -46,9 +48,11 @@ curl -s http://localhost:10101/metrics | grep -E 'lease_expired|claim_conflict|o
 
 ---
 
-## Rollback Tier 1 — Feature Flag 切換（30 秒）
+## Rollback Tier 1 — Feature Flag 切換（30 秒）⚠️ DEPRECATED（2026-05-10）
 
-**前提**：`config.py` 已加 `BOARD_V2` flag（W5-C 已完成），且 v1 路徑在 `board_routes.py` 仍保留分支（過渡期）。
+> ❌ **本章節已失效**：`BOARD_V2` flag 已從 `config.py` 移除，`board_lua.py` v1 實作亦已刪除。下方指令執行後 station 不會切回 v1，只會抱怨找不到 env var 或直接無變化。**請改用 Tier 2 — Git Revert。** 以下原始流程僅供歷史參考。
+
+**前提**（已不成立）：`config.py` 已加 `BOARD_V2` flag（W5-C 已完成），且 v1 路徑在 `board_routes.py` 仍保留分支（過渡期）。
 
 **用途**：v2 路徑 bug 但 v1 程式碼還在 → 不需 git revert，直接切舊邏輯。
 
@@ -133,10 +137,9 @@ for failed in $(redis-cli --scan --pattern 'ws:channel:board:*:failed'); do
   redis-cli DEL "$failed"
 done
 
-# 4. 啟用 BOARD_V2=0 並重啟
-ENVFILE=/opt/homebrew/etc/session-channel.env
-sudo sed -i '' '/^BOARD_V2=/d' "$ENVFILE"
-echo 'BOARD_V2=0' | sudo tee -a "$ENVFILE" >/dev/null
+# 4. Git revert v2 路徑 + 重啟（取代舊的 BOARD_V2=0 流程，2026-05-10 後）
+# git revert <v2 commits>          # 在另一視窗執行
+# 或從 backup 分支 hard reset
 
 launchctl load ~/Library/LaunchAgents/com.workshop.session-channel.plist
 sleep 3 && curl -s http://localhost:10101/health | jq
