@@ -1,0 +1,291 @@
+# Workshop Port Registry — Cross-Language Single Source of Truth
+#
+# Consumed by:
+#   - libs/sdk-client/sdk_client/port_registry.py        (Python, runtime load)
+#   - libs/rust-port-registry/build.rs                    (Rust, build-time codegen)
+#   - (v2) libs/go-port-registry                          (Go, //go:generate)
+#
+# Schema mirrors port_registry.py:23-44 ServicePort dataclass.
+# Port range convention (10000+, self-managed services):
+#   10000-10099   Core Services
+#   10100-10199   Stations: Infra & Ops
+#   10200-10299   Stations: AI & Media
+#   10300-10399   Stations: Business & Tools
+#   10500-10599   Frontend
+# Third-party / Docker services keep their standard ports.
+
+host: 127.0.0.1
+
+services:
+  # ── Core ──
+  - name: core
+    port: 10000
+    group: core
+    health_path: /health
+    env_var: CORE_API_URL
+    nginx_path: ""
+    optional: false
+  - name: paper
+    port: 10010
+    group: core
+    health_path: /health
+    env_var: PAPER_SVC_URL
+    nginx_path: /api/paper/
+    optional: false
+  - name: intelflow
+    port: 10011
+    group: core
+    health_path: /health
+    env_var: INTELFLOW_SVC_URL
+    nginx_path: /api/intelflow/
+    optional: false
+  - name: invest
+    port: 10012
+    group: core
+    health_path: /health
+    env_var: INVEST_SVC_URL
+    nginx_path: /api/invest/
+    optional: false
+
+  # ── Stations: Infra & Ops ──
+  - name: hook-observatory
+    port: 10100
+    group: station-infra
+    health_path: /
+    env_var: HOOK_OBS_URL
+    nginx_path: /apps/hook/
+    optional: false
+  - name: session-channel
+    port: 10101
+    group: station-infra
+    health_path: /health
+    env_var: SESSION_CHANNEL_URL
+    nginx_path: /apps/channel/
+    optional: false
+  - name: system-monitor
+    port: 10102
+    group: station-infra
+    health_path: /
+    env_var: SYSTEM_MONITOR_URL
+    nginx_path: /apps/sysmon/
+    optional: false
+  - name: agent-metrics
+    port: 10103
+    group: station-infra
+    health_path: /health
+    env_var: AGENT_METRICS_URL
+    nginx_path: /apps/agent-metrics/
+    optional: false
+  - name: capture-console
+    port: 10104
+    group: station-infra
+    health_path: /docs
+    env_var: CAPTURE_CONSOLE_URL
+    nginx_path: /apps/capture/
+    optional: false
+  - name: tmux-webui
+    port: 10105
+    group: station-infra
+    health_path: /
+    env_var: TMUX_WEBUI_URL
+    nginx_path: /apps/tmux/
+    optional: false
+  - name: sentinel
+    port: 4101
+    group: station-infra
+    health_path: /api/sentinel/health
+    env_var: SENTINEL_URL
+    nginx_path: /apps/sentinel/
+    optional: false
+  - name: fleet
+    port: 10106
+    group: station-infra
+    health_path: /health
+    env_var: FLEET_URL
+    nginx_path: /apps/fleet/
+    optional: false
+
+  # ── Stations: AI & Media ──
+  - name: stt
+    port: 10200
+    group: station-ai
+    health_path: /health
+    env_var: STT_URL
+    nginx_path: ""
+    optional: true
+  - name: tts
+    port: 10201
+    group: station-ai
+    health_path: /health
+    env_var: TTS_URL
+    nginx_path: ""
+    optional: true
+  - name: ocr
+    port: 10202
+    group: station-ai
+    health_path: /health
+    env_var: OCR_URL
+    nginx_path: ""
+    optional: true
+  - name: vision
+    port: 10203
+    group: station-ai
+    health_path: /health
+    env_var: VISION_URL
+    nginx_path: ""
+    optional: true
+  - name: voice-gateway
+    port: 10204
+    group: station-ai
+    health_path: /health
+    env_var: VOICE_GATEWAY_URL
+    nginx_path: /apps/voice/
+    optional: true
+  - name: translate
+    port: 10205
+    group: station-ai
+    health_path: /health
+    env_var: TRANSLATE_URL
+    nginx_path: ""
+    optional: true
+  - name: video-edit
+    port: 10206
+    group: station-ai
+    health_path: /health
+    env_var: VIDEO_EDIT_URL
+    nginx_path: /apps/mlt-editor/
+    optional: false
+  - name: agent-vista
+    port: 10207
+    group: station-ai
+    health_path: /
+    env_var: AGENT_VISTA_URL
+    nginx_path: /apps/vista/
+    optional: false
+  - name: remote-node
+    port: 10208
+    group: station-ai
+    health_path: /health
+    env_var: REMOTE_NODE_URL
+    nginx_path: ""
+    optional: true
+
+  # ── Stations: Business & Tools ──
+  - name: auto-survey
+    port: 10300
+    group: station-biz
+    health_path: /api/people
+    env_var: AUTO_SURVEY_URL
+    nginx_path: /apps/survey/
+    optional: false
+  - name: anvil
+    port: 10301
+    group: station-biz
+    health_path: /docs
+    env_var: ANVIL_URL
+    nginx_path: /apps/anvil/
+    optional: false
+  - name: blog
+    port: 10302
+    group: station-biz
+    health_path: /zh/
+    env_var: BLOG_URL
+    nginx_path: ""
+    optional: false
+
+  # ── Frontend ──
+  - name: workbench
+    port: 10500
+    group: frontend
+    health_path: ""
+    env_var: ""
+    nginx_path: ""
+    optional: false
+
+  # ── Third-party (keep original ports) ──
+  - name: cronicle
+    port: 4105
+    group: third-party
+    health_path: /api/app/ping
+    env_var: ""
+    nginx_path: /apps/scheduler/
+    optional: false
+  - name: litellm
+    port: 4000
+    group: third-party
+    health_path: /health/liveliness
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: ccr
+    port: 3456
+    group: third-party
+    health_path: /
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: mcpproxy
+    port: 8808
+    group: third-party
+    health_path: /health
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: nginx
+    port: 8080
+    group: third-party
+    health_path: /health
+    env_var: ""
+    nginx_path: ""
+    optional: false
+
+  # ── Docker (keep standard ports) ──
+  - name: postgres
+    port: 5432
+    group: docker
+    health_path: ""
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: redis
+    port: 6379
+    group: docker
+    health_path: ""
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: qdrant
+    port: 6333
+    group: docker
+    health_path: /healthz
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: rustfs
+    port: 9000
+    group: docker
+    health_path: /
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: filebrowser
+    port: 8850
+    group: docker
+    health_path: /apps/files/health
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: bark
+    port: 8090
+    group: docker
+    health_path: /ping
+    env_var: ""
+    nginx_path: ""
+    optional: false
+  - name: lgtm
+    port: 3100
+    group: docker
+    health_path: /api/health
+    env_var: ""
+    nginx_path: ""
+    optional: true

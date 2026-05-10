@@ -1,6 +1,9 @@
 """Workshop Port Registry — Single Source of Truth.
 
-All port definitions live here. Other files MUST import from this module.
+All port definitions are loaded at runtime from:
+    shared/schemas/port_registry.yaml  (cross-language single source of truth)
+
+Other files MUST import from this module.
 DO NOT hardcode ports elsewhere — use get_url() or import constants.
 
 Port Range Convention (10000+, for self-managed services):
@@ -16,8 +19,16 @@ Third-party / Docker services keep their standard ports.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 _HOST = "127.0.0.1"
+
+# Path to the YAML source of truth (workshop_root/shared/schemas/port_registry.yaml)
+# parents[3]: sdk_client/ → sdk-client/ → libs/ → <workshop_root>
+_YAML_PATH = Path(__file__).resolve().parents[3] / "shared" / "schemas" / "port_registry.yaml"
 
 
 @dataclass(frozen=True)
@@ -43,247 +54,32 @@ class ServicePort:
         return f"{self.url}{self.health_path}"
 
 
+def _load_from_yaml(path: Path = _YAML_PATH) -> list[ServicePort]:
+    """Load service definitions from YAML file and return a list of ServicePort."""
+    with path.open("r", encoding="utf-8") as fh:
+        data: dict[str, Any] = yaml.safe_load(fh)
+
+    services: list[ServicePort] = []
+    for entry in data.get("services", []):
+        services.append(
+            ServicePort(
+                name=entry["name"],
+                port=int(entry["port"]),
+                group=entry["group"],
+                health_path=entry.get("health_path", "/health"),
+                env_var=entry.get("env_var", ""),
+                nginx_path=entry.get("nginx_path", ""),
+                optional=bool(entry.get("optional", False)),
+            )
+        )
+    return services
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  Service Definitions
-#
-#  NOTE: Ports below are ACTIVE values. Self-managed services
-#  have been migrated to the 10000+ range per the convention.
+#  Service Definitions — loaded from shared/schemas/port_registry.yaml
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-PORTS: list[ServicePort] = [
-    # ── Core ──
-    ServicePort(
-        "core",
-        10000,
-        "core",
-        health_path="/health",
-        env_var="CORE_API_URL",
-    ),
-    ServicePort(
-        "paper",
-        10010,
-        "core",
-        health_path="/health",
-        env_var="PAPER_SVC_URL",
-        nginx_path="/api/paper/",
-    ),
-    ServicePort(
-        "intelflow",
-        10011,
-        "core",
-        health_path="/health",
-        env_var="INTELFLOW_SVC_URL",
-        nginx_path="/api/intelflow/",
-    ),
-    ServicePort(
-        "invest",
-        10012,
-        "core",
-        health_path="/health",
-        env_var="INVEST_SVC_URL",
-        nginx_path="/api/invest/",
-    ),
-    # ── Stations: Infra & Ops ──
-    ServicePort(
-        "hook-observatory",
-        10100,
-        "station-infra",
-        health_path="/",
-        env_var="HOOK_OBS_URL",
-        nginx_path="/apps/hook/",
-    ),
-    ServicePort(
-        "session-channel",
-        10101,
-        "station-infra",
-        health_path="/health",
-        env_var="SESSION_CHANNEL_URL",
-        nginx_path="/apps/channel/",
-    ),
-    ServicePort(
-        "system-monitor",
-        10102,
-        "station-infra",
-        health_path="/",
-        env_var="SYSTEM_MONITOR_URL",
-        nginx_path="/apps/sysmon/",
-    ),
-    ServicePort(
-        "agent-metrics",
-        10103,
-        "station-infra",
-        health_path="/health",
-        env_var="AGENT_METRICS_URL",
-        nginx_path="/apps/agent-metrics/",
-    ),
-    ServicePort(
-        "capture-console",
-        10104,
-        "station-infra",
-        health_path="/docs",
-        env_var="CAPTURE_CONSOLE_URL",
-        nginx_path="/apps/capture/",
-    ),
-    ServicePort(
-        "tmux-webui",
-        10105,
-        "station-infra",
-        health_path="/",
-        env_var="TMUX_WEBUI_URL",
-        nginx_path="/apps/tmux/",
-    ),
-    ServicePort(
-        "sentinel",
-        4101,
-        "station-infra",
-        health_path="/api/sentinel/health",
-        env_var="SENTINEL_URL",
-        nginx_path="/apps/sentinel/",
-    ),
-    ServicePort(
-        "fleet",
-        10106,
-        "station-infra",
-        health_path="/health",
-        env_var="FLEET_URL",
-        nginx_path="/apps/fleet/",
-    ),
-    # ── Stations: AI & Media ──
-    ServicePort(
-        "stt",
-        10200,
-        "station-ai",
-        env_var="STT_URL",
-        optional=True,
-    ),
-    ServicePort(
-        "tts",
-        10201,
-        "station-ai",
-        env_var="TTS_URL",
-        optional=True,
-    ),
-    ServicePort(
-        "ocr",
-        10202,
-        "station-ai",
-        env_var="OCR_URL",
-        optional=True,
-    ),
-    ServicePort(
-        "vision",
-        10203,
-        "station-ai",
-        env_var="VISION_URL",
-        optional=True,
-    ),
-    ServicePort(
-        "voice-gateway",
-        10204,
-        "station-ai",
-        env_var="VOICE_GATEWAY_URL",
-        optional=True,
-        nginx_path="/apps/voice/",
-    ),
-    ServicePort(
-        "translate",
-        10205,
-        "station-ai",
-        env_var="TRANSLATE_URL",
-        optional=True,
-    ),
-    ServicePort(
-        "video-edit",
-        10206,
-        "station-ai",
-        env_var="VIDEO_EDIT_URL",
-        nginx_path="/apps/mlt-editor/",
-    ),
-    ServicePort(
-        "agent-vista",
-        10207,
-        "station-ai",
-        health_path="/",
-        env_var="AGENT_VISTA_URL",
-        nginx_path="/apps/vista/",
-    ),
-    ServicePort(
-        "remote-node",
-        10208,
-        "station-ai",
-        env_var="REMOTE_NODE_URL",
-        optional=True,
-    ),
-    # ── Stations: Business & Tools ──
-    ServicePort(
-        "auto-survey",
-        10300,
-        "station-biz",
-        health_path="/api/people",
-        env_var="AUTO_SURVEY_URL",
-        nginx_path="/apps/survey/",
-    ),
-    ServicePort(
-        "anvil",
-        10301,
-        "station-biz",
-        health_path="/docs",
-        env_var="ANVIL_URL",
-        nginx_path="/apps/anvil/",
-    ),
-    ServicePort(
-        "blog",
-        10302,
-        "station-biz",
-        health_path="/zh/",
-        env_var="BLOG_URL",
-    ),
-    # ── Frontend ──
-    ServicePort("workbench", 10500, "frontend", health_path=""),
-    # ── Third-party (keep original ports) ──
-    ServicePort(
-        "cronicle",
-        4105,
-        "third-party",
-        health_path="/api/app/ping",
-        nginx_path="/apps/scheduler/",
-    ),
-    ServicePort(
-        "litellm",
-        4000,
-        "third-party",
-        health_path="/health/liveliness",
-    ),
-    ServicePort(
-        "ccr",
-        3456,
-        "third-party",
-        # CCR has no dedicated health endpoint; root returns 404 but TCP listens
-        # — sentinel light_check tolerates expect_status=404 below.
-        health_path="/",
-    ),
-    ServicePort("mcpproxy", 8808, "third-party", health_path="/health"),
-    ServicePort("nginx", 8080, "third-party", health_path="/health"),
-    # ── Docker (keep standard ports) ──
-    ServicePort("postgres", 5432, "docker", health_path=""),
-    ServicePort("redis", 6379, "docker", health_path=""),
-    ServicePort("qdrant", 6333, "docker", health_path="/healthz"),
-    ServicePort("rustfs", 9000, "docker", health_path="/"),
-    ServicePort(
-        "filebrowser",
-        8850,
-        "docker",
-        health_path="/apps/files/health",
-    ),
-    ServicePort("bark", 8090, "docker", health_path="/ping"),
-    ServicePort(
-        "lgtm",
-        3100,
-        "docker",
-        health_path="/api/health",
-        optional=True,
-    ),
-]
+PORTS: list[ServicePort] = _load_from_yaml()
 
 
 # ── Lookup Helpers ─────────────────────────────────────────
@@ -328,37 +124,9 @@ def check_conflicts() -> list[str]:
 
 
 # ── Migration Map (10000+ convention) ──────────────────────
+# Dynamically built from PORTS; includes only services in the 10000-10599 range.
 # ACTIVE values — migration complete. Kept as reference index.
 
 MIGRATION_MAP: dict[str, int] = {
-    # Core
-    "core": 10000,
-    "paper": 10010,
-    "intelflow": 10011,
-    "invest": 10012,
-    # Stations: Infra & Ops
-    "hook-observatory": 10100,
-    "session-channel": 10101,
-    "system-monitor": 10102,
-    "agent-metrics": 10103,
-    "capture-console": 10104,
-    "tmux-webui": 10105,
-    "sentinel": 4101,
-    "fleet": 10106,
-    # Stations: AI & Media
-    "stt": 10200,
-    "tts": 10201,
-    "ocr": 10202,
-    "vision": 10203,
-    "voice-gateway": 10204,
-    "translate": 10205,
-    "video-edit": 10206,
-    "agent-vista": 10207,
-    "remote-node": 10208,
-    # Stations: Business & Tools
-    "auto-survey": 10300,
-    "anvil": 10301,
-    "blog": 10302,
-    # Frontend
-    "workbench": 10500,
+    p.name: p.port for p in PORTS if 10000 <= p.port <= 10599
 }

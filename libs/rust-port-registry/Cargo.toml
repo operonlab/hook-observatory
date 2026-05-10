@@ -1,0 +1,13 @@
+[package]
+name = "workshop-port-registry"
+version = "0.1.0"
+edition = "2021"
+description = "Workshop shared port registry — codegen from shared/schemas/port_registry.yaml"
+
+[lib]
+name = "workshop_port_registry"
+path = "src/lib.rs"
+
+[build-dependencies]
+serde_yaml = "0.9"
+serde = { version = "1", features = ["derive"] }

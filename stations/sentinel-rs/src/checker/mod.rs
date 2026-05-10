@@ -4,15 +4,16 @@ pub mod shell;
 
 use crate::models::CheckResult;
 use futures::stream::{FuturesUnordered, StreamExt};
-use registry::{Check, CheckKind, CHECKS};
+use registry::{Check, CheckKind};
 use std::time::Duration;
 
 pub async fn run_all(client: &reqwest::Client) -> Vec<CheckResult> {
+    let all_checks = registry::all_checks();
     let mut fut = FuturesUnordered::new();
-    for check in CHECKS {
+    for check in all_checks {
         fut.push(run_one(client, check));
     }
-    let mut results = Vec::with_capacity(CHECKS.len());
+    let mut results = Vec::with_capacity(all_checks.len());
     while let Some(r) = fut.next().await {
         results.push(r);
     }
