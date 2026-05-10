@@ -52,16 +52,30 @@ func (c *Conn) pollLoop() error {
 	}
 }
 
-// pollPanes captures all panes, diffs against snapshot, sends outOutput if any
-// pane changed, and updates snapshot. Returns true if any content changed.
+// pollPanes captures only the panes in the currently-active window, diffs
+// against snapshot, sends outOutput if any pane changed, and updates snapshot.
+// Returns true if any content changed.
+//
+// If snapshotDirty is set (e.g. after a window switch), the snapshot is
+// cleared first so all panes in the new active window get re-emitted.
 func (c *Conn) pollPanes(snapshot map[string]string) bool {
+	if c.snapshotDirty.CompareAndSwap(true, false) {
+		for k := range snapshot {
+			delete(snapshot, k)
+		}
+	}
+
 	panes, err := c.hub.tx.ListPanes(c.ctx, c.session)
 	if err != nil || len(panes) == 0 {
 		return false
 	}
+	activeWin := int(c.activeWindow.Load())
 
 	changed := make(map[string]string)
 	for _, p := range panes {
+		if activeWin > 0 && p.Window != activeWin {
+			continue
+		}
 		content, err := c.hub.tx.CapturePane(c.ctx, c.session+":"+p.ID, c.hub.cfg.CaptureLines)
 		if err != nil {
 			continue

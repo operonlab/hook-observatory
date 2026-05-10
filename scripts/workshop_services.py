@@ -293,12 +293,19 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/stations/remote-node-rs",
     },
     {
+        # 2026-05-10: switched to Go rewrite for a one-week trial.
+        # Fallback to Python: change `cmd` back to the uvicorn invocation
+        # below. Python code is kept under stations/tmux-webui/.
+        # Old cmd (Python uvicorn):
+        #   /opt/homebrew/bin/uv run stations/tmux-webui/server.py
+        #     --host 127.0.0.1 --port {get_port('tmux-webui')}
+        # Old workdir: stations/tmux-webui
         "name": "tmux-webui",
-        "type": "uvicorn",
-        "cmd": f"/opt/homebrew/bin/uv run /Users/joneshong/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port {get_port('tmux-webui')}",  # noqa: E501
+        "type": "binary",
+        "cmd": f"/Users/joneshong/.local/bin/tmux-webui serve --config /Users/joneshong/.config/tmux-webui/config.json --host 127.0.0.1 --port {get_port('tmux-webui')}",  # noqa: E501
         "port": get_port("tmux-webui"),
         "health": get("tmux-webui").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/tmux-webui",
+        "workdir": "/Users/joneshong/workshop/stations/tmux-webui-go",
     },
     {
         "name": "fleet",

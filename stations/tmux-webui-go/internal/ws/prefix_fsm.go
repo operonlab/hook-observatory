@@ -13,29 +13,69 @@ import (
 //	idle  + key==prefixKey → waiting=true, send prefix_active, return
 //	waiting + any key     → lookup binding; exec cmd or send raw key; waiting=false
 //	idle  + other key     → send raw key
+//
+// handleKeyWithFSM implements Py server.py:697-734's 5-case FSM:
+//
+//  1. prefixWaiting=true  → look up binding; exec or send raw (literal=false)
+//  2. combo == prefix key → enter prefix mode, send prefix_active
+//  3. has modifiers       → send-keys literal=false (so "C-a" is interpreted)
+//  4. single char, no mod → send-keys literal=true  (so "$" or "?" is sent verbatim)
+//  5. fallback            → send-keys literal=false
 func (c *Conn) handleKeyWithFSM(msg *InboundMsg) error {
-	key := buildKeySpec(msg.Key, msg.Modifiers)
+	if msg.Key == "" {
+		return nil
+	}
+	hasMods := false
+	for _, m := range msg.Modifiers {
+		switch strings.ToLower(m) {
+		case "ctrl", "c", "alt", "m", "shift", "s":
+			hasMods = true
+		}
+	}
+	combo := buildKeySpec(msg.Key, msg.Modifiers)
 	target := c.paneTarget(msg.Pane)
 
-	if !c.prefixWaiting {
-		prefixKey := c.hub.pc.Key(c.ctx)
-		if key == prefixKey {
-			c.prefixWaiting = true
-			c.send(outPrefixActive{Type: "prefix_active"})
-			return nil
+	// Case 1: in-prefix state — second key consumes binding.
+	if c.prefixWaiting {
+		c.prefixWaiting = false
+		cmd := c.hub.pc.Lookup(c.ctx, combo)
+		if cmd != "" {
+			return c.executePrefixCmd(target, cmd)
 		}
-		return c.hub.tx.SendKey(c.ctx, target, key)
+		// No binding — send raw (literal=false).
+		return c.hub.tx.SendKey(c.ctx, target, combo)
 	}
 
-	// prefixWaiting == true
-	c.prefixWaiting = false
-	cmd := c.hub.pc.Lookup(c.ctx, key)
-	if cmd == "" {
-		// No binding — send the key as-is.
-		return c.hub.tx.SendKey(c.ctx, target, key)
+	// Case 2: this press IS the prefix.
+	if combo == c.hub.pc.Key(c.ctx) {
+		c.prefixWaiting = true
+		c.send(outPrefixActive{Type: "prefix_active"})
+		return nil
 	}
-	// Execute the bound command.
-	return c.executePrefixCmd(target, cmd)
+
+	// Case 3: modifiers present → literal=false so tmux interprets the combo.
+	if hasMods {
+		return c.hub.tx.SendKey(c.ctx, target, combo)
+	}
+
+	// Case 4: single character, no modifiers → literal=true so symbols
+	// like "$", "?", "{" reach the program verbatim.
+	if utf8RuneCount(msg.Key) == 1 {
+		return c.hub.tx.SendText(c.ctx, target, msg.Key)
+	}
+
+	// Case 5: named key (Up, Tab, F1, ...) → literal=false.
+	return c.hub.tx.SendKey(c.ctx, target, msg.Key)
+}
+
+// utf8RuneCount returns the number of runes in s without importing unicode/utf8
+// at the top of the file (keep the prefix_fsm imports minimal).
+func utf8RuneCount(s string) int {
+	n := 0
+	for range s {
+		n++
+	}
+	return n
 }
 
 // executePrefixCmd runs a tmux prefix binding command.

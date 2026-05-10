@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -34,6 +35,17 @@ type Conn struct {
 
 	// prefix FSM state (see prefix_fsm.go)
 	prefixWaiting bool
+
+	// activeWindow tracks the currently-displayed tmux window index.
+	// Updated by reader goroutine (handleSwitchWindow / handleNewWindow /
+	// handleCloseWindow) and read by pollLoop. Atomic for cross-goroutine
+	// safety without holding a mutex during the long-running poll.
+	activeWindow atomic.Int32
+
+	// snapshotDirty asks pollLoop to clear its content cache on next tick.
+	// Set after window switches so all panes' output gets re-sent to the
+	// frontend (matches Python's last_contents.clear() behaviour).
+	snapshotDirty atomic.Bool
 }
 
 // newConn allocates a Conn. ctx should be the request context or a derived ctx.
@@ -78,15 +90,32 @@ func (c *Conn) sendInitial(ctx context.Context) {
 			break
 		}
 	}
+	c.activeWindow.Store(int32(active))
 	c.send(outWindows{Type: "windows", Windows: windows, Active: active})
 
 	panes, _ := c.hub.tx.ListPanes(ctx, c.session)
 	if panes == nil {
 		panes = []tmuxctl.Pane{}
 	}
-	c.send(outPanes{Type: "panes", Panes: panes})
+	c.send(outPanes{Type: "panes", Panes: visiblePanes(panes, active)})
 
 	c.send(outMetrics{Type: "metrics", Metrics: map[string]any{}})
+}
+
+// visiblePanes filters panes to those in the given active window.
+// activeWin == 0 (default tmux pane-base-index is 1) means "no filter" —
+// matches the Python `active_window is None` early-return branch.
+func visiblePanes(panes []tmuxctl.Pane, activeWin int) []tmuxctl.Pane {
+	if activeWin <= 0 {
+		return panes
+	}
+	out := make([]tmuxctl.Pane, 0, len(panes))
+	for _, p := range panes {
+		if p.Window == activeWin {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // Run starts the four goroutines and blocks until all exit (errgroup).

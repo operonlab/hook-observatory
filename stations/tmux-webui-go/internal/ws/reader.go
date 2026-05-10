@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -77,8 +78,24 @@ func (c *Conn) handleFocus(msg *InboundMsg) error {
 }
 
 func (c *Conn) handleInput(msg *InboundMsg) error {
+	if msg.Text == "" {
+		return nil
+	}
 	target := c.paneTarget(msg.Pane)
-	return c.hub.tx.SendText(c.ctx, target, msg.Text)
+	if err := c.hub.tx.SendText(c.ctx, target, msg.Text); err != nil {
+		// Mirror Py server.py:690 — surface the failure to the client.
+		c.send(outInputError{Type: "input_error", Message: "Failed to send to " + msg.Pane})
+		return nil
+	}
+	// tmux send-keys is async — give the buffer a moment to land before
+	// pressing Enter (Py server.py:683 has no explicit sleep but uses two
+	// sequential awaits that effectively yield; 50ms is the safety margin
+	// from the relay-style bus). Keeping it for paste-buffer mode.
+	time.Sleep(50 * time.Millisecond)
+	if err := c.hub.tx.SendEnter(c.ctx, target); err != nil {
+		c.send(outInputError{Type: "input_error", Message: "Failed to send Enter to " + msg.Pane})
+	}
+	return nil
 }
 
 func (c *Conn) handleKey(msg *InboundMsg) error {
@@ -86,17 +103,49 @@ func (c *Conn) handleKey(msg *InboundMsg) error {
 }
 
 func (c *Conn) handleSwitchWindow(msg *InboundMsg) error {
-	_, err := c.hub.tx.Run(c.ctx, "select-window", "-t",
-		c.session+":"+itoa(msg.Window))
-	return err
+	// Py server.py:736-749 does NOT call `tmux select-window`. It only
+	// updates the per-connection active_window state and re-emits the
+	// windows + visible-panes frames. Multiple WS clients can each view
+	// a different window without stealing tmux's physical active state.
+	c.pushWindowsAndPanes(msg.Window)
+	return nil
 }
 
 func (c *Conn) handleNewWindow(_ *InboundMsg) error {
-	return c.hub.tx.NewWindow(c.ctx, c.session)
+	if err := c.hub.tx.NewWindow(c.ctx, c.session); err != nil {
+		return err
+	}
+	// New window becomes active (highest index after creation).
+	windows, _ := c.hub.tx.ListWindows(c.ctx, c.session)
+	maxIdx := 0
+	for _, w := range windows {
+		if w.Index > maxIdx {
+			maxIdx = w.Index
+		}
+	}
+	c.pushWindowsAndPanes(maxIdx)
+	return nil
 }
 
 func (c *Conn) handleCloseWindow(msg *InboundMsg) error {
-	return c.hub.tx.KillWindow(c.ctx, c.session, msg.Window)
+	if err := c.hub.tx.KillWindow(c.ctx, c.session, msg.Window); err != nil {
+		return err
+	}
+	windows, _ := c.hub.tx.ListWindows(c.ctx, c.session)
+	if len(windows) == 0 {
+		// Py server.py:773-779 sends an error and exits the read loop.
+		c.send(newError("All windows closed"))
+		c.cancel()
+		return nil
+	}
+	// Py server.py:780-781: if the killed window was active, fall back to
+	// the FIRST window in the remaining list (not tmux's auto-pick).
+	active := int(c.activeWindow.Load())
+	if msg.Window == active {
+		active = windows[0].Index
+	}
+	c.pushWindowsAndPanes(active)
+	return nil
 }
 
 func (c *Conn) handleSelectPaneDirection(msg *InboundMsg) error {
@@ -105,24 +154,11 @@ func (c *Conn) handleSelectPaneDirection(msg *InboundMsg) error {
 }
 
 func (c *Conn) handleRefreshPanes() error {
-	panes, err := c.hub.tx.ListPanes(c.ctx, c.session)
-	if err != nil || panes == nil {
-		panes = nil
-	}
-	windows, _ := c.hub.tx.ListWindows(c.ctx, c.session)
-	active := 0
-	for _, w := range windows {
-		if w.Active == 1 {
-			active = w.Index
-			break
-		}
-	}
-	if windows != nil {
-		c.send(outWindows{Type: "windows", Windows: windows, Active: active})
-	}
-	if panes != nil {
-		c.send(outPanes{Type: "panes", Panes: panes})
-	}
+	// Py server.py:837-839 only sends `panes`, not `windows`, and does
+	// NOT clear last_contents. Match exactly.
+	panes, _ := c.hub.tx.ListPanes(c.ctx, c.session)
+	active := int(c.activeWindow.Load())
+	c.send(outPanes{Type: "panes", Panes: visiblePanes(panes, active)})
 	return nil
 }
 
@@ -156,24 +192,24 @@ func itoa(n int) string {
 	return string(result)
 }
 
-// sendWindowsAndPanes is a helper used when the window/pane state changes.
-func (c *Conn) sendWindowsAndPanes() {
+// pushWindowsAndPanes refreshes the frontend view after a window-set change.
+// Updates activeWindow, sets snapshotDirty so pollLoop re-emits all output,
+// and sends fresh windows + panes (filtered to active window) frames.
+//
+// Replaces the old sendWindowsAndPanes which never filtered, leaving the
+// frontend with stale pane content from previously-active windows.
+func (c *Conn) pushWindowsAndPanes(active int) {
+	c.activeWindow.Store(int32(active))
+	c.snapshotDirty.Store(true)
+
 	windows, _ := c.hub.tx.ListWindows(c.ctx, c.session)
 	if windows == nil {
-		return
-	}
-	active := 0
-	for _, w := range windows {
-		if w.Active == 1 {
-			active = w.Index
-			break
-		}
+		windows = nil // explicit no-op; outWindows handles nil via json
 	}
 	c.send(outWindows{Type: "windows", Windows: windows, Active: active})
+
 	panes, _ := c.hub.tx.ListPanes(c.ctx, c.session)
-	if panes != nil {
-		c.send(outPanes{Type: "panes", Panes: panes})
-	}
+	c.send(outPanes{Type: "panes", Panes: visiblePanes(panes, active)})
 }
 
 // Ensure websocket import used (Read call in reader loop).

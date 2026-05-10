@@ -78,6 +78,17 @@ func (s *Server) Mux() http.Handler {
 	mux.Handle("GET /icon-512.png", pwa.AssetFile("icon-512.png", "image/png"))
 	mux.Handle("GET /static/", pwa.StaticFS())
 
+	// Workshop Py version is reverse-proxied behind nginx with /apps/tmux/
+	// prefix; the embedded index.html still references those URLs. Serve
+	// the same files at both paths so the OSS binary works without needing
+	// to edit the frontend HTML.
+	mux.Handle("GET /apps/tmux/manifest.json", pwa.AssetFile("manifest.json", "application/manifest+json"))
+	mux.Handle("GET /apps/tmux/icon-192.svg", pwa.AssetFile("icon-192.svg", "image/svg+xml"))
+	mux.Handle("GET /apps/tmux/icon-512.svg", pwa.AssetFile("icon-512.svg", "image/svg+xml"))
+	mux.Handle("GET /apps/tmux/icon-192.png", pwa.AssetFile("icon-192.png", "image/png"))
+	mux.Handle("GET /apps/tmux/icon-512.png", pwa.AssetFile("icon-512.png", "image/png"))
+	mux.Handle("GET /favicon.ico", pwa.AssetFile("icon-192.png", "image/png"))
+
 	// Read-only tmux queries
 	mux.HandleFunc("GET /api/sessions", s.handleListSessions)
 	mux.HandleFunc("GET /api/sessions/{name}/panes", s.handleListPanes)
