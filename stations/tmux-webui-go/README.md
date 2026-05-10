@@ -63,7 +63,9 @@ Removes binary, config, daemon, and uploads.
 - [Remote access (LAN / Tailscale / Cloudflare / ngrok)](docs/remote-access.md)
 - [Daemon setup](docs/daemon.md)
 - [Homebrew install](docs/homebrew.md)
-- [Workshop dogfood config](docs/dogfood-config.example.json)
+- [Dogfooding](docs/dogfood.md) — what it means, how the maintainer runs it before tagging a release
+- [Cutting a release](docs/release.md) — tag, GoReleaser, Homebrew tap
+- [Sample dogfood config](docs/dogfood-config.example.json)
 
 ## Status
 
@@ -73,8 +75,8 @@ Removes binary, config, daemon, and uploads.
 | 1 — Backend feature parity | ✅ |
 | 2 — UX wrapping (`--lan` / QR / cobra / daemon / update / uninstall) | ✅ |
 | 3 — Distribution (install.sh / goreleaser / Homebrew tap) | ✅ |
-| 4 — Docs + first release | 🚧 first release pending |
-| 5 — Workshop dogfood | ✅ smoke test passing |
+| 4 — Docs + first release | 🚧 first release pending — see [release.md](docs/release.md) |
+| 5 — [Dogfooding](docs/dogfood.md) (one-week trial in production) | 🟡 in progress |
 
 ## License
 
