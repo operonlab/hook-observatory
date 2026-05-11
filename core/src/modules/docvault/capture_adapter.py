@@ -26,6 +26,32 @@ class DocumentCaptureAdapter(BaseCaptureAdapter):
         "source_uri": 15,
     }
 
+    # MIME-type → source_type mapping for media files
+    _MIME_TO_SOURCE_TYPE: dict[str, str] = {
+        # Audio
+        "audio/mpeg": "audio",
+        "audio/mp3": "audio",
+        "audio/wav": "audio",
+        "audio/x-wav": "audio",
+        "audio/m4a": "audio",
+        "audio/mp4": "audio",
+        "audio/flac": "audio",
+        "audio/x-flac": "audio",
+        "audio/ogg": "audio",
+        "audio/aac": "audio",
+        "audio/opus": "audio",
+        "audio/webm": "audio",
+        # Video
+        "video/mp4": "video",
+        "video/quicktime": "video",
+        "video/webm": "video",
+        "video/x-matroska": "video",
+        "video/x-msvideo": "video",
+        "video/mpeg": "video",
+        "video/x-m4v": "video",
+        "video/mp2t": "video",
+    }
+
     default_values = {
         "source_type": "markdown",
         "tags": [],
@@ -35,6 +61,13 @@ class DocumentCaptureAdapter(BaseCaptureAdapter):
         self, payload: dict[str, Any], user_prefs: dict[str, Any]
     ) -> dict[str, Any]:
         result = {**self.default_values, **payload}
+
+        # Auto-detect source_type from MIME type if provided
+        mime_type = result.get("mime_type", "")
+        if mime_type and result.get("source_type") in (None, "markdown"):
+            detected = self._MIME_TO_SOURCE_TYPE.get(mime_type.split(";")[0].strip().lower())
+            if detected:
+                result["source_type"] = detected
 
         if result.get("source_type") is None:
             result["source_type"] = "markdown"

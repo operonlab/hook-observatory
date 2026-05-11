@@ -11,7 +11,7 @@ from src.shared.schemas import PaginatedResponse, SpaceScopedResponse  # noqa: F
 
 class DocumentCreate(BaseModel):
     title: str = Field(..., max_length=500)
-    source_type: str = Field(default="markdown", pattern="^(pdf|docx|markdown|webpage|api)$")
+    source_type: str = Field(default="markdown", pattern="^(pdf|docx|markdown|webpage|api|audio|video)$")
     source_uri: str | None = None
     content_hash: str = Field(..., max_length=64)
     tags: list[str] = Field(default_factory=list)
@@ -218,7 +218,7 @@ class DocumentUploadRequest(BaseModel):
 
     file_path: str = Field(..., description="Absolute path to the local file")
     title: str | None = Field(default=None, max_length=500)
-    source_type: str | None = Field(default=None, pattern="^(pdf|docx|markdown|webpage|api)$")
+    source_type: str | None = Field(default=None, pattern="^(pdf|docx|markdown|webpage|api|audio|video)$")
     source_uri: str | None = None
     tags: list[str] = Field(default_factory=list)
     metadata: dict | None = None
