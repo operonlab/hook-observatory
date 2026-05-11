@@ -83,8 +83,11 @@ class TestE2EAudioParseMocked:
 
         fake_result = _make_fake_transcript("Hello test world.", 5.0)
 
-        with patch("audio_ops.transcribe.transcribe", new=AsyncMock(return_value=fake_result)):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        with patch(
+            "src.modules.docvault.ingest.audio_parser.transcribe",
+            new=AsyncMock(return_value=fake_result),
+        ):
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, meta = await parse_audio(str(wav))
 
@@ -109,10 +112,15 @@ class TestE2EAudioParseMocked:
         wav.write_bytes(b"RIFF" + b"\x00" * 100)
 
         seg = TranscriptSegment(start=0.0, end=3.0, text="no speaker here", speaker=None)
-        result = TranscriptResult(full_text="no speaker here", language="en", duration=3.0, segments=[seg])
+        result = TranscriptResult(
+            full_text="no speaker here", language="en", duration=3.0, segments=[seg]
+        )
 
-        with patch("audio_ops.transcribe.transcribe", new=AsyncMock(return_value=result)):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        with patch(
+            "src.modules.docvault.ingest.audio_parser.transcribe",
+            new=AsyncMock(return_value=result),
+        ):
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, meta = await parse_audio(str(wav), with_speaker=False)
 
@@ -130,8 +138,11 @@ class TestE2EAudioParseMocked:
 
         result = TranscriptResult(full_text="你好世界", language="zh-TW", duration=2.0, segments=[])
 
-        with patch("audio_ops.transcribe.transcribe", new=AsyncMock(return_value=result)):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        with patch(
+            "src.modules.docvault.ingest.audio_parser.transcribe",
+            new=AsyncMock(return_value=result),
+        ):
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, meta = await parse_audio(str(wav), language="zh-TW")
 
@@ -146,10 +157,15 @@ class TestE2EAudioParseMocked:
         wav = tmp_path / "empty_seg.wav"
         wav.write_bytes(b"RIFF" + b"\x00" * 100)
 
-        result = TranscriptResult(full_text="fallback text only", language="en", duration=1.0, segments=[])
+        result = TranscriptResult(
+            full_text="fallback text only", language="en", duration=1.0, segments=[]
+        )
 
-        with patch("audio_ops.transcribe.transcribe", new=AsyncMock(return_value=result)):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        with patch(
+            "src.modules.docvault.ingest.audio_parser.transcribe",
+            new=AsyncMock(return_value=result),
+        ):
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, meta = await parse_audio(str(wav))
 
@@ -180,21 +196,21 @@ class TestE2EVideoParseMocked:
         fake_transcript = _make_fake_transcript("video speech here", 10.0)
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 side_effect=self._patch_ffmpeg_audio(tmp_path),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes",
+                "src.modules.docvault.ingest.video_parser._extract_keyframes",
                 return_value=[],
             ),
             patch(
-                "audio_ops.transcribe.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=fake_transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             content, meta = await parse_video(str(mp4), with_keyframes=False)
 
@@ -225,22 +241,22 @@ class TestE2EVideoParseMocked:
         mock_vision.return_value.close = MagicMock()
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 side_effect=self._patch_ffmpeg_audio(tmp_path),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes",
+                "src.modules.docvault.ingest.video_parser._extract_keyframes",
                 return_value=fake_frame_pairs,
             ),
             patch("sdk_client.vision.VisionClient", mock_vision),
             patch(
-                "audio_ops.transcribe.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=fake_transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             content, meta = await parse_video(str(mp4), with_keyframes=True)
 
@@ -257,10 +273,10 @@ class TestE2EVideoParseMocked:
         expected = ("## Transcript: route_test.wav\n", {"source_type": "audio"})
 
         with patch(
-            "core.src.modules.docvault.ingest.parser.parse_audio",
+            "src.modules.docvault.ingest.parser.parse_audio",
             new=AsyncMock(return_value=expected),
         ) as mock_audio:
-            from core.src.modules.docvault.ingest.parser import parse_document_async
+            from src.modules.docvault.ingest.parser import parse_document_async
 
             content, meta = await parse_document_async(str(wav))
 
@@ -277,10 +293,10 @@ class TestE2EVideoParseMocked:
         expected = ("## Video Transcript: route_test.mp4\n", {"source_type": "video"})
 
         with patch(
-            "core.src.modules.docvault.ingest.parser.parse_video",
+            "src.modules.docvault.ingest.parser.parse_video",
             new=AsyncMock(return_value=expected),
         ) as mock_video:
-            from core.src.modules.docvault.ingest.parser import parse_document_async
+            from src.modules.docvault.ingest.parser import parse_document_async
 
             content, meta = await parse_document_async(str(mp4))
 
@@ -337,7 +353,7 @@ class TestRealDataFixtureDriven:
         if not _port_open(STT_PORT):
             pytest.skip(f"STT station not reachable at port {STT_PORT}")
 
-        from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        from src.modules.docvault.ingest.audio_parser import parse_audio
 
         content, meta = await parse_audio(str(WAV_FIXTURE))
 
@@ -357,7 +373,7 @@ class TestRealDataFixtureDriven:
         if not _port_open(STT_PORT):
             pytest.skip(f"STT station not reachable at port {STT_PORT}")
 
-        from core.src.modules.docvault.ingest.video_parser import parse_video
+        from src.modules.docvault.ingest.video_parser import parse_video
 
         # with_keyframes=False to avoid Vision dependency
         content, meta = await parse_video(

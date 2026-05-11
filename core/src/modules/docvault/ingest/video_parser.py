@@ -30,6 +30,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from audio_ops.transcribe import transcribe
+from sdk_client.vision import VisionClient
+
 logger = logging.getLogger(__name__)
 
 # Guard: skip files larger than 500 MB
@@ -49,7 +52,7 @@ VIDEO_EXTENSIONS: frozenset[str] = frozenset(
 @dataclass
 class FrameDesc:
     timestamp: float  # seconds
-    frame_path: str   # absolute path to extracted frame image
+    frame_path: str  # absolute path to extracted frame image
     description: str  # vision QA result
 
 
@@ -63,9 +66,7 @@ def _format_time(seconds: float) -> str:
 def _check_ffmpeg() -> None:
     """Raise RuntimeError if ffmpeg is not available."""
     if not shutil.which("ffmpeg"):
-        raise RuntimeError(
-            "ffmpeg not found. Install via: brew install ffmpeg"
-        )
+        raise RuntimeError("ffmpeg not found. Install via: brew install ffmpeg")
 
 
 def _extract_audio(video_path: Path, tmp_dir: str) -> Path:
@@ -76,11 +77,17 @@ def _extract_audio(video_path: Path, tmp_dir: str) -> Path:
     """
     out_path = Path(tmp_dir) / f"{video_path.stem}_audio.wav"
     cmd = [
-        "ffmpeg", "-y", "-i", str(video_path),
-        "-vn",                   # no video
-        "-acodec", "pcm_s16le",  # WAV PCM
-        "-ar", "16000",          # 16kHz for STT
-        "-ac", "1",              # mono
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-vn",  # no video
+        "-acodec",
+        "pcm_s16le",  # WAV PCM
+        "-ar",
+        "16000",  # 16kHz for STT
+        "-ac",
+        "1",  # mono
         str(out_path),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -107,12 +114,18 @@ def _extract_keyframes(video_path: Path, tmp_dir: str) -> list[tuple[float, str]
 
     # Two-pass: extract frames + write timestamps
     cmd = [
-        "ffmpeg", "-y", "-i", str(video_path),
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
         "-vf",
         f"select='gt(scene,{_SCENE_THRESHOLD})',scale={_FRAME_SCALE}",
-        "-frames:v", str(_MAX_FRAMES),
-        "-fps_mode", "vfr",
-        "-frame_pts", "1",
+        "-frames:v",
+        str(_MAX_FRAMES),
+        "-fps_mode",
+        "vfr",
+        "-frame_pts",
+        "1",
         out_pattern,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -151,7 +164,6 @@ async def _describe_frames(
     frame_pairs: list[tuple[float, str]],
 ) -> list[FrameDesc]:
     """Send each frame to Vision station for description in parallel."""
-    from sdk_client.vision import VisionClient
 
     async def _describe_one(ts: float, frame_path: str) -> FrameDesc:
         def _call() -> str:
@@ -164,9 +176,7 @@ async def _describe_frames(
                 )
                 return resp.get("result", "")
             except Exception as exc:
-                logger.warning(
-                    "video_parser: vision QA failed for frame %.1fs: %s", ts, exc
-                )
+                logger.warning("video_parser: vision QA failed for frame %.1fs: %s", ts, exc)
                 return ""
             finally:
                 client.close()
@@ -253,7 +263,6 @@ async def parse_video(
         ValueError: File is empty or exceeds 500 MB.
         RuntimeError: ffmpeg, STT, or Vision station failure.
     """
-    from audio_ops.transcribe import transcribe
 
     path = Path(file_path)
     if not path.exists():
@@ -263,9 +272,7 @@ async def parse_video(
     if file_size == 0:
         raise ValueError(f"Video file is empty (0 bytes): {file_path}")
     if file_size > _MAX_FILE_SIZE_BYTES:
-        raise ValueError(
-            f"Video file too large ({file_size / (1024**2):.0f} MB > 500 MB): {path}"
-        )
+        raise ValueError(f"Video file too large ({file_size / (1024**2):.0f} MB > 500 MB): {path}")
 
     _check_ffmpeg()
 

@@ -20,8 +20,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
-import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -44,10 +42,10 @@ class TestAdversaryAudioEdges:
         # STT station will reject random bytes → RuntimeError propagated
         # We mock transcribe to raise RuntimeError (as station would)
         with patch(
-            "audio_ops.transcribe.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(side_effect=RuntimeError("STT rejected corrupted audio")),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             with pytest.raises(RuntimeError):
                 await parse_audio(str(corrupt))
@@ -60,7 +58,7 @@ class TestAdversaryAudioEdges:
         empty = tmp_path / "empty.wav"
         empty.touch()
 
-        from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        from src.modules.docvault.ingest.audio_parser import parse_audio
 
         with pytest.raises(ValueError, match="empty"):
             await parse_audio(str(empty))
@@ -72,7 +70,7 @@ class TestAdversaryAudioEdges:
         """不存在的檔案 → FileNotFoundError。"""
         missing = tmp_path / "nonexistent.wav"
 
-        from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        from src.modules.docvault.ingest.audio_parser import parse_audio
 
         with pytest.raises(FileNotFoundError):
             await parse_audio(str(missing))
@@ -88,10 +86,10 @@ class TestAdversaryAudioEdges:
         wav.write_bytes(b"RIFF" + b"\x00" * 100)
 
         with patch(
-            "audio_ops.transcribe.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(side_effect=httpx.TimeoutException("connection timed out")),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             with pytest.raises(Exception):
                 await parse_audio(str(wav))
@@ -105,10 +103,10 @@ class TestAdversaryAudioEdges:
         wav.write_bytes(b"RIFF" + b"\x00" * 100)
 
         with patch(
-            "audio_ops.transcribe.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(side_effect=RuntimeError("Unexpected STT response")),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             with pytest.raises(RuntimeError):
                 await parse_audio(str(wav))
@@ -125,7 +123,7 @@ class TestAdversaryVideoEdges:
         empty = tmp_path / "empty.mp4"
         empty.touch()
 
-        from core.src.modules.docvault.ingest.video_parser import parse_video
+        from src.modules.docvault.ingest.video_parser import parse_video
 
         with pytest.raises(ValueError, match="empty"):
             await parse_video(str(empty))
@@ -143,7 +141,7 @@ class TestAdversaryVideoEdges:
         mock_stat.st_size = 501 * 1024 * 1024
 
         with patch.object(Path, "stat", return_value=mock_stat):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             with pytest.raises(ValueError, match="too large"):
                 await parse_video(str(mp4))
@@ -161,13 +159,13 @@ class TestAdversaryVideoEdges:
             raise RuntimeError("ffmpeg audio extraction failed (exit 1): error output here")
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 side_effect=_bad_extract,
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             with pytest.raises(RuntimeError, match="ffmpeg"):
                 await parse_video(str(mp4))
@@ -181,7 +179,7 @@ class TestAdversaryVideoEdges:
         mp4.write_bytes(b"\x00" * 2048)
 
         with patch("shutil.which", return_value=None):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             with pytest.raises(RuntimeError, match="ffmpeg"):
                 await parse_video(str(mp4))
@@ -215,22 +213,22 @@ class TestAdversaryVideoEdges:
         mock_vision_cls = MagicMock(return_value=mock_vision_instance)
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 return_value=fake_audio,
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes",
+                "src.modules.docvault.ingest.video_parser._extract_keyframes",
                 return_value=fake_frame_pairs,
             ),
             patch("sdk_client.vision.VisionClient", mock_vision_cls),
             patch(
-                "audio_ops.transcribe.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=fake_transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             # Should NOT raise — vision 503 is gracefully degraded
             content, meta = await parse_video(str(mp4), with_keyframes=True)
@@ -247,16 +245,18 @@ class TestAdversaryVideoEdges:
         corrupt.write_bytes(os.urandom(2048))
 
         def _bad_extract(video_path, tmp_dir):
-            raise RuntimeError("ffmpeg audio extraction failed (exit 1): Invalid data found when processing input")
+            raise RuntimeError(
+                "ffmpeg audio extraction failed (exit 1): Invalid data found when processing input"
+            )
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 side_effect=_bad_extract,
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             with pytest.raises(RuntimeError):
                 await parse_video(str(corrupt))
@@ -290,21 +290,21 @@ class TestRegression:
 
     def test_import_audio_parser(self):
         """audio_parser 模組 import 不退化。"""
-        from core.src.modules.docvault.ingest import audio_parser  # noqa: F401
+        from src.modules.docvault.ingest import audio_parser
 
         assert hasattr(audio_parser, "parse_audio")
         # 鐵律 6 斷言 M: audio_parser importable with parse_audio
 
     def test_import_video_parser(self):
         """video_parser 模組 import 不退化。"""
-        from core.src.modules.docvault.ingest import video_parser  # noqa: F401
+        from src.modules.docvault.ingest import video_parser
 
         assert hasattr(video_parser, "parse_video")
         # 鐵律 6 斷言 N: video_parser importable with parse_video
 
     def test_import_parser_module(self):
         """parser 模組 import 不退化，parse_document / parse_document_async 存在。"""
-        from core.src.modules.docvault.ingest import parser  # noqa: F401
+        from src.modules.docvault.ingest import parser
 
         assert hasattr(parser, "parse_document")
         assert hasattr(parser, "parse_document_async")
@@ -312,7 +312,7 @@ class TestRegression:
 
     def test_pdf_source_type_still_valid(self):
         """schemas.DocumentCreate source_type='pdf' 仍合法。"""
-        from core.src.modules.docvault.schemas import DocumentCreate
+        from src.modules.docvault.schemas import DocumentCreate
 
         doc = DocumentCreate(title="PDF Doc", source_type="pdf", content_hash="a" * 64)
         assert doc.source_type == "pdf"
@@ -320,7 +320,7 @@ class TestRegression:
 
     def test_docx_source_type_still_valid(self):
         """schemas.DocumentCreate source_type='docx' 仍合法。"""
-        from core.src.modules.docvault.schemas import DocumentCreate
+        from src.modules.docvault.schemas import DocumentCreate
 
         doc = DocumentCreate(title="DOCX Doc", source_type="docx", content_hash="b" * 64)
         assert doc.source_type == "docx"
@@ -328,7 +328,7 @@ class TestRegression:
 
     def test_markdown_source_type_still_valid(self):
         """schemas.DocumentCreate source_type='markdown' 仍合法。"""
-        from core.src.modules.docvault.schemas import DocumentCreate
+        from src.modules.docvault.schemas import DocumentCreate
 
         doc = DocumentCreate(title="MD Doc", source_type="markdown", content_hash="c" * 64)
         assert doc.source_type == "markdown"
@@ -336,7 +336,7 @@ class TestRegression:
 
     def test_audio_source_type_valid_in_schema(self):
         """schemas.DocumentCreate source_type='audio' 仍合法 (Phase C 新增)。"""
-        from core.src.modules.docvault.schemas import DocumentCreate
+        from src.modules.docvault.schemas import DocumentCreate
 
         doc = DocumentCreate(title="Audio Doc", source_type="audio", content_hash="d" * 64)
         assert doc.source_type == "audio"
@@ -344,7 +344,7 @@ class TestRegression:
 
     def test_video_source_type_valid_in_schema(self):
         """schemas.DocumentCreate source_type='video' 仍合法 (Phase C 新增)。"""
-        from core.src.modules.docvault.schemas import DocumentCreate
+        from src.modules.docvault.schemas import DocumentCreate
 
         doc = DocumentCreate(title="Video Doc", source_type="video", content_hash="e" * 64)
         assert doc.source_type == "video"
@@ -358,15 +358,15 @@ class TestRegression:
 
         with (
             patch(
-                "core.src.modules.docvault.ingest.parser.parse_audio",
+                "src.modules.docvault.ingest.parser.parse_audio",
                 new=AsyncMock(side_effect=AssertionError("PDF must not route to audio parser")),
             ),
             patch(
-                "core.src.modules.docvault.ingest.parser.parse_document",
+                "src.modules.docvault.ingest.parser.parse_document",
                 return_value=("pdf content", {"source_type": "pdf"}),
             ),
         ):
-            from core.src.modules.docvault.ingest.parser import parse_document_async
+            from src.modules.docvault.ingest.parser import parse_document_async
 
             content, meta = await parse_document_async(str(pdf))
 
@@ -381,15 +381,15 @@ class TestRegression:
 
         with (
             patch(
-                "core.src.modules.docvault.ingest.parser.parse_video",
+                "src.modules.docvault.ingest.parser.parse_video",
                 new=AsyncMock(side_effect=AssertionError("DOCX must not route to video parser")),
             ),
             patch(
-                "core.src.modules.docvault.ingest.parser.parse_document",
+                "src.modules.docvault.ingest.parser.parse_document",
                 return_value=("docx content", {"source_type": "docx"}),
             ),
         ):
-            from core.src.modules.docvault.ingest.parser import parse_document_async
+            from src.modules.docvault.ingest.parser import parse_document_async
 
             content, meta = await parse_document_async(str(docx))
 
@@ -398,7 +398,7 @@ class TestRegression:
 
     def test_document_parser_op_still_has_correct_keys(self):
         """DocumentParserOp input/output keys 未退化。"""
-        from core.src.modules.docvault.ingest.parser import DocumentParserOp
+        from src.modules.docvault.ingest.parser import DocumentParserOp
 
         op = DocumentParserOp()
         assert "raw_file" in op.input_keys
@@ -409,7 +409,7 @@ class TestRegression:
 
     def test_audio_extensions_constant_unchanged(self):
         """audio_parser.AUDIO_EXTENSIONS 包含核心格式。"""
-        from core.src.modules.docvault.ingest.audio_parser import AUDIO_EXTENSIONS
+        from src.modules.docvault.ingest.audio_parser import AUDIO_EXTENSIONS
 
         for ext in (".mp3", ".wav", ".m4a", ".flac", ".ogg"):
             assert ext in AUDIO_EXTENSIONS, f"Missing: {ext}"
@@ -417,7 +417,7 @@ class TestRegression:
 
     def test_video_extensions_constant_unchanged(self):
         """video_parser.VIDEO_EXTENSIONS 包含核心格式。"""
-        from core.src.modules.docvault.ingest.video_parser import VIDEO_EXTENSIONS
+        from src.modules.docvault.ingest.video_parser import VIDEO_EXTENSIONS
 
         for ext in (".mp4", ".mov", ".webm", ".mkv", ".avi"):
             assert ext in VIDEO_EXTENSIONS, f"Missing: {ext}"
@@ -430,7 +430,7 @@ class TestRegression:
         import sys
 
         # Guard: ensure the worktree path is in sys.path context
-        module_name = "core.src.modules.docvault.tests.test_adversary_data_flow_multimodal"
+        module_name = "src.modules.docvault.tests.test_adversary_data_flow_multimodal"
         try:
             if module_name in sys.modules:
                 mod = sys.modules[module_name]

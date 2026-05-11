@@ -79,7 +79,7 @@ class TestVideoParserInterleave:
         ]
         transcript = _make_transcript(segs, duration=25.0)
 
-        from core.src.modules.docvault.ingest.video_parser import FrameDesc
+        from src.modules.docvault.ingest.video_parser import FrameDesc
 
         fake_frames = [
             FrameDesc(timestamp=2.0, frame_path="/tmp/f1.jpg", description="scene at 2s"),
@@ -87,25 +87,25 @@ class TestVideoParserInterleave:
         ]
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 return_value=Path("/tmp/audio.wav"),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes",
+                "src.modules.docvault.ingest.video_parser._extract_keyframes",
                 return_value=[(2.0, "/tmp/f1.jpg"), (15.0, "/tmp/f2.jpg")],
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._describe_frames",
+                "src.modules.docvault.ingest.video_parser._describe_frames",
                 new=AsyncMock(return_value=fake_frames),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             content, meta = await parse_video(real_mp4_file, with_keyframes=True)
 
@@ -124,24 +124,24 @@ class TestVideoParserInterleave:
         transcript = _make_transcript([], full_text="no keyframes", duration=5.0)
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 return_value=Path("/tmp/audio.wav"),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes"
+                "src.modules.docvault.ingest.video_parser._extract_keyframes"
             ) as mock_kf,
             patch(
-                "core.src.modules.docvault.ingest.video_parser._describe_frames",
+                "src.modules.docvault.ingest.video_parser._describe_frames",
                 new=AsyncMock(return_value=[]),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             _, meta = await parse_video(real_mp4_file, with_keyframes=False)
 
@@ -151,7 +151,7 @@ class TestVideoParserInterleave:
     @pytest.mark.asyncio
     async def test_frame_count_upper_limit_20(self, real_mp4_file):
         """Even if extraction returns >20, metadata frame_count must cap at 20 (via _MAX_FRAMES)."""
-        from core.src.modules.docvault.ingest.video_parser import FrameDesc
+        from src.modules.docvault.ingest.video_parser import FrameDesc
 
         # Simulate 20 frames (maximum allowed)
         fake_frames = [
@@ -161,25 +161,25 @@ class TestVideoParserInterleave:
         transcript = _make_transcript([], duration=30.0)
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 return_value=Path("/tmp/audio.wav"),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes",
+                "src.modules.docvault.ingest.video_parser._extract_keyframes",
                 return_value=[(float(i), f"/tmp/f{i}.jpg") for i in range(20)],
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._describe_frames",
+                "src.modules.docvault.ingest.video_parser._describe_frames",
                 new=AsyncMock(return_value=fake_frames),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             _, meta = await parse_video(real_mp4_file, with_keyframes=True)
 
@@ -191,25 +191,25 @@ class TestVideoParserInterleave:
         transcript = _make_transcript([], duration=5.0)
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 return_value=Path("/tmp/audio.wav"),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes",
+                "src.modules.docvault.ingest.video_parser._extract_keyframes",
                 return_value=[],
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._describe_frames",
+                "src.modules.docvault.ingest.video_parser._describe_frames",
                 new=AsyncMock(return_value=[]),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             content, _ = await parse_video(real_mp4_file, with_keyframes=True)
 
@@ -221,25 +221,25 @@ class TestVideoParserInterleave:
         transcript = _make_transcript([], duration=5.0)
 
         with (
-            patch("core.src.modules.docvault.ingest.video_parser._check_ffmpeg"),
+            patch("src.modules.docvault.ingest.video_parser._check_ffmpeg"),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_audio",
+                "src.modules.docvault.ingest.video_parser._extract_audio",
                 return_value=Path("/tmp/audio.wav"),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._extract_keyframes",
+                "src.modules.docvault.ingest.video_parser._extract_keyframes",
                 return_value=[],
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser._describe_frames",
+                "src.modules.docvault.ingest.video_parser._describe_frames",
                 new=AsyncMock(return_value=[]),
             ),
             patch(
-                "core.src.modules.docvault.ingest.video_parser.transcribe",
+                "src.modules.docvault.ingest.video_parser.transcribe",
                 new=AsyncMock(return_value=transcript),
             ),
         ):
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             _, meta = await parse_video(real_mp4_file)
 
@@ -254,14 +254,14 @@ class TestVideoParserInterleave:
 class TestVideoParserExceptions:
     @pytest.mark.asyncio
     async def test_file_not_found(self):
-        from core.src.modules.docvault.ingest.video_parser import parse_video
+        from src.modules.docvault.ingest.video_parser import parse_video
 
         with pytest.raises(FileNotFoundError):
             await parse_video("/nonexistent/video.mp4")
 
     @pytest.mark.asyncio
     async def test_empty_file_raises_value_error(self, empty_mp4):
-        from core.src.modules.docvault.ingest.video_parser import parse_video
+        from src.modules.docvault.ingest.video_parser import parse_video
 
         with pytest.raises(ValueError, match="empty"):
             await parse_video(empty_mp4)
@@ -272,7 +272,7 @@ class TestVideoParserExceptions:
         with patch("pathlib.Path.stat") as mock_stat:
             mock_stat.return_value.st_size = 600 * 1024 * 1024  # 600 MB
             mock_stat.return_value.st_mode = 0o100644
-            from core.src.modules.docvault.ingest.video_parser import parse_video
+            from src.modules.docvault.ingest.video_parser import parse_video
 
             with pytest.raises(ValueError, match="500 MB"):
                 await parse_video(real_mp4_file)

@@ -20,7 +20,7 @@ import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 
-from core.src.modules.docvault.capture_adapter import DocumentCaptureAdapter
+from src.modules.docvault.capture_adapter import DocumentCaptureAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -120,10 +120,10 @@ class TestParserRoutingAsync:
         })
 
         with patch(
-            "core.src.modules.docvault.ingest.parser.parse_audio",
+            "src.modules.docvault.ingest.parser.parse_audio",
             new=AsyncMock(return_value=mock_result),
         ) as mock_audio:
-            from core.src.modules.docvault.ingest.parser import parse_document_async
+            from src.modules.docvault.ingest.parser import parse_document_async
 
             content, meta = await parse_document_async(audio_file)
 
@@ -138,10 +138,10 @@ class TestParserRoutingAsync:
         })
 
         with patch(
-            "core.src.modules.docvault.ingest.parser.parse_video",
+            "src.modules.docvault.ingest.parser.parse_video",
             new=AsyncMock(return_value=mock_result),
         ) as mock_video:
-            from core.src.modules.docvault.ingest.parser import parse_document_async
+            from src.modules.docvault.ingest.parser import parse_document_async
 
             content, meta = await parse_document_async(video_file)
 
@@ -154,10 +154,10 @@ class TestParserRoutingAsync:
         mock_result = ("## Transcript: audio.wav\n", {"source_type": "audio"})
 
         with patch(
-            "core.src.modules.docvault.ingest.parser.parse_audio",
+            "src.modules.docvault.ingest.parser.parse_audio",
             new=AsyncMock(return_value=mock_result),
         ) as mock_audio:
-            from core.src.modules.docvault.ingest.parser import parse_document_async
+            from src.modules.docvault.ingest.parser import parse_document_async
 
             _, meta = await parse_document_async(audio_file, source_type="audio")
 
@@ -171,14 +171,14 @@ class TestParserRoutingAsync:
 
         # audio parser should never be called for pdf
         with patch(
-            "core.src.modules.docvault.ingest.parser.parse_audio",
+            "src.modules.docvault.ingest.parser.parse_audio",
             new=AsyncMock(side_effect=AssertionError("Should not call audio parser for PDF")),
         ):
             with patch(
-                "core.src.modules.docvault.ingest.parser.parse_document",
+                "src.modules.docvault.ingest.parser.parse_document",
                 return_value=("pdf content", {"source_type": "pdf"}),
             ):
-                from core.src.modules.docvault.ingest.parser import parse_document_async
+                from src.modules.docvault.ingest.parser import parse_document_async
 
                 _, meta = await parse_document_async(str(pdf_file))
 

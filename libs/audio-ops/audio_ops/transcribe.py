@@ -12,6 +12,8 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sdk_client.stt import STTClient
+
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB guard
@@ -67,9 +69,7 @@ async def transcribe(
     if file_size == 0:
         raise ValueError(f"Audio file is empty (0 bytes): {path}")
     if file_size > _MAX_FILE_SIZE_BYTES:
-        raise ValueError(
-            f"Audio file too large ({file_size / (1024**2):.0f} MB > 500 MB): {path}"
-        )
+        raise ValueError(f"Audio file too large ({file_size / (1024**2):.0f} MB > 500 MB): {path}")
 
     return await asyncio.to_thread(_transcribe_sync, path, language, with_speaker, timeout)
 
@@ -81,7 +81,6 @@ def _transcribe_sync(
     timeout: float,
 ) -> TranscriptResult:
     """Synchronous transcription call — runs in thread pool."""
-    from sdk_client.stt import STTClient
 
     client = STTClient(timeout=timeout)
     try:

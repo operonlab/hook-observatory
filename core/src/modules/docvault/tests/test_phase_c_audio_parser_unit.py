@@ -84,10 +84,10 @@ class TestAudioParserMarkdownFormat:
         result = _make_result("Hello world", "en", 5.0, [])
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, metadata = await parse_audio(real_wav_file)
 
@@ -99,10 +99,10 @@ class TestAudioParserMarkdownFormat:
         result = _make_result("text", "en", 12.5, [])
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, _ = await parse_audio(real_wav_file)
 
@@ -113,10 +113,10 @@ class TestAudioParserMarkdownFormat:
         result = _make_result("text", "zh-TW", 3.0, [])
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, _ = await parse_audio(real_wav_file, language="zh-TW")
 
@@ -132,10 +132,10 @@ class TestAudioParserMarkdownFormat:
         result = _make_result("Hello World", "en", 18.0, segs)
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, _ = await parse_audio(real_wav_file, with_speaker=True)
 
@@ -152,10 +152,10 @@ class TestAudioParserMarkdownFormat:
         result = _make_result("First Second", "en", 67.0, segs)
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, _ = await parse_audio(real_wav_file, with_speaker=False)
 
@@ -169,10 +169,10 @@ class TestAudioParserMarkdownFormat:
         result = _make_result("Hello", "en", 2.0, segs)
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, _ = await parse_audio(real_wav_file, with_speaker=False)
 
@@ -192,10 +192,10 @@ class TestAudioParserEdgeCases:
         result = _make_result("", "en", 0.0, [])
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, meta = await parse_audio(real_wav_file)
 
@@ -208,10 +208,10 @@ class TestAudioParserEdgeCases:
         result = _make_result("fallback text only", "en", 5.0, [])
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, _ = await parse_audio(real_wav_file)
 
@@ -223,10 +223,10 @@ class TestAudioParserEdgeCases:
         result = _make_result("Single speaker text", "en", 5.0, segs)
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             content, meta = await parse_audio(real_wav_file, with_speaker=True)
 
@@ -240,10 +240,10 @@ class TestAudioParserEdgeCases:
         result = _make_result("text", "en", 3.0, segs)
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             _, meta = await parse_audio(real_wav_file, with_speaker=True)
 
@@ -255,10 +255,10 @@ class TestAudioParserEdgeCases:
         result = _make_result("text", "zh-TW", 2.0, [])
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             _, meta = await parse_audio(real_wav_file, language="zh-TW")
 
@@ -269,10 +269,10 @@ class TestAudioParserEdgeCases:
         result = _make_result("x", "en", 1.0, [])
 
         with patch(
-            "core.src.modules.docvault.ingest.audio_parser.transcribe",
+            "src.modules.docvault.ingest.audio_parser.transcribe",
             new=AsyncMock(return_value=result),
         ):
-            from core.src.modules.docvault.ingest.audio_parser import parse_audio
+            from src.modules.docvault.ingest.audio_parser import parse_audio
 
             _, meta = await parse_audio(real_wav_file)
 
@@ -287,14 +287,14 @@ class TestAudioParserEdgeCases:
 class TestAudioParserExceptions:
     @pytest.mark.asyncio
     async def test_file_not_found(self):
-        from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        from src.modules.docvault.ingest.audio_parser import parse_audio
 
         with pytest.raises(FileNotFoundError):
             await parse_audio("/nonexistent/path/audio.wav")
 
     @pytest.mark.asyncio
     async def test_empty_file_raises_value_error(self, empty_file):
-        from core.src.modules.docvault.ingest.audio_parser import parse_audio
+        from src.modules.docvault.ingest.audio_parser import parse_audio
 
         with pytest.raises(ValueError, match="empty"):
             await parse_audio(empty_file)

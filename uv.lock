@@ -17,6 +17,7 @@ members = [
     "workshop-cli-dic",
     "workshop-image-ops",
     "workshop-kg-ops",
+    "workshop-ops-core",
     "workshop-sdk-client",
     "workshop-text-ops",
     "workshop-tmux-lib",
@@ -3655,6 +3656,7 @@ dev = [
     { name = "workshop-cli-dic" },
     { name = "workshop-image-ops" },
     { name = "workshop-kg-ops" },
+    { name = "workshop-ops-core" },
     { name = "workshop-sdk-client" },
     { name = "workshop-tmux-lib" },
     { name = "workshop-video-ops" },
@@ -3668,6 +3670,7 @@ dev = [
     { name = "workshop-cli-dic", editable = "libs/cli-dic" },
     { name = "workshop-image-ops", editable = "libs/image-ops" },
     { name = "workshop-kg-ops", editable = "libs/kg-ops" },
+    { name = "workshop-ops-core", editable = "libs/ops-core" },
     { name = "workshop-sdk-client", editable = "libs/sdk-client" },
     { name = "workshop-tmux-lib", editable = "libs/tmux-lib" },
     { name = "workshop-video-ops", editable = "libs/video-ops" },
@@ -3718,6 +3721,17 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "igraph", specifier = ">=0.11" },
 ]
+
+[[package]]
+name = "workshop-ops-core"
+version = "0.1.0"
+source = { editable = "libs/ops-core" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "numpy", specifier = ">=2.0" }]
 
 [[package]]
 name = "workshop-sdk-client"

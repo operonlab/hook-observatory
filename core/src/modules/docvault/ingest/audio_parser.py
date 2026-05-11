@@ -20,6 +20,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from audio_ops.transcribe import transcribe
+
 logger = logging.getLogger(__name__)
 
 # Supported MIME types routed to this parser
@@ -56,7 +58,6 @@ async def parse_audio(
         ValueError: File is empty or too large (>500 MB).
         RuntimeError: STT station unreachable or returned unexpected format.
     """
-    from audio_ops.transcribe import transcribe
 
     path = Path(file_path)
     if not path.exists():
@@ -80,7 +81,7 @@ async def parse_audio(
     if result.segments:
         for seg in result.segments:
             ts = _format_time(seg.start)
-            if seg.speaker:
+            if with_speaker and seg.speaker:
                 lines.append(f"**[{seg.speaker}] [{ts}]**: {seg.text}")
             else:
                 lines.append(f"**[{ts}]**: {seg.text}")
