@@ -131,12 +131,18 @@ func pcWriteCheckpoint(payload PreCompactPayload) error {
 }
 
 // RegisterPreCompact wires the handler into the dispatcher registry.
-// Called from doc.go init() once the hook is confirmed stable.
-// Kept separate so tests can call it without triggering a double-register.
+// Kept as a named function so tests can call it after core.Reset() without
+// triggering a double-register from init().
 func RegisterPreCompact() {
 	core.Register("PreCompact", core.Entry{
 		Handler:    preCompactHandle,
 		Critical:   false,
 		ModuleName: "pre_compact",
 	})
+}
+
+// init wires the handler at binary startup. Tests Reset() the registry and
+// re-register via RegisterPreCompact() as needed.
+func init() {
+	RegisterPreCompact()
 }
