@@ -98,6 +98,22 @@ func safeCall(h Handler, eventType, toolName string, toolInput map[string]any, r
 func Dispatch(eventType, rawInput string) string {
 	toolName, toolInput := parseInput(rawInput)
 
+	// Echo guard (cannibalize from oh-my-claudecode): strip pasted hook/Stop-hook
+	// echoes from UserPromptSubmit prompts before dispatching to handlers,
+	// preventing infinite trigger loops when prior hook output is re-pasted as
+	// a new prompt. Re-marshal rawInput so handlers reading raw also see clean.
+	if eventType == "UserPromptSubmit" {
+		if prompt, ok := toolInput["prompt"].(string); ok && LooksLikeSystemEcho(prompt) {
+			toolInput["prompt"] = StripSystemEchoes(prompt)
+			if newRaw, err := json.Marshal(map[string]any{
+				"tool_name":  toolName,
+				"tool_input": toolInput,
+			}); err == nil {
+				rawInput = string(newRaw)
+			}
+		}
+	}
+
 	entries := enabledEntries(eventType)
 	criticals, deferrables := splitByCriticality(entries)
 
