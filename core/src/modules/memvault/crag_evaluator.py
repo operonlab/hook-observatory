@@ -76,6 +76,42 @@ def signal_from_score(confidence: float | None) -> str:
     return "inferred"
 
 
+# Adjusted promote threshold for 'inferred' signal triples.
+# Default CRAG promote threshold is EVIDENCE_SIGNAL_EXTRACTED_THRESHOLD (0.8).
+# For inferred triples, we accept lower bar so they can still be used.
+_INFERRED_PROMOTE_THRESHOLD = 0.7
+
+
+def _verify_strategy_from_signal(signal: str) -> dict:
+    """Return CRAG verify strategy dict based on triple evidence_signal.
+
+    Rules (Phase B — graphify-cannibalized 2026-05-11):
+      - 'ambiguous' → force_web_verify=True (low certainty, must verify externally)
+      - 'inferred'  → force_web_verify=False, promote_threshold lowered to 0.7
+      - 'extracted' → force_web_verify=False, promote_threshold=default (0.8)
+
+    Returns:
+        dict with keys:
+          force_web_verify (bool): Whether to require web verification.
+          promote_threshold (float): Score threshold to promote verdict to CORRECT.
+    """
+    if signal == "ambiguous":
+        return {
+            "force_web_verify": True,
+            "promote_threshold": EVIDENCE_SIGNAL_EXTRACTED_THRESHOLD,
+        }
+    if signal == "inferred":
+        return {
+            "force_web_verify": False,
+            "promote_threshold": _INFERRED_PROMOTE_THRESHOLD,
+        }
+    # extracted (default)
+    return {
+        "force_web_verify": False,
+        "promote_threshold": EVIDENCE_SIGNAL_EXTRACTED_THRESHOLD,
+    }
+
+
 @dataclass
 class CRAGEvaluation:
     verdict: CRAGVerdict
@@ -122,14 +158,22 @@ class CRAGEvaluator:
         result: CascadeRecallResult,
         evaluate: str = "default",
         intent: str = "unknown",
+        enable_web_verify: bool = False,
     ) -> CRAGEvaluation:
         """Evaluate cascade recall results.
 
         Args:
             evaluate: "default" (Layer A+B), "deep" (+Haiku), "rlm" (+RLM), "none" (skip).
             intent: Query intent for weight tuning (AttnRes-inspired).
+            enable_web_verify: Whether external web verification is available.
+                               Relevant for 'ambiguous' signal triples — if False,
+                               logs a warning instead of performing web verify.
         """
         weights = crag_weights_for_intent(intent)
+
+        # Compute dominant evidence_signal from triples in the recall result
+        # and adjust evaluation strategy accordingly (Phase B signal-aware verify)
+        dominant_signal, strategy = self._signal_strategy_from_result(result, enable_web_verify)
 
         # Layer A: Rule-based heuristics
         layer_a = self._layer_a_rules(result, weights)
@@ -147,12 +191,14 @@ class CRAGEvaluator:
 
         # Combine Layer A + B scores
         combined_score = self._combine_scores(layer_a, layer_b, weights)
-        verdict = self._score_to_verdict(combined_score, layer_b)
+        verdict = self._score_to_verdict(combined_score, layer_b, strategy)
 
         metadata: dict = {
             "layer_a": layer_a,
             "layer_b": layer_b,
             "combined_score": round(combined_score, 3),
+            "dominant_signal": dominant_signal,
+            "signal_strategy": strategy,
         }
 
         # Layer C: Haiku LLM evaluation (opt-in)
@@ -270,14 +316,27 @@ class CRAGEvaluator:
             # No reranker — rely more on rules
             return a_score
 
-    def _score_to_verdict(self, score: float, layer_b: dict) -> CRAGVerdict:
-        """Map combined score to verdict."""
+    def _score_to_verdict(
+        self,
+        score: float,
+        layer_b: dict,
+        strategy: dict | None = None,
+    ) -> CRAGVerdict:
+        """Map combined score to verdict, optionally applying signal strategy.
+
+        strategy: dict from _verify_strategy_from_signal() — contains
+                  force_web_verify and promote_threshold. If None, uses defaults.
+        """
+        promote_threshold = (strategy or {}).get(
+            "promote_threshold", EVIDENCE_SIGNAL_EXTRACTED_THRESHOLD
+        )
+
         # If cross-encoder is available, use its max_score as additional signal
         if layer_b.get("status") == "ok":
             max_score = layer_b.get("max_score", 0.0)
             avg_score = layer_b.get("avg_score", 0.0)
 
-            if avg_score >= 0.6 and max_score >= 0.7:
+            if avg_score >= 0.6 and max_score >= promote_threshold:
                 return CRAGVerdict.CORRECT
             if avg_score < 0.3:
                 return CRAGVerdict.INCORRECT
@@ -289,6 +348,39 @@ class CRAGEvaluator:
         if score < 0.3:
             return CRAGVerdict.INCORRECT
         return CRAGVerdict.AMBIGUOUS
+
+    def _signal_strategy_from_result(
+        self,
+        result: CascadeRecallResult,
+        enable_web_verify: bool = False,
+    ) -> tuple[str, dict]:
+        """Derive the dominant evidence_signal from recall result triples.
+
+        Picks the most conservative (lowest-weight) signal present in the
+        triple set — worst case governs the overall verify strategy.
+
+        Returns (dominant_signal, strategy_dict).
+        """
+        _signal_priority = {"ambiguous": 0, "inferred": 1, "extracted": 2}
+        dominant = "extracted"
+
+        for triple in result.triples:
+            sig = getattr(triple, "evidence_signal", None) or "extracted"
+            if _signal_priority.get(sig, 2) < _signal_priority.get(dominant, 2):
+                dominant = sig
+
+        strategy = _verify_strategy_from_signal(dominant)
+
+        # If ambiguous signal but web verify not enabled: warn, don't override
+        if dominant == "ambiguous" and not enable_web_verify:
+            logger.warning(
+                "Evidence signal 'ambiguous' in recall result but enable_web_verify=False. "
+                "Proceeding without web verification — consider enabling for higher accuracy."
+            )
+            # Still mark force_web_verify=True in strategy for caller awareness
+            # but we cannot actually perform web verify here.
+
+        return dominant, strategy
 
     async def _layer_c_haiku(self, query: str, result: CascadeRecallResult) -> dict | None:
         """Layer C: Haiku LLM evaluation (opt-in, 1-3s)."""
