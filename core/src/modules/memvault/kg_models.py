@@ -159,6 +159,14 @@ class Triple(SpaceScopedModel):
     )  # annotation 自指 / 糾正鏈
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     # 0.0-1.0 LLM 抽取信心
+    evidence_signal: Mapped[str] = mapped_column(
+        String(16), server_default=text("'extracted'"), nullable=False
+    )
+    # extracted (1.0 證據強) | inferred (0.6-0.9 推論) | ambiguous (0.1-0.3 模糊)
+    # graphify-cannibalized 2026-05-11；對應 evidence provenance type，
+    # 與 extra_metadata.signal_type（Dream Phase 2 行為類別）語意不同。
+    evidence_method: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # llm-extraction | rule-inference | fuzzy-match | manual | NULL（未標）
     extra_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # 接 LLM 輸出的 tags / signal_type / 其他半結構
     # ---- /Envelope ----

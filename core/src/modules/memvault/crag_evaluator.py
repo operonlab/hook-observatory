@@ -10,6 +10,11 @@ Confidence thresholds:
   CORRECT:   avg_score >= 0.6 AND max_score >= 0.7
   AMBIGUOUS: 0.3 <= avg_score < 0.6
   INCORRECT: avg_score < 0.3 OR empty results
+
+Evidence signal thresholds (graphify-cannibalized 2026-05-11):
+  extracted: confidence >= 0.8 (direct evidence)
+  inferred:  0.4 <= confidence < 0.8 (LLM/semantic inference)
+  ambiguous: confidence < 0.4 (low certainty)
 """
 
 from __future__ import annotations
@@ -45,6 +50,30 @@ class CRAGVerdict(StrEnum):
     CORRECT = "correct"
     AMBIGUOUS = "ambiguous"
     INCORRECT = "incorrect"
+
+
+# Evidence signal boundaries (graphify-cannibalized 2026-05-11)
+# Maps confidence score → three-tier evidence_signal label for Triple/Citation
+# provenance tracking. Tune via these constants only.
+EVIDENCE_SIGNAL_EXTRACTED_THRESHOLD = 0.8
+EVIDENCE_SIGNAL_AMBIGUOUS_THRESHOLD = 0.4
+
+
+def signal_from_score(confidence: float | None) -> str:
+    """Map a confidence score (0.0-1.0) to three-tier evidence_signal label.
+
+    None / missing confidence defaults to 'extracted' — treats LLM extraction
+    as direct evidence unless explicitly downgraded by an inference pathway.
+
+    Returns one of: 'extracted' | 'inferred' | 'ambiguous'.
+    """
+    if confidence is None:
+        return "extracted"
+    if confidence >= EVIDENCE_SIGNAL_EXTRACTED_THRESHOLD:
+        return "extracted"
+    if confidence < EVIDENCE_SIGNAL_AMBIGUOUS_THRESHOLD:
+        return "ambiguous"
+    return "inferred"
 
 
 @dataclass

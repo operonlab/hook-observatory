@@ -103,7 +103,19 @@ class Citation:
     section: str | None
     page: str | None
     quote: str | None
+    confidence: float | None              # 0.0-1.0 retrieval/synth 信心
+    confidence_type: str | None           # extracted | inferred | ambiguous
 ```
+
+#### Evidence Tier Semantics（graphify-cannibalized 2026-05-11）
+
+| `confidence_type` | 範圍 | 語意 |
+|---|---|---|
+| `extracted` | confidence ≥ 0.8 | quote 直接出現在 chunk 原文，證據強 |
+| `inferred` | 0.4 ≤ confidence < 0.8 | LLM 從語義相關 chunk 推斷，非直接引用 |
+| `ambiguous` | confidence < 0.4 | 多個 chunk 部分符合、無法確定唯一源 |
+
+兩欄位皆 nullable（向前相容既有 QALog JSONB）。synth op 未產出信心時保持 NULL，前端依 NULL 退化為「無信心標記」顯示。
 
 ### 可選 Ops
 - `CitedAnswerOp` — 通用帶引用回答
