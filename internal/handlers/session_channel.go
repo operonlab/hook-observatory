@@ -152,8 +152,9 @@ func sessionChannelHandleUserPromptSubmit(_ string) core.HookResult {
 			text, _ := m["text"].(string)
 			meta, _ := m["_meta"].(map[string]any)
 
-			// tasks topic: respect target_pane
-			if topic == "tasks" {
+			// tasks + handoffs topics: respect target_pane (skip if explicitly
+			// addressed to a different pane).
+			if topic == "tasks" || topic == "handoffs" {
 				if target, ok := meta["target_pane"].(string); ok && target != "" {
 					if target != myPane && target != mySender {
 						continue
@@ -161,10 +162,17 @@ func sessionChannelHandleUserPromptSubmit(_ string) core.HookResult {
 				}
 			}
 
+			displayText := sessionChannelTrunc(text, 120)
+			if topic == "handoffs" {
+				if path, ok := meta["handoff_path"].(string); ok && path != "" {
+					displayText = fmt.Sprintf("%s → READ %s", displayText, path)
+				}
+			}
+
 			items = append(items, inboxItem{
 				topic:   topic,
 				sender:  sender,
-				text:    sessionChannelTrunc(text, 120),
+				text:    displayText,
 				tag:     tag,
 				timeAgo: sessionChannelMsgAgeStr(m),
 			})
