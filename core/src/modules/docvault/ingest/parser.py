@@ -112,21 +112,117 @@ def parse_document(
             ".md": "markdown",
             ".markdown": "markdown",
             ".txt": "markdown",
+            # Audio
+            ".mp3": "audio",
+            ".wav": "audio",
+            ".m4a": "audio",
+            ".flac": "audio",
+            ".ogg": "audio",
+            ".aac": "audio",
+            ".opus": "audio",
+            ".wma": "audio",
+            # Video
+            ".mp4": "video",
+            ".mov": "video",
+            ".webm": "video",
+            ".mkv": "video",
+            ".avi": "video",
+            ".m4v": "video",
+            ".ts": "video",
+            ".flv": "video",
         }
         source_type = type_map.get(ext, "markdown")
 
-    parsers = {
+    # ── Sync parsers ──────────────────────────────────────────────────────
+    sync_parsers = {
         "pdf": _parse_pdf,
         "docx": _parse_docx,
         "markdown": _parse_markdown,
     }
 
-    parser_fn = parsers.get(source_type, _parse_markdown)
-    content, metadata = parser_fn(file_path)
-    metadata["file_path"] = file_path
-    metadata["file_size"] = path.stat().st_size
+    if source_type in sync_parsers:
+        parser_fn = sync_parsers[source_type]
+        content, metadata = parser_fn(file_path)
+        metadata["file_path"] = file_path
+        metadata["file_size"] = path.stat().st_size
+        return content, metadata
 
-    return content, metadata
+    # ── Async media parsers (audio / video) ───────────────────────────────
+    # These are async; callers must use parse_document_async() instead.
+    raise ValueError(
+        f"source_type '{source_type}' requires parse_document_async(). "
+        "Use parse_document_async() for audio/video files."
+    )
+
+
+async def parse_document_async(
+    file_path: str,
+    source_type: str | None = None,
+) -> tuple[str, dict]:
+    """Async-capable parse that handles all types including audio/video.
+
+    For sync types (pdf/docx/markdown), delegates to parse_document().
+    For audio/* and video/*, calls the respective async parsers.
+
+    Args:
+        file_path: Path to the source file.
+        source_type: Explicit type. Auto-detected from extension if None.
+
+    Returns:
+        (content_markdown, metadata_dict)
+    """
+    import asyncio
+
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Document not found: {file_path}")
+
+    if source_type is None:
+        ext = path.suffix.lower()
+        type_map = {
+            ".pdf": "pdf",
+            ".docx": "docx",
+            ".doc": "docx",
+            ".md": "markdown",
+            ".markdown": "markdown",
+            ".txt": "markdown",
+            ".mp3": "audio",
+            ".wav": "audio",
+            ".m4a": "audio",
+            ".flac": "audio",
+            ".ogg": "audio",
+            ".aac": "audio",
+            ".opus": "audio",
+            ".wma": "audio",
+            ".mp4": "video",
+            ".mov": "video",
+            ".webm": "video",
+            ".mkv": "video",
+            ".avi": "video",
+            ".m4v": "video",
+            ".ts": "video",
+            ".flv": "video",
+        }
+        source_type = type_map.get(ext, "markdown")
+
+    if source_type in ("pdf", "docx", "markdown"):
+        content, metadata = parse_document(file_path, source_type)
+        return content, metadata
+
+    elif source_type == "audio":
+        from .audio_parser import parse_audio
+        return await parse_audio(file_path)
+
+    elif source_type == "video":
+        from .video_parser import parse_video
+        return await parse_video(file_path)
+
+    else:
+        # Unknown type — fall back to markdown reader
+        content, metadata = _parse_markdown(file_path)
+        metadata["file_path"] = file_path
+        metadata["file_size"] = path.stat().st_size
+        return content, metadata
 
 
 class DocumentParserOp:
