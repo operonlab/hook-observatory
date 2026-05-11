@@ -383,17 +383,30 @@ def generate_summaries(
             key_findings = result.get("key_findings", [])
             if isinstance(key_findings, str):
                 key_findings = [key_findings]
+            single_record = {
+                "community_id": comm_id,
+                "summary": summary_text,
+                "key_findings": key_findings,
+                "evidence_count": evidence,
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+                "skipped": False,
+            }
+            summaries.append(single_record)
+            # 2026-05-08 修正：per-item commit（scoped delete + commit, 只動該 community）
+            # 原本 batch save at end → 中途卡死全失（少爺揪出的 batch save 設計缺陷）
+            if not dry_run:
+                if not _save_single_summary(single_record, space_id):
+                    # 不丟 exception 中斷迴圈；標記 skipped 讓 main() 的 batch save 重試
+                    single_record["skipped"] = True
+                    single_record["error"] = "single-item save failed"
+                    print(
+                        f"  ⚠ per-item save FAILED for {comm_id} — "
+                        "fallback to batch retry at end. "
+                        "Diagnosis hint: 看 stderr.log POST URL 看 Core API 回 status；"
+                        "404 → endpoint 缺；422 → schema mismatch；500 → server error",
+                        file=sys.stderr,
+                    )
             print(f"ok ({len(summary_text)} chars)")
-            summaries.append(
-                {
-                    "community_id": comm_id,
-                    "summary": summary_text,
-                    "key_findings": key_findings,
-                    "evidence_count": evidence,
-                    "generated_at": datetime.now().isoformat(timespec="seconds"),
-                    "skipped": False,
-                }
-            )
         except RuntimeError as e:
             print(f"FAILED: {e}", file=sys.stderr)
             summaries.append(
@@ -418,6 +431,22 @@ def generate_summaries(
 
 
 # ── Phase 4: POST Summaries to Core API ──────────────────────────────────────
+def _save_single_summary(record: dict, space_id: str) -> bool:
+    """Per-item save：每筆 LLM 完成立即 POST /summaries/regenerate（scoped delete only this community_id）.
+
+    save_summaries service 內部：DELETE WHERE community_id IN [target] → INSERT → commit。
+    所以單筆 send 不會清掉其他 community 的 summaries（即 per-item upsert 行為）。
+    """
+    url = f"{CORE_API}/api/memvault/kg/summaries/regenerate"
+    payload = {
+        "space_id": space_id,
+        "summaries": [record],
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    result = http_post(url, payload, params={"space_id": space_id})
+    return "error" not in result
+
+
 def save_summaries(summaries: list[dict], space_id: str, dry_run: bool) -> bool:
     # Filter out skipped entries — only save actual new/updated summaries
     to_save = [s for s in summaries if not s.get("skipped")]

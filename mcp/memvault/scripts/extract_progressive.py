@@ -198,6 +198,10 @@ def main() -> None:
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
     env["MEMVAULT_SKIP_RECALL"] = "1"
+    # Suppress voicenotify TTS in the spawned `claude -p` sub-session — see
+    # extract.py for the full rationale (system prompt leaking into the
+    # master pane's Stop announcement).
+    env["CLAUDE_VOICE"] = "0"
 
     progressive_model = os.environ.get("MEMVAULT_PROGRESSIVE_MODEL", "haiku")
     log(f"Calling Claude ({progressive_model}) for progressive extraction ...")

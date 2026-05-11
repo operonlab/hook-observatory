@@ -442,18 +442,36 @@ def main() -> None:
     tags = validated_json.get("tags", [])
     triples = validated_json.get("triples", [])
 
+    # Envelope 9 欄 + tags/signal_type forward 到 Core API
+    # (2026-05-08 中文化重構：subject/object 中文 + envelope 結構化)
+    signal_type = validated_json.get("signal_type")
     batch_triples = []
     for t in triples:
-        batch_triples.append(
-            {
-                "s": t.get("s", ""),
-                "p": t.get("p", ""),
-                "o": t.get("o", ""),
-                "session_id": session_id,
-                "topic": topic,
-                "tags": tags,
-            }
-        )
+        item = {
+            "s": t.get("s", ""),
+            "p": t.get("p", ""),
+            "o": t.get("o", ""),
+            "session_id": session_id,
+            "topic": topic,
+            "tags": tags,
+        }
+        # Envelope 欄位（LLM 抽到才寫入；nullable 由 Pydantic schema 處理）
+        for key in (
+            "kind",
+            "modality",
+            "polarity",
+            "raw_quote",
+            "temporal",
+            "attribution",
+            "speaker",
+            "refs",
+            "confidence",
+        ):
+            if key in t and t[key] is not None:
+                item[key] = t[key]
+        if signal_type:
+            item["signal_type"] = signal_type
+        batch_triples.append(item)
 
     batch_body = {
         "triples": batch_triples,

@@ -375,6 +375,10 @@ Timestamp: {timestamp}
     # Prevent recall from firing on our internal LLM calls
     env = os.environ.copy()
     env["MEMVAULT_SKIP_RECALL"] = "1"
+    # Suppress voicenotify TTS in the spawned `claude -p` sub-session — its
+    # Stop hook would otherwise read the system-prompt opening
+    # ("你是記憶品質審查員 …") aloud as the master pane's task summary.
+    env["CLAUDE_VOICE"] = "0"
 
     memvault_model = os.environ.get("MEMVAULT_MODEL", "")
 

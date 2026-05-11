@@ -116,20 +116,17 @@ class EdgeSessionOverlapOp(MemvaultOp):
         space_id: str = ctx["space_id"]
 
         # Collect sessions per entity
-        stmt = (
-            select(
-                Triple.canonical_subject_id,
-                Triple.canonical_object_id,
-                Triple.source_session,
-            )
-            .where(
-                Triple.space_id == space_id,
-                Triple.deleted_at.is_(None),
-                Triple.invalid_at.is_(None),
-                Triple.canonical_subject_id.isnot(None),
-                Triple.canonical_object_id.isnot(None),
-                Triple.source_session.isnot(None),
-            )
+        stmt = select(
+            Triple.canonical_subject_id,
+            Triple.canonical_object_id,
+            Triple.source_session,
+        ).where(
+            Triple.space_id == space_id,
+            Triple.deleted_at.is_(None),
+            Triple.invalid_at.is_(None),
+            Triple.canonical_subject_id.isnot(None),
+            Triple.canonical_object_id.isnot(None),
+            Triple.source_session.isnot(None),
         )
         result = await db.execute(stmt)
 
@@ -188,9 +185,7 @@ class EdgeAdamicAdarOp(MemvaultOp):
             b_nbrs = neighbors.get(pair[1], set())
             common = a_nbrs & b_nbrs
             if common:
-                aa_score = sum(
-                    1.0 / math.log(degree[z]) for z in common if degree[z] > 1
-                )
+                aa_score = sum(1.0 / math.log(degree[z]) for z in common if degree[z] > 1)
                 if aa_score > 0:
                     edge_map[pair] = aa_score
 
@@ -477,6 +472,9 @@ class EdgePersistOp(MemvaultOp):
             upserted += len(batch)
 
         await db.flush()
+        # 2026-05-08 修正：必須 commit！原本只 flush 導致 endpoint return
+        # 後 transaction rollback，DB 收到 0 rows（API 回 202 + edges_upserted 但 DB 0）
+        await db.commit()
         ctx["edges_upserted"] = upserted
-        logger.info("Persisted %d entity edges", upserted)
+        logger.info("Persisted and committed %d entity edges", upserted)
         return ctx

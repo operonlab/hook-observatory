@@ -3,11 +3,14 @@
 Prefix: /api/memvault/kg (mounted via __init__.py)
 """
 
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from src.events.bus import Event, event_bus
 from src.shared.deps import get_db, require_permission
@@ -742,7 +745,29 @@ async def lint_knowledge_graph(
                 code="memvault.forbidden",
             )
     check_list = None if checks == "all" else [c.strip() for c in checks.split(",")]
-    report = await run_lint(db, space_id, checks=check_list, use_pipeline=True)
+    logger.info("[lint] start: space_id=%s checks=%s", space_id, check_list or "all")
+    # 2026-05-08: use_pipeline=False — ParallelOp 用 asyncio.gather 跑多個 check
+    # 共享同一個 AsyncSession → SQLAlchemy "concurrent operations not permitted"
+    # 改 sequential：lint 是低頻 endpoint，sequential 跑速度可接受
+    report = await run_lint(db, space_id, checks=check_list, use_pipeline=False)
+
+    failed_checks = [
+        f.check for f in report.findings if f.severity == "error" and f.entity_type == "system"
+    ]
+    if failed_checks:
+        logger.warning(
+            "[lint] %d checks failed (system error): %s. Diagnosis hint: 看 "
+            "stderr.log 'Check ... failed' 找 ImportError / DB column missing / "
+            "AsyncSession concurrent → 修 schema drift 或改 use_pipeline=False",
+            len(failed_checks),
+            failed_checks,
+        )
+    logger.info(
+        "[lint] done: %d findings, %d checks ran (%.0fms)",
+        len(report.findings),
+        len(report.checks_run),
+        report.run_duration_ms,
+    )
 
     remediations = 0
     if fix:
@@ -912,22 +937,36 @@ async def recompute_edge_weights(
     from .pipeline_config import MemvaultPipelineConfig
     from .pipelines.edge_pipeline import build_edge_pipeline
 
+    logger.info("[entity_edges/recompute] start: space_id=%s", space_id)
     config = MemvaultPipelineConfig.from_env()
     pipeline = build_edge_pipeline(config)
 
     ctx = {"db": db, "space_id": space_id}
     ctx = await pipeline.execute(ctx)
 
+    upserted = ctx.get("edges_upserted", 0)
+    meta = ctx.get("_pipeline_meta")
+    stages = meta.stages_applied if hasattr(meta, "stages_applied") else []
+    timings = meta.stage_timings if hasattr(meta, "stage_timings") else {}
+
+    if upserted == 0:
+        logger.warning(
+            "[entity_edges/recompute] 0 edges upserted (stages=%s). "
+            "Diagnosis hint: 確認 (a) entity_canonicals 有 row、(b) triples 主張類 > 0、"
+            "(c) edge_ops.py:EdgePersistOp 有 await db.commit()（2026-05-08 修過 silent rollback bug）",
+            stages,
+        )
+    else:
+        logger.info(
+            "[entity_edges/recompute] done: upserted=%d stages=%s timings=%s",
+            upserted,
+            stages,
+            {k: round(v, 1) for k, v in timings.items()},
+        )
+
     return {
-        "edges_upserted": ctx.get("edges_upserted", 0),
-        "meta": {
-            "stages_applied": ctx.get("_pipeline_meta", {}).stages_applied
-            if hasattr(ctx.get("_pipeline_meta"), "stages_applied")
-            else [],
-            "stage_timings": ctx.get("_pipeline_meta", {}).stage_timings
-            if hasattr(ctx.get("_pipeline_meta"), "stage_timings")
-            else {},
-        },
+        "edges_upserted": upserted,
+        "meta": {"stages_applied": stages, "stage_timings": timings},
     }
 
 
@@ -983,6 +1022,11 @@ async def apply_attitude_decay(
 
     from .models import MemoryBlock
 
+    logger.info(
+        "[decay] start: space_id=%s half_life_days=%d",
+        space_id,
+        half_life_days,
+    )
     now = datetime.now(UTC)
     stmt = select(MemoryBlock).where(
         MemoryBlock.space_id == space_id,
@@ -990,8 +1034,19 @@ async def apply_attitude_decay(
         MemoryBlock.deleted_at.is_(None),
         MemoryBlock.confidence.is_not(None),
     )
-    result = await db.execute(stmt)
-    blocks = result.scalars().all()
+    try:
+        result = await db.execute(stmt)
+        blocks = result.scalars().all()
+    except Exception as e:
+        # Schema drift 友好錯誤訊息：少爺日後 grep 'memvault.decay' log 找根因
+        logger.error(
+            "[decay] DB query failed (likely ORM-DB schema drift): %s. "
+            "Diagnosis hint: 跑 'SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema=memvault AND table_name=blocks' 對照 ORM 'models.py' "
+            "MemoryBlock class，缺哪欄就寫 alembic migration 補。",
+            e,
+        )
+        raise
 
     updated = 0
     for b in blocks:
@@ -1002,6 +1057,12 @@ async def apply_attitude_decay(
             b.confidence = new_conf
             updated += 1
     await db.commit()
+    logger.info(
+        "[decay] done: checked=%d updated=%d (space_id=%s)",
+        len(blocks),
+        updated,
+        space_id,
+    )
 
     return AttitudeDecayResponse(
         space_id=space_id,
@@ -1118,3 +1179,38 @@ async def evolve_attitude(
         action="logged",
         audit_file=str(audit_file),
     )
+
+
+# ======================== Admin: MLX Worker Unload ========================
+
+
+@router.post("/admin/unload-mlx", status_code=200)
+async def unload_mlx_workers(
+    which: str = Query(
+        "both",
+        pattern="^(embed|rerank|both)$",
+        description="哪個 worker 要 unload：embed (~770MB) | rerank (~1.5GB) | both",
+    ),
+    _user: dict = require_permission("memvault.write"),
+):
+    """主動 unload MLX model 釋放 RAM（不殺 worker process，下次 query 自動 reload）.
+
+    使用情境：
+    - 重抽前 / 大批處理前先釋放 rerank（重抽用不到）
+    - RAM 緊張時手動釋放
+    - 對應 IDLE_TIMEOUT 為被動觸發；此 endpoint 為主動觸發
+
+    Diagnosis hint（少爺日後 grep 用）:
+    - log 標籤: '[admin/unload-mlx]'
+    - 找 worker stdin command 是否寫入失敗：grep 'worker unreachable'
+    """
+    from src.shared import omlx_bridge, rerank_bridge
+
+    logger.info("[admin/unload-mlx] start: which=%s", which)
+    result: dict = {}
+    if which in ("embed", "both"):
+        result["embed"] = await omlx_bridge.unload_model()
+    if which in ("rerank", "both"):
+        result["rerank"] = await rerank_bridge.unload_model()
+    logger.info("[admin/unload-mlx] done: %s", result)
+    return result

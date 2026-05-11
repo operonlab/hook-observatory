@@ -1,8 +1,18 @@
 """Core service — Modular Monolith."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+
+# 2026-05-08: 確保 module-level logger（譬如 memvault.kg_routes）的 INFO/WARNING
+# 會輸出到 stderr → /opt/homebrew/var/log/workshop/core/YYYY-MM-DD.error.log
+# 否則 logger.info('[decay] ...') 等診斷訊息會被吞掉，少爺日後找不到 root cause
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError

@@ -55,3 +55,20 @@ class IntentClassificationOutput(BaseModel):
         "entity_lookup", "conceptual", "factual", "exploratory", "cross_domain", "unknown"
     ]
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class SemanticLintOutput(BaseModel):
+    """LLM output for lint.semantic_contradictions check.
+
+    每對 memory block 比對後的語意關係判斷。lint.py:535 PydanticAgent 用作 output_type。
+    field 名 `relationship` 對齊 lint.py:620,624,648,671 使用點。
+    """
+
+    relationship: Literal["contradiction", "evolution", "compatible"]
+    # contradiction: 直接矛盾的事實
+    # evolution: 信念/情境演化（newer 取代 older）
+    # compatible: 相關但非矛盾
+    stale_id: str | None = None
+    # contradiction/evolution 時填過時 block 的 id；compatible 留 null
+    reason: str = "LLM judgment"
+    confidence: float = Field(default=0.7, ge=0.0, le=1.0)
