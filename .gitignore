@@ -63,6 +63,8 @@ lab/
 
 # External / standalone
 clients/
+# But hook-dispatcher's internal/clients/ is real source code — keep it tracked.
+!stations/hook-dispatcher/internal/clients/
 
 # Backup files
 *.bak
