@@ -41,5 +41,10 @@
     "ai-assistant",
     "rendering"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "overrides": {
+      "gh-pages": "^5.0.0"
+    }
+  }
 }
