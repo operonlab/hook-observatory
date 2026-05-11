@@ -39,5 +39,18 @@
     "chat",
     "clippy"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "overrides": {
+      "lodash": "^4.18.1",
+      "lodash-es": "^4.18.1",
+      "fast-uri": "^3.1.2",
+      "picomatch": "^4.0.4",
+      "serialize-javascript": "^7.0.5",
+      "postcss": "^8.5.14",
+      "brace-expansion": "^2.0.2",
+      "@xmldom/xmldom": "^0.9.10",
+      "@babel/plugin-transform-modules-systemjs": "^7.29.4"
+    }
+  }
 }
