@@ -14,6 +14,7 @@ from pathlib import Path
 try:
     from sdk_client.retry import async_with_backoff as _async_with_backoff
     from sdk_client.timeout import dynamic_timeout as _dynamic_timeout
+
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False
@@ -27,7 +28,7 @@ EMBEDDING_DIM: int = 1024  # re-declared; canonical value in search_constants.py
 
 _process: subprocess.Popen | None = None
 _startup_lock = asyncio.Lock()  # protects worker process startup
-_io_lock = asyncio.Lock()       # protects stdin/stdout I/O atomicity
+_io_lock = asyncio.Lock()  # protects stdin/stdout I/O atomicity
 _ready = False
 
 
@@ -98,13 +99,21 @@ async def _send_request(request: dict) -> dict | None:
                 _process.stdin.write(line)
                 _process.stdin.flush()
 
-            write_timeout = _dynamic_timeout(base=10, factor=0.5, context=len(line), cap=30) if _HAS_RETRY else 10
+            write_timeout = (
+                _dynamic_timeout(base=10, factor=0.5, context=len(line), cap=30)
+                if _HAS_RETRY
+                else 10
+            )
             await asyncio.wait_for(
                 loop.run_in_executor(None, _write_request),
                 timeout=write_timeout,
             )
 
-            read_timeout = _dynamic_timeout(base=30, factor=0.5, context=len(line), cap=120) if _HAS_RETRY else 30
+            read_timeout = (
+                _dynamic_timeout(base=30, factor=0.5, context=len(line), cap=120)
+                if _HAS_RETRY
+                else 30
+            )
             response_line = await asyncio.wait_for(
                 loop.run_in_executor(None, _process.stdout.readline),
                 timeout=read_timeout,
@@ -185,3 +194,15 @@ async def shutdown():
             _process.kill()
     _process = None
     _ready = False
+
+
+async def unload_model() -> dict:
+    """主動 unload embed model（保留 worker process，下次 embed 自動 reload）.
+
+    用途：重抽前釋放 ~770 MB；不殺 process 避免 1-3s reload 延遲。
+    對應 worker 的 stdin 'action: unload' command（embed_worker.py 2026-05-08 加）.
+    """
+    response = await _send_request({"action": "unload"})
+    if response is None:
+        return {"unloaded": False, "reason": "worker unreachable"}
+    return response

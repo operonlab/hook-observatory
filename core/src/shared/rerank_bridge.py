@@ -15,6 +15,7 @@ from pathlib import Path
 try:
     from sdk_client.retry import async_with_backoff as _async_with_backoff
     from sdk_client.timeout import dynamic_timeout as _dynamic_timeout
+
     _HAS_RETRY = True
 except ImportError:
     _HAS_RETRY = False
@@ -163,6 +164,18 @@ async def shutdown():
             _process.kill()
     _process = None
     _ready = False
+
+
+async def unload_model() -> dict:
+    """主動 unload rerank model（保留 worker process，下次 rerank 自動 reload）.
+
+    用途：重抽前釋放 ~1.5 GB；不殺 process 避免 reload 延遲。
+    對應 worker 的 stdin 'action: unload' command（rerank_worker.py 2026-05-08 加）.
+    """
+    response = await _send_request({"action": "unload"})
+    if response is None:
+        return {"unloaded": False, "reason": "worker unreachable"}
+    return response
 
 
 async def rerank(
