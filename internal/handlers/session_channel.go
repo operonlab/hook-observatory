@@ -76,11 +76,102 @@ func sessionChannelHandleStart(rawInput string) core.HookResult {
 }
 
 func sessionChannelHandlePreTool(rawInput string) core.HookResult {
+	// Always publish the tool event (one per actual tool call) so the dashboard
+	// can show "what is this pane doing right now?". The heartbeat snapshot
+	// below is throttled because it carries ctx%/branch/task — those change
+	// slowly; tool-call observability needs per-call granularity.
+	sessionChannelPublishTool(rawInput)
+
 	if sessionChannelHeartbeatThrottled() {
 		return core.Allow()
 	}
 	sessionChannelPublishSnapshot("heartbeat", rawInput)
 	return core.Allow()
+}
+
+// sessionChannelPublishTool — emit a `tool` tag to the agents topic so
+// observers see "pane %5 just ran Read ~/path/foo". Idempotent on rawInput:
+// silently no-ops if tool_name cannot be parsed.
+func sessionChannelPublishTool(rawInput string) {
+	var p map[string]any
+	if err := json.Unmarshal([]byte(rawInput), &p); err != nil {
+		return
+	}
+	toolName, _ := p["tool_name"].(string)
+	if toolName == "" {
+		return
+	}
+
+	preview := sessionChannelToolPreview(toolName, p["tool_input"])
+
+	meta := sessionChannelCollectMeta(rawInput)
+	meta["tool_name"] = toolName
+	if preview != "" {
+		meta["tool_args_preview"] = preview
+	}
+
+	text := toolName
+	if preview != "" {
+		text = toolName + " " + preview
+	}
+	if len(text) > 80 {
+		text = text[:77] + "..."
+	}
+
+	sessionChannelSendAsync("agents", text, "normal", "tool", meta)
+}
+
+// sessionChannelToolPreview builds a short human-readable summary of a tool
+// invocation. Each tool gets a hand-picked field that is most descriptive.
+// Returns empty string if no useful preview can be extracted.
+func sessionChannelToolPreview(toolName string, toolInput any) string {
+	inp, ok := toolInput.(map[string]any)
+	if !ok {
+		return ""
+	}
+	pick := func(key string, maxLen int) string {
+		s, _ := inp[key].(string)
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return ""
+		}
+		s = strings.ReplaceAll(s, "\n", " ")
+		if maxLen > 0 && len(s) > maxLen {
+			s = s[:maxLen-1] + "…"
+		}
+		return s
+	}
+	shortPath := func(s string) string {
+		if home, _ := os.UserHomeDir(); home != "" && strings.HasPrefix(s, home) {
+			s = "~" + s[len(home):]
+		}
+		if len(s) > 48 {
+			s = "…" + s[len(s)-47:]
+		}
+		return s
+	}
+	switch toolName {
+	case "Read", "Write", "Edit", "NotebookEdit":
+		if p := pick("file_path", 0); p != "" {
+			return shortPath(p)
+		}
+	case "Bash":
+		return pick("command", 50)
+	case "Grep":
+		return pick("pattern", 50)
+	case "Glob":
+		return pick("pattern", 50)
+	case "WebFetch", "WebSearch":
+		if u := pick("url", 50); u != "" {
+			return u
+		}
+		return pick("query", 50)
+	case "Task", "Agent":
+		return pick("description", 50)
+	case "Skill":
+		return pick("skill", 50)
+	}
+	return ""
 }
 
 func sessionChannelHandleStop(rawInput string) core.HookResult {
