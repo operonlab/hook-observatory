@@ -24,6 +24,39 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _enrich_citations_with_signal(
+    citations: list[dict],
+    *,
+    overall_confidence: float,
+    crag_verdict: str | None,
+) -> list[CitationRef]:
+    """Attach confidence + confidence_type to each citation (Phase B Phase 2026-05-11).
+
+    Rules (graphify-cannibalized three-tier):
+      - If crag_verdict == 'incorrect' → all citations forced to 'ambiguous'
+      - Otherwise use per-citation score if present, else overall_confidence
+      - score >= 0.8 → 'extracted', 0.4 <= score < 0.8 → 'inferred', else 'ambiguous'
+
+    If citation dict already carries explicit confidence/confidence_type,
+    do not overwrite (synth op authority preserved).
+    """
+    from src.modules.memvault.crag_evaluator import signal_from_score
+
+    forced_ambiguous = crag_verdict == "incorrect"
+    enriched: list[CitationRef] = []
+    for c in citations:
+        c2 = dict(c)
+        if "confidence" not in c2 or c2["confidence"] is None:
+            c2["confidence"] = c.get("score", overall_confidence)
+        if "confidence_type" not in c2 or c2["confidence_type"] is None:
+            if forced_ambiguous:
+                c2["confidence_type"] = "ambiguous"
+            else:
+                c2["confidence_type"] = signal_from_score(c2["confidence"])
+        enriched.append(CitationRef(**c2))
+    return enriched
+
+
 def _hash_query(query: str) -> str:
     return hashlib.sha256(query.strip().lower().encode()).hexdigest()
 
@@ -72,12 +105,15 @@ class QAService:
             created_by=created_by,
         )
 
+        enriched_citations = _enrich_citations_with_signal(
+            result.get("citations", []),
+            overall_confidence=result.get("confidence", 0.0),
+            crag_verdict=result.get("crag_verdict"),
+        )
         return QAResponse(
             question=request.question,
             answer=result.get("answer", ""),
-            citations=[
-                CitationRef(**c) for c in result.get("citations", [])
-            ],
+            citations=enriched_citations,
             confidence=result.get("confidence", 0.0),
             crag_verdict=result.get("crag_verdict"),
             pipeline_used="C" if request.mode == "mixed" else "A",
