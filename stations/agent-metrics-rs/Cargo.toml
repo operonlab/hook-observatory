@@ -38,7 +38,7 @@ async-trait = "0.1"
 futures = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
 once_cell = "1"
-nix = { version = "0.29", features = ["signal"] }
+nix = { version = "0.31", features = ["signal"] }
 regex = "1"
 fs2 = "0.4"
 
