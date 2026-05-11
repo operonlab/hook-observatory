@@ -15,7 +15,7 @@ use chrono::{Local, NaiveDate, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{Row, SqlitePool};
-use std::{collections::HashMap, convert::Infallible, time::Duration};
+use std::{collections::HashMap, convert::Infallible, sync::OnceLock, time::Duration};
 use tokio_stream::wrappers::ReceiverStream;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use uuid::Uuid;
@@ -191,12 +191,55 @@ fn row_to_run(row: &sqlx::sqlite::SqliteRow) -> DailyRunOut {
 
 // ── Routes builder ────────────────────────────────────────
 
+/// Resolve the static asset directory at runtime.
+///
+/// Priority:
+/// 1. `AUTO_SURVEY_STATIC_DIR` env var (explicit override)
+/// 2. `<cwd>/static` — launchd plist sets WorkingDirectory to the station root
+/// 3. Walk up from the binary path looking for a `static/` sibling
+/// 4. Compile-time `CARGO_MANIFEST_DIR/static` (dev / fallback)
+///
+/// Why: `env!("CARGO_MANIFEST_DIR")` bakes the build-time path into the binary;
+/// when built inside a worktree that gets pruned post-merge, the runtime path
+/// no longer exists and `index.html` 404s.
+fn resolve_static_dir() -> std::path::PathBuf {
+    let has_index = |p: &std::path::Path| p.join("index.html").is_file();
+
+    if let Ok(env_dir) = std::env::var("AUTO_SURVEY_STATIC_DIR") {
+        let pb = std::path::PathBuf::from(env_dir);
+        if has_index(&pb) {
+            return pb;
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        let pb = cwd.join("static");
+        if has_index(&pb) {
+            return pb;
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cursor = exe.parent().map(|p| p.to_path_buf());
+        while let Some(dir) = cursor {
+            let candidate = dir.join("static");
+            if has_index(&candidate) {
+                return candidate;
+            }
+            cursor = dir.parent().map(|p| p.to_path_buf());
+        }
+    }
+
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static")
+}
+
+fn static_dir() -> &'static std::path::Path {
+    static STATIC_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
+    STATIC_DIR.get_or_init(resolve_static_dir).as_path()
+}
+
 pub fn routes() -> Router<AppState> {
-    // Resolve static dir relative to the binary's manifest dir
-    let static_dir = {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        std::path::PathBuf::from(manifest_dir).join("static")
-    };
+    let static_dir = static_dir().to_path_buf();
 
     Router::new()
         // People CRUD
@@ -228,9 +271,7 @@ pub fn routes() -> Router<AppState> {
 // ── Frontend file handlers ─────────────────────────────────
 
 async fn serve_index() -> impl IntoResponse {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("static")
-        .join("index.html");
+    let path = static_dir().join("index.html");
     match tokio::fs::read(&path).await {
         Ok(bytes) => (
             StatusCode::OK,
@@ -243,9 +284,7 @@ async fn serve_index() -> impl IntoResponse {
 }
 
 async fn serve_sw_js() -> impl IntoResponse {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("static")
-        .join("sw.js");
+    let path = static_dir().join("sw.js");
     match tokio::fs::read(&path).await {
         Ok(bytes) => (
             StatusCode::OK,
