@@ -105,6 +105,8 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             speaker_id=instance.speaker_id,
             refs_triple_id=instance.refs_triple_id,
             confidence=instance.confidence,
+            evidence_signal=instance.evidence_signal,
+            evidence_method=instance.evidence_method,
             extra_metadata=instance.extra_metadata,
             valid_at=instance.valid_at,
             invalid_at=instance.invalid_at,
