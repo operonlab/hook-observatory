@@ -1,6 +1,6 @@
 // Package handlers — session_channel.go
-// SessionStart / PreToolUse / Stop / SessionEnd handler — auto-announce to
-// session-channel station for cross-agent statline and pane discovery.
+// SessionStart / PreToolUse / UserPromptSubmit / Stop / SessionEnd handler —
+// auto-announce to session-channel for cross-agent statline + inbox push.
 // Fire-and-forget HTTP POST via curl subprocess.
 // Fails silently if station is not running.
 package handlers
@@ -8,6 +8,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,10 +25,15 @@ const (
 	sessionChannelDebounceSeconds = 60
 	sessionChannelHeartbeatSecs   = 30
 	sessionChannelCtxFreshSecs    = 30
+	sessionChannelInboxFetchSecs  = 2
+	sessionChannelInboxMaxItems   = 6
 )
 
+// Topics polled on UserPromptSubmit. Order = display order in injected text.
+var sessionChannelInboxTopics = []string{"broadcasts", "handoffs", "tasks"}
+
 func init() {
-	for _, ev := range []string{"SessionStart", "PreToolUse", "Stop", "SessionEnd"} {
+	for _, ev := range []string{"SessionStart", "PreToolUse", "Stop", "SessionEnd", "UserPromptSubmit"} {
 		core.Register(ev, core.Entry{
 			Matcher:    "",
 			Handler:    sessionChannelHandle,
@@ -42,6 +49,8 @@ func sessionChannelHandle(eventType, _ string, _ map[string]any, rawInput string
 		return sessionChannelHandleStart(rawInput)
 	case "PreToolUse":
 		return sessionChannelHandlePreTool(rawInput)
+	case "UserPromptSubmit":
+		return sessionChannelHandleUserPromptSubmit(rawInput)
 	case "Stop":
 		return sessionChannelHandleStop(rawInput)
 	case "SessionEnd":
@@ -96,6 +105,188 @@ func sessionChannelHandleStop(rawInput string) core.HookResult {
 func sessionChannelHandleSessionEnd(rawInput string) core.HookResult {
 	sessionChannelPublishSnapshot("leave", rawInput)
 	return core.Allow()
+}
+
+// ── UserPromptSubmit inbox push ────────────────────────────────────────────
+//
+// Fetch unread messages on watched topics, filter (drop self-sent; for
+// `tasks` only keep ones targeted at this pane or untargeted), advance the
+// per-pane cursor, and inject a compact summary into the prompt context.
+// Fail-open on any error — the user's prompt always goes through.
+
+func sessionChannelHandleUserPromptSubmit(_ string) core.HookResult {
+	cursor := sessionChannelLoadCursor()
+	mySender := sessionChannelPaneID()
+	myPane := os.Getenv("TMUX_PANE")
+
+	type inboxItem struct {
+		topic, sender, text, tag, timeAgo string
+	}
+	var items []inboxItem
+
+	baseURL := core.Cfg().GetService("session_channel_url")
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:10101"
+	}
+	client := &http.Client{Timeout: time.Duration(sessionChannelInboxFetchSecs) * time.Second}
+
+	for _, topic := range sessionChannelInboxTopics {
+		since := cursor[topic]
+		if since == "" {
+			// First time: anchor at "now - 1h" so we don't flood with stale messages.
+			anchorMs := time.Now().Add(-1*time.Hour).UnixMilli()
+			since = fmt.Sprintf("%d-0", anchorMs)
+		}
+		msgs, lastID := sessionChannelFetchSince(client, baseURL, topic, since)
+		if lastID != "" {
+			cursor[topic] = lastID
+		}
+		for _, m := range msgs {
+			sender, _ := m["sender"].(string)
+			if sender == mySender {
+				continue // skip self-sent
+			}
+			tag, _ := m["tag"].(string)
+			text, _ := m["text"].(string)
+			meta, _ := m["_meta"].(map[string]any)
+
+			// tasks topic: respect target_pane
+			if topic == "tasks" {
+				if target, ok := meta["target_pane"].(string); ok && target != "" {
+					if target != myPane && target != mySender {
+						continue
+					}
+				}
+			}
+
+			items = append(items, inboxItem{
+				topic:   topic,
+				sender:  sender,
+				text:    sessionChannelTrunc(text, 120),
+				tag:     tag,
+				timeAgo: sessionChannelMsgAgeStr(m),
+			})
+			if len(items) >= sessionChannelInboxMaxItems {
+				break
+			}
+		}
+		if len(items) >= sessionChannelInboxMaxItems {
+			break
+		}
+	}
+
+	// Persist cursor even when no new items (keeps anchor advancing).
+	sessionChannelSaveCursor(cursor)
+
+	if len(items) == 0 {
+		return core.Allow()
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("📬 session-channel inbox (%d unread):\n", len(items)))
+	for _, it := range items {
+		tagPart := ""
+		if it.tag != "" {
+			tagPart = " #" + it.tag
+		}
+		b.WriteString(fmt.Sprintf("  [%s]%s %s: %s · %s\n",
+			it.topic, tagPart, it.sender, it.text, it.timeAgo))
+	}
+	b.WriteString("(use /channel read <topic> for full thread)")
+	return core.TextResult(b.String())
+}
+
+func sessionChannelFetchSince(client *http.Client, baseURL, topic, since string) ([]map[string]any, string) {
+	url := fmt.Sprintf("%s/api/messages/%s?since=%s&count=20",
+		baseURL, topic, since)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, ""
+	}
+	req.Header.Set("X-Local-Key", sessionChannelLocalKey)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil, ""
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, ""
+	}
+	var d struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &d); err != nil {
+		return nil, ""
+	}
+	if len(d.Messages) == 0 {
+		return nil, ""
+	}
+	// xrange returns the `since` ID inclusive — drop the head if it matches.
+	out := d.Messages
+	if id, _ := out[0]["id"].(string); id == since && len(out) > 1 {
+		out = out[1:]
+	} else if id == since {
+		return nil, since
+	}
+	lastID, _ := out[len(out)-1]["id"].(string)
+	return out, lastID
+}
+
+func sessionChannelMsgAgeStr(m map[string]any) string {
+	id, _ := m["id"].(string)
+	tsPart := strings.SplitN(id, "-", 2)[0]
+	tsMs, err := strconv.ParseInt(tsPart, 10, 64)
+	if err != nil {
+		return "?"
+	}
+	age := time.Since(time.UnixMilli(tsMs))
+	if age < time.Minute {
+		return fmt.Sprintf("%ds ago", int(age.Seconds()))
+	}
+	if age < time.Hour {
+		return fmt.Sprintf("%dm ago", int(age.Minutes()))
+	}
+	return fmt.Sprintf("%dh ago", int(age.Hours()))
+}
+
+func sessionChannelTrunc(s string, n int) string {
+	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+func sessionChannelCursorPath() string {
+	pane := os.Getenv("TMUX_PANE")
+	paneSafe := strings.ReplaceAll(pane, "%", "")
+	if paneSafe == "" {
+		paneSafe = strconv.Itoa(os.Getpid())
+	}
+	return fmt.Sprintf("/tmp/channel-cursor-%s.json", paneSafe)
+}
+
+func sessionChannelLoadCursor() map[string]string {
+	out := map[string]string{}
+	data, err := os.ReadFile(sessionChannelCursorPath())
+	if err != nil {
+		return out
+	}
+	_ = json.Unmarshal(data, &out)
+	return out
+}
+
+func sessionChannelSaveCursor(c map[string]string) {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(sessionChannelCursorPath(), data, 0o644)
 }
 
 // ── Metadata collection ────────────────────────────────────────────────────
