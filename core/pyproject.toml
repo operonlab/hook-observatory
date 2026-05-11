@@ -52,3 +52,6 @@ dev = [
 # import root that let SQLAlchemy register `memvault.blocks` twice via
 # `memvault.models` AND `src.modules.memvault.models`. Don't reintroduce it.
 asyncio_mode = "auto"
+markers = [
+    "requires_station: test requires external station (STT/Vision) reachable; auto-skipped when offline",
+]
