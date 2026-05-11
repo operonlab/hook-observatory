@@ -112,6 +112,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
             _opt("Bash", sentinel_notify),
             ("Bash", rtk_rewrite.handle),
             ("Write|Edit", skill_security.handle),
+            _opt(None, session_channel),
             # context_supervisor: disabled — concept good, scoring inaccurate
             (None, observability.handle),
         ],
@@ -144,6 +145,7 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
         ],
         "SessionEnd": [
             _opt(None, session_pipeline),
+            _opt(None, session_channel),
             (None, instinct_distiller.handle),
             _opt(None, utility_watchdog),
             _opt(None, attitude_signal),
