@@ -30,7 +30,9 @@ const (
 )
 
 // Topics polled on UserPromptSubmit. Order = display order in injected text.
-var sessionChannelInboxTopics = []string{"broadcasts", "handoffs", "tasks"}
+// Both `broadcast` (singular, dashboard footer default) and `broadcasts`
+// (plural, /channel send recommended form) are accepted to be forgiving.
+var sessionChannelInboxTopics = []string{"broadcasts", "broadcast", "handoffs", "tasks"}
 
 func init() {
 	for _, ev := range []string{"SessionStart", "PreToolUse", "Stop", "SessionEnd", "UserPromptSubmit"} {
