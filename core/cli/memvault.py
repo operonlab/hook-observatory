@@ -1037,6 +1037,8 @@ def cmd_triple_create(client: MemvaultClient, args: argparse.Namespace) -> None:
         args.object,
         confidence=args.confidence,
         source_session=args.session,
+        evidence_signal=getattr(args, "evidence_signal", None),
+        evidence_method=getattr(args, "evidence_method", None),
     )
     if json_out(data, args):
         return
@@ -1277,6 +1279,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("object", help="Object entity")
     p.add_argument("--confidence", type=float, default=None, help="Confidence (0.0-1.0)")
     p.add_argument("--session", default=None, help="Source session ID")
+    p.add_argument(
+        "--evidence-signal",
+        dest="evidence_signal",
+        choices=["extracted", "inferred", "ambiguous"],
+        default=None,
+        help="Evidence provenance tier (default 'extracted')",
+    )
+    p.add_argument(
+        "--evidence-method",
+        dest="evidence_method",
+        default=None,
+        help="Extraction method tag, e.g. llm-extraction / rule-inference / manual",
+    )
 
     # triple-delete
     p = sub.add_parser("triple-delete", parents=[common], help="Delete a KG triple")

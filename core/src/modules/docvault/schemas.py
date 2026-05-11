@@ -1,6 +1,7 @@
 """DocVault Pydantic schemas — request/response types."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -273,6 +274,11 @@ class CitationRef(BaseModel):
     section: str | None = None
     page: str | None = None
     quote: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    # 0.0-1.0 retrieval/synth 信心分數
+    confidence_type: Literal["extracted", "inferred", "ambiguous"] | None = None
+    # 三段式證據強度（graphify-cannibalized 2026-05-11）
+    # extracted=quote 直接出現原文 | inferred=LLM 推斷 | ambiguous=多源模糊
 
 
 class QAResponse(BaseModel):

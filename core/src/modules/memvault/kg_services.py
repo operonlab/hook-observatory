@@ -74,11 +74,24 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
     event_fields = ("subject", "predicate", "source_session")
 
     def before_create(self, data: TripleCreate, **kwargs: Any) -> dict:
-        """Normalize predicate and entity text before inserting."""
+        """Normalize predicate and entity text before inserting.
+
+        Phase B (graphify-cannibalized 2026-05-11):
+        若 evidence_signal 未顯式指定（仍為 default 'extracted'）且 confidence
+        < EVIDENCE_SIGNAL_EXTRACTED_THRESHOLD，依 confidence 反推三段式。
+        若呼叫端明確傳 evidence_signal（含 'extracted'），尊重不覆寫。
+        """
+        from .crag_evaluator import signal_from_score
+
         d = data.model_dump()
         d["predicate"] = normalize_predicate(d["predicate"])
         d["subject"] = normalize_entity_text(d["subject"])
         d["object"] = normalize_entity_text(d["object"])
+        if (
+            "evidence_signal" not in data.model_fields_set
+            and data.confidence is not None
+        ):
+            d["evidence_signal"] = signal_from_score(data.confidence)
         return d
 
     def to_response(self, instance: Triple) -> TripleResponse:
@@ -105,6 +118,8 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             speaker_id=instance.speaker_id,
             refs_triple_id=instance.refs_triple_id,
             confidence=instance.confidence,
+            evidence_signal=instance.evidence_signal,
+            evidence_method=instance.evidence_method,
             extra_metadata=instance.extra_metadata,
             valid_at=instance.valid_at,
             invalid_at=instance.invalid_at,

@@ -29,6 +29,22 @@ DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
+# ── Evidence Signal Weighting (Phase B — graphify-cannibalized 2026-05-11) ────
+# Feature flag: set MEMVAULT_USE_EVIDENCE_SIGNAL_WEIGHTS=0 to disable
+_USE_EVIDENCE_SIGNAL_WEIGHTS: bool = (
+    os.environ.get("MEMVAULT_USE_EVIDENCE_SIGNAL_WEIGHTS", "1") != "0"
+)
+
+# Weight multipliers per evidence_signal tier.
+# extracted = direct evidence from source text (highest weight)
+# inferred  = LLM/semantic inference from context
+# ambiguous = low-certainty, multi-source conflict
+EVIDENCE_SIGNAL_WEIGHT: dict[str, float] = {
+    "extracted": 1.0,
+    "inferred": 0.7,
+    "ambiguous": 0.3,
+}
+
 # Retry settings for LLM calls
 LLM_RETRY_COUNT = 3
 LLM_RETRY_DELAY = 2.0  # seconds between retries
@@ -188,9 +204,57 @@ def _triples_from_community_record(community: dict) -> list[dict]:
 
 
 # ── Phase 3: Generate Summary via DeepSeek V3 ────────────────────────────────
+
+
+def _apply_evidence_weight(base_weight: float, triple: dict) -> float:
+    """Apply evidence_signal multiplier to a base weight.
+
+    Feature-flagged: returns base_weight unchanged if
+    MEMVAULT_USE_EVIDENCE_SIGNAL_WEIGHTS=0.
+
+    Returns final_weight = base_weight * multiplier.
+    """
+    if not _USE_EVIDENCE_SIGNAL_WEIGHTS:
+        return base_weight
+    signal = triple.get("evidence_signal", "extracted") or "extracted"
+    multiplier = EVIDENCE_SIGNAL_WEIGHT.get(signal, 1.0)
+    return base_weight * multiplier
+
+
 def _build_triple_text(triples: list[dict]) -> str:
+    """Build LLM prompt text from triples, sorted by evidence weight (desc).
+
+    Triples with higher evidence signal quality appear first in the prompt,
+    giving the LLM stronger grounding for its summary.
+    Logs a sample of weight adjustments on first call for shadow-log comparison.
+    """
+    if not triples:
+        return ""
+
+    # Score triples by evidence weight for ordering
+    scored: list[tuple[float, dict]] = []
+    _log_samples: list[str] = []
+    _sampled = 0
+
+    for t in triples:
+        base = 1.0
+        final = _apply_evidence_weight(base, t)
+        scored.append((final, t))
+        if _sampled < 3 and _USE_EVIDENCE_SIGNAL_WEIGHTS:
+            signal = t.get("evidence_signal", "extracted")
+            s = t.get("s", t.get("subject", ""))[:20]
+            p = t.get("p", t.get("predicate", ""))[:12]
+            _log_samples.append(f"{s}→{p} signal={signal} w={base:.2f}→{final:.2f}")
+            _sampled += 1
+
+    if _log_samples:
+        print(f"[evidence-weight sample] {'; '.join(_log_samples)}")
+
+    # Sort descending by weight (highest confidence evidence first)
+    scored.sort(key=lambda x: x[0], reverse=True)
+
     lines = []
-    for t in triples[:MAX_TRIPLES_IN_PROMPT]:
+    for _weight, t in scored[:MAX_TRIPLES_IN_PROMPT]:
         s = t.get("s", t.get("subject", ""))
         p = t.get("p", t.get("predicate", ""))
         o = t.get("o", t.get("object", ""))

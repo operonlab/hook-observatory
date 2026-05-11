@@ -2,10 +2,16 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, Field
 
 from src.shared.schemas import SpaceScopedResponse
+
+# Evidence provenance tier (graphify-cannibalized 2026-05-11)
+# extracted=直接證據(原文存在) / inferred=LLM 推論(語意相關) / ambiguous=多源模糊
+# 與 extra_metadata.signal_type（Dream Phase 2 行為類別）語意不同。
+EvidenceSignal = Literal["extracted", "inferred", "ambiguous"]
 
 # ======================== Retrieval Mode (LightRAG-inspired) ========================
 
@@ -62,6 +68,8 @@ class TripleCreate(BaseModel):
         validation_alias=AliasChoices("refs_triple_id", "refs"),
     )
     confidence: float | None = None
+    evidence_signal: EvidenceSignal = "extracted"
+    evidence_method: str | None = Field(default=None, max_length=32)
     # Carry-fields → batch_ingest 寫入 extra_metadata
     tags: list[str] | None = None
     signal_type: str | None = None
@@ -94,6 +102,8 @@ class TripleResponse(SpaceScopedResponse):
     speaker_id: str | None = None
     refs_triple_id: str | None = None
     confidence: float | None = None
+    evidence_signal: EvidenceSignal = "extracted"
+    evidence_method: str | None = None
     extra_metadata: dict | None = None
     # Edge invalidation
     valid_at: datetime | None = None

@@ -323,13 +323,23 @@ class MemvaultClient(BaseClient):
         obj: str,
         confidence: float | None = None,
         source_session: str | None = None,
+        evidence_signal: str | None = None,
+        evidence_method: str | None = None,
     ) -> dict:
-        """Create a KG triple. POST /kg/triples"""
+        """Create a KG triple. POST /kg/triples
+
+        evidence_signal: 'extracted' | 'inferred' | 'ambiguous' (default 'extracted')
+        evidence_method: free-form tag e.g. 'llm-extraction' | 'rule-inference'
+        """
         body: dict = {"subject": subject, "predicate": predicate, "object": obj}
         if confidence is not None:
             body["confidence"] = confidence
         if source_session:
             body["source_session"] = source_session
+        if evidence_signal:
+            body["evidence_signal"] = evidence_signal
+        if evidence_method:
+            body["evidence_method"] = evidence_method
         return self._post("/kg/triples", body)
 
     def batch_ingest_triples(self, triples: list[dict], session_id: str | None = None) -> dict:
