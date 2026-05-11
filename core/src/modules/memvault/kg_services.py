@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,10 +87,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         d["predicate"] = normalize_predicate(d["predicate"])
         d["subject"] = normalize_entity_text(d["subject"])
         d["object"] = normalize_entity_text(d["object"])
-        if (
-            "evidence_signal" not in data.model_fields_set
-            and data.confidence is not None
-        ):
+        if "evidence_signal" not in data.model_fields_set and data.confidence is not None:
             d["evidence_signal"] = signal_from_score(data.confidence)
         return d
 
@@ -127,6 +124,46 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             invalidation_reason=instance.invalidation_reason,
             canonical_subject_id=instance.canonical_subject_id,
             canonical_object_id=instance.canonical_object_id,
+        )
+
+    async def list_with_signal_filter(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        pagination: "PaginationParams | None" = None,
+        evidence_signal: str | None = None,
+    ) -> "PaginatedResponse[TripleResponse]":
+        """Triple list with optional evidence_signal filter (Phase B).
+
+        Falls back to base behavior when evidence_signal is None.
+        """
+        if evidence_signal is None:
+            return await self.list(db, space_id, pagination)
+
+        from src.shared.schemas import PaginatedResponse, PaginationParams
+
+        p = pagination or PaginationParams()
+        base_filter = (
+            (Triple.space_id == space_id)
+            & (Triple.deleted_at.is_(None))
+            & (Triple.evidence_signal == evidence_signal)
+        )
+        total = (
+            await db.execute(select(func.count()).select_from(Triple).where(base_filter))
+        ).scalar_one()
+        q = (
+            select(Triple)
+            .where(base_filter)
+            .order_by(Triple.created_at.desc())
+            .offset((p.page - 1) * p.page_size)
+            .limit(p.page_size)
+        )
+        rows = (await db.execute(q)).scalars().all()
+        return PaginatedResponse[TripleResponse](
+            items=[self.to_response(r) for r in rows],
+            total=total,
+            page=p.page,
+            page_size=p.page_size,
         )
 
     async def batch_ingest(
@@ -247,6 +284,7 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
         object: str | None = None,
         limit: int = 50,
         include_invalid: bool = False,
+        evidence_signal: str | None = None,
     ) -> list[TripleResponse]:
         """Query triples by predicate, optionally filtered by subject or object."""
         canonical = normalize_predicate(predicate)
@@ -264,6 +302,8 @@ class TripleService(BaseCRUDService[Triple, TripleCreate, TripleUpdate, TripleRe
             q = q.where(Triple.subject.ilike(f"%{subject}%"))
         if object is not None:
             q = q.where(Triple.object.ilike(f"%{object}%"))
+        if evidence_signal is not None:
+            q = q.where(Triple.evidence_signal == evidence_signal)
 
         rows = (await db.execute(q)).scalars().all()
         return [self.to_response(r) for r in rows]

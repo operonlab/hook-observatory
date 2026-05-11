@@ -103,6 +103,11 @@ async def list_triples(
     space_id: str = Query("default"),
     predicate: str | None = Query(None),
     subject: str | None = Query(None),
+    evidence_signal: str | None = Query(
+        None,
+        pattern="^(extracted|inferred|ambiguous)$",
+        description="Filter by graphify-cannibalized 三段式證據強度",
+    ),
     include_invalid: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -116,6 +121,7 @@ async def list_triples(
             predicate,
             subject=subject,
             include_invalid=include_invalid,
+            evidence_signal=evidence_signal,
         )
         return PaginatedResponse(
             items=results,
@@ -124,7 +130,9 @@ async def list_triples(
             page_size=page_size,
         )
     pagination = PaginationParams(page=page, page_size=page_size)
-    return await triple_service.list(db, space_id, pagination)
+    return await triple_service.list_with_signal_filter(
+        db, space_id, pagination, evidence_signal=evidence_signal
+    )
 
 
 @router.get("/triples/search", response_model=list[TripleResponse])
