@@ -780,6 +780,18 @@
       "enabled": true
     },
     {
+      "name": "ws-session-channel-supervisor",
+      "label": "com.joneshong.scheduler.ws-session-channel-supervisor",
+      "command": "~/.local/bin/python3 ~/workshop/stations/session-channel/scripts/supervisor.py",
+      "schedule": {
+        "interval": 60
+      },
+      "description": "每 60 秒: 掃 relay pool pane，worker 過 grace 後自動 respawn 對應 wrapper (claude/codex/gemini)。預設 disabled，少爺手動 enable 並調整 config.yaml relay_pool.workers 後生效。",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": false
+    },
+    {
       "name": "obsidian-workshop-autocommit",
       "label": "com.joneshong.scheduler.obsidian-workshop-autocommit",
       "command": "/bin/bash /Users/joneshong/.local/bin/obsidian-workshop-autocommit.sh",
