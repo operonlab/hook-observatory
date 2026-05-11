@@ -32,7 +32,45 @@ PID_DIR = Path("/opt/homebrew/var/run/workshop")
 LOG_RETAIN_DAYS = 90
 LOG_MAX_SIZE = 10 * 1024 * 1024  # 10MB
 
+
+def _litellm_preflight() -> tuple[bool, str]:
+    """Verify litellm[proxy] extras are intact in its uv tool env.
+
+    `uv tool upgrade litellm` does not re-resolve extras, so the
+    `[proxy]`-only deps (backoff, prisma, etc.) can silently disappear.
+    Catch it here with a clear remediation hint instead of letting the
+    proxy crash with ImportError after binding port 4000.
+    """
+    py = "/Users/joneshong/.local/share/uv/tools/litellm/bin/python"
+    try:
+        # `backoff` is the canary: litellm/proxy/proxy_server.py imports it
+        # unconditionally and raises ImportError at startup if missing.
+        # Other [proxy] extras (prisma, etc.) are config-conditional, so we
+        # don't preflight them — they'll surface in stderr log if needed.
+        result = subprocess.run(
+            [py, "-c", "import backoff"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return True, ""
+        missing = result.stderr.strip().splitlines()[-1] if result.stderr else "unknown"
+        return False, (
+            f"litellm[proxy] extras missing ({missing}). "
+            "Fix: uv tool install --force 'litellm[proxy]'  "
+            "(NOT 'uv tool upgrade litellm' — that drops extras)"
+        )
+    except FileNotFoundError:
+        return False, (
+            f"litellm uv tool env not found at {py}. Fix: uv tool install 'litellm[proxy]'"
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"litellm preflight timed out (10s) — check {py}"
+
+
 # Service registry: list of dicts with name, type, cmd, port, health, workdir
+# Optional: 'preflight' callable returning (ok: bool, hint: str) — runs before spawn
 SERVICES = [
     # ── V2 Core ──
     {
@@ -361,6 +399,7 @@ SERVICES = [
         "port": 4000,
         "health": "http://127.0.0.1:4000",
         "workdir": "/Users/joneshong",
+        "preflight": _litellm_preflight,
     },
     {
         "name": "ccr",
@@ -662,6 +701,13 @@ def start_service(svc: dict) -> None:
     if pid is not None:
         log(f"{name} already running (PID {pid})")
         return
+
+    preflight = svc.get("preflight")
+    if preflight is not None:
+        ok, hint = preflight()
+        if not ok:
+            err(f"{name} preflight failed — {hint}")
+            return
 
     log_dir = LOG_BASE / name
     log_dir.mkdir(parents=True, exist_ok=True)
