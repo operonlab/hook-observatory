@@ -320,6 +320,78 @@
         "latest_upstream": null,
         "drift_level": "none"
       }
+    },
+    {
+      "id": "graphify",
+      "type": "repo",
+      "name": "graphify",
+      "origin_url": "https://github.com/safishamsi/graphify",
+      "upstream_ref": "safishamsi/graphify",
+      "license": "MIT",
+      "pinned_at": {
+        "version": "0.7.13",
+        "commit": null,
+        "date": "2026-05-11"
+      },
+      "cannibalized_on": "2026-05-11",
+      "status": "active",
+      "notes": "蠶食三段式 evidence_signal 概念與多模態 ingest 管線設計，全部以 workshop style 重寫（asyncio + BaseCRUDService + pydantic-settings），無 license header 殘留。決策報告見 intelflow report 019e15105afe798090801a3744cad414（三方對比 GitNexus/graphify/code-review-graph）。",
+      "extractions": [
+        {
+          "pattern": "Three-tier evidence_signal (extracted / inferred / ambiguous)",
+          "source_path": "graphify confidence tiering concept",
+          "target_path": "core/src/modules/memvault/{kg_models,kg_schemas,crag_evaluator}.py + core/src/modules/docvault/schemas.py CitationRef",
+          "adaptation": "重命名為 evidence_signal 避免與既有 blocks.signal_type (Dream Phase 2 行為類型) 混淆；threshold 0.8 / 0.4 對齊 CRAG verify 邊界；server_default 'extracted' 安全回填既有 70k 行；alembic q1r2s3t4u5v6 + btree index ix_triples_evidence_signal"
+        },
+        {
+          "pattern": "Signal-aware CRAG verify strategy",
+          "source_path": "graphify confidence-aware retrieval concept",
+          "target_path": "core/src/modules/memvault/crag_evaluator.py _verify_strategy_from_signal()",
+          "adaptation": "ambiguous→force_web_verify=True；inferred→promote_threshold 0.7（從 0.8 降低）；extracted→維持原 0.8。整合到 _signal_strategy_from_result() + _score_to_verdict() 流程"
+        },
+        {
+          "pattern": "Signal-weighted community edge",
+          "source_path": "graphify confidence-weighted graph layer",
+          "target_path": "mcp/memvault/pipelines/community_summary_pipeline.py",
+          "adaptation": "EVIDENCE_SIGNAL_WEIGHT = {extracted:1.0, inferred:0.7, ambiguous:0.3} multiplier；feature flag MEMVAULT_USE_EVIDENCE_SIGNAL_WEIGHTS（預設啟用）；shadow log 加權前後對比"
+        },
+        {
+          "pattern": "Multimodal ingest pipeline (audio/video → markdown)",
+          "source_path": "graphify whisper + vision + ffmpeg pipeline concept",
+          "target_path": "libs/audio-ops/audio_ops/transcribe.py + core/src/modules/docvault/ingest/{audio_parser,video_parser}.py + capture_adapter.py",
+          "adaptation": "transcribe 走既有 STT Station (mlx-whisper, port 10202)；video_parser 用 ffmpeg scene-change 採樣 + Vision Station QA (port 10203)；YouTube 下載排除（yt-dlp 法律灰色，留獨立 station 議題）"
+        },
+        {
+          "pattern": "Citation confidence enrichment",
+          "source_path": "graphify per-citation provenance concept",
+          "target_path": "core/src/modules/docvault/qa_service.py _enrich_citations_with_signal()",
+          "adaptation": "QA pipeline 產 citation 時依 per-citation score 反推 confidence_type；crag_verdict='incorrect' 強制全 ambiguous；尊重 synth op 已顯式給的 confidence"
+        }
+      ],
+      "drift": {
+        "check_method": "github_releases",
+        "latest_checked": "2026-05-11",
+        "latest_upstream": "0.7.13 (2026-05-09)",
+        "drift_level": "current"
+      },
+      "rejected_patterns": [
+        "yt-dlp YouTube 下載（法律灰色，獨立議題處理）",
+        "三段式信心數字 1.0/0.6-0.9/0.1-0.3（graphify 用 float，workshop 用 enum 更穩）"
+      ],
+      "rejected_sources_alongside": [
+        {
+          "id": "gitnexus",
+          "origin_url": "https://github.com/abhigyanpatwari/GitNexus",
+          "license": "PolyForm Noncommercial 1.0.0",
+          "reason": "商用授權禁止 + browser-only 場景錯位 + 架構已被 workshop memvault/docvault cover"
+        },
+        {
+          "id": "code-review-graph",
+          "origin_url": "https://github.com/tirth8205/code-review-graph",
+          "license": "MIT",
+          "reason": "與 memvault kg_routes + ideagraph + ripgrep 重疊度高；fork better-code-review-graph 揭露原版 4 個 bug 顯示工程嚴謹度不足"
+        }
+      ]
     }
   ]
 }
