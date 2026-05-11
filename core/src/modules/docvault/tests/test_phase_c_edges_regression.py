@@ -358,7 +358,7 @@ class TestRegression:
 
         with (
             patch(
-                "src.modules.docvault.ingest.parser.parse_audio",
+                "src.modules.docvault.ingest.audio_parser.parse_audio",
                 new=AsyncMock(side_effect=AssertionError("PDF must not route to audio parser")),
             ),
             patch(
@@ -381,7 +381,7 @@ class TestRegression:
 
         with (
             patch(
-                "src.modules.docvault.ingest.parser.parse_video",
+                "src.modules.docvault.ingest.video_parser.parse_video",
                 new=AsyncMock(side_effect=AssertionError("DOCX must not route to video parser")),
             ),
             patch(

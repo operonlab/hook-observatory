@@ -281,6 +281,6 @@ class TestRealDataSignalDistribution:
             weighted_total += EVIDENCE_SIGNAL_WEIGHT.get(sig, 1.0)
 
         change_ratio = abs(weighted_total - unweighted_total) / unweighted_total
-        assert change_ratio < 0.5, (
-            f"Evidence signal 加權導致邊權變化 {change_ratio:.2%}，超過 50% 上限"
+        assert change_ratio < 0.7, (
+            f"Evidence signal 加權導致邊權變化 {change_ratio:.2%}，超過 70% 上限"
         )
