@@ -43,6 +43,7 @@ dev = [
     "workshop-cli-dic",
     "workshop-kg-ops",
     "workshop-ops-core",
+    "pgvector>=0.4.2",
 ]
 
 [tool.ruff]
