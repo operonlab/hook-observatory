@@ -6,6 +6,9 @@
     "build": "echo 'Use: pnpm --filter <app> build'"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "core-js"]
+    "onlyBuiltDependencies": ["esbuild", "core-js"],
+    "overrides": {
+      "gh-pages": "^5.0.0"
+    }
   }
 }
