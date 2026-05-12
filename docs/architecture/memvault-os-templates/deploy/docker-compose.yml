@@ -1,0 +1,113 @@
+version: "3.9"
+
+# memvault-os standalone deployment
+# Brings up: PostgreSQL 16 + pgvector, Redis 7, memvault-os service (port 10090)
+#
+# Quick start:
+#   cp .env.example .env          # fill in required values
+#   docker compose up -d
+#   docker compose exec postgres psql -U memvault -d memvault_db -f /bootstrap.sql
+#
+# NOTE: The postgres image used is pgvector/pgvector:pg16 which bundles the
+# pgvector extension needed for semantic search. If you substitute a plain
+# postgres:16 image you must install pgvector manually.
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 + pgvector
+  # --------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: memvault-os-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-memvault}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-memvault_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./bootstrap.sql:/bootstrap.sql:ro
+    ports:
+      # Bind to 127.0.0.1 only — never expose PG to the internet
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-memvault} -d ${POSTGRES_DB:-memvault_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Redis 7
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: memvault-os-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --maxmemory ${REDIS_MAX_MEMORY:-256mb}
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --appendonly no
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # memvault-os application
+  # --------------------------------------------------------------------------
+  memvault-os:
+    image: ${MEMVAULT_OS_IMAGE:-ghcr.io/joneshong/memvault-os:latest}
+    container_name: memvault-os-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Service discovery — use Docker service names as hostnames
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-memvault}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-memvault_db}"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-}@redis:6379/0"
+      # Standalone mode flags
+      MEMVAULT_OS_STANDALONE: "true"
+      MEMVAULT_OS_TOKEN: ${MEMVAULT_OS_TOKEN:?MEMVAULT_OS_TOKEN is required}
+      MEMVAULT_OS_SPACE_ID: ${MEMVAULT_OS_SPACE_ID:-default}
+      # Embedding provider
+      EMBED_PROVIDER: ${EMBED_PROVIDER:-openai}
+      EMBED_MODEL: ${EMBED_MODEL:-text-embedding-3-small}
+      EMBED_API_KEY: ${EMBED_API_KEY:-}
+      # Ollama alternative (set EMBED_PROVIDER=ollama)
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # LLM for synthesis / dream pipeline
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    ports:
+      # Expose memvault-os on host port 10090
+      - "0.0.0.0:${MEMVAULT_OS_PORT:-10090}:10090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:10090/api/memvault/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# ------------------------------------------------------------------------------
+# Volumes
+# ------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
