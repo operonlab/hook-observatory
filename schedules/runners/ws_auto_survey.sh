@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# ws_auto_survey.sh — Wed/Fri 13:00 auto-survey orchestrator (Rust cutover).
+# ws_auto_survey.sh — Wed/Fri 13:00 auto-survey orchestrator.
 #
-# Replaces ws_auto_survey.py. Drives only the Rust binary
-# `auto-survey-rs` — no Python, no uv, no Postgres.
+# Drives the auto-survey binary directly — no Python, no uv, no Postgres.
 #
 # Timeline:
 #   13:00       Cronicle triggers this script
@@ -14,8 +13,8 @@
 set -u
 trap 'echo "[ws_auto_survey] exiting ($?)"' EXIT
 
-BIN="/Users/joneshong/.cargo/shared-target/release/auto-survey-rs"
-DB="/Users/joneshong/workshop/stations/auto-survey-rs/data/auto_survey.db"
+BIN="/Users/joneshong/.cargo/shared-target/release/auto-survey"
+DB="/Users/joneshong/workshop/stations/auto-survey/data/auto_survey.db"
 export AUTO_SURVEY_SQLITE_PATH="$DB"
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
