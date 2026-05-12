@@ -7,12 +7,15 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
-const (
-	observatoryDefault = "http://127.0.0.1:10100"
-	obsSecretDefault   = "workshop-v2-dev-key"
-)
+const obsSecretDefault = "workshop-v2-dev-key"
+
+// observatoryDefault points at the hook-observatory station via the
+// cross-language port registry (hook-observatory = 10100).
+var observatoryDefault = portregistry.URL("hook-observatory", "", 10100)
 
 // StageLog posts the pipeline summary to hook-observatory. Mirrors _stage_log.
 func StageLog(p *PipelineResult) StageResult {

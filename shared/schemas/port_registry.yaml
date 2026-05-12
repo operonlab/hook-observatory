@@ -2,8 +2,8 @@
 #
 # Consumed by:
 #   - libs/sdk-client/sdk_client/port_registry.py        (Python, runtime load)
-#   - libs/port-registry/build.rs                    (Rust, build-time codegen)
-#   - (v2) libs/go-port-registry                          (Go, //go:generate)
+#   - libs/port-registry/build.rs                        (Rust, build-time codegen)
+#   - libs/go-port-registry/cmd/gen                      (Go, //go:generate)
 #
 # Schema mirrors port_registry.py:23-44 ServicePort dataclass.
 # Port range convention (10000+, self-managed services):

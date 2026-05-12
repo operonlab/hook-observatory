@@ -10,12 +10,16 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
-const (
-	defaultLiteLLMBase = "http://127.0.0.1:4000/v1"
-	liteLLMTimeout     = 10 * time.Second
-)
+const liteLLMTimeout = 10 * time.Second
+
+// defaultLiteLLMBase is resolved from the cross-language port registry
+// (litellm = 4000) at package init so a yaml-side port change is picked up
+// without touching this file.
+var defaultLiteLLMBase = portregistry.URL("litellm", "/v1", 4000)
 
 // LiteLLMMessage is one message in the chat completions request.
 type LiteLLMMessage struct {
