@@ -3,7 +3,7 @@
 //! that materialise the periodic-report plists this station owns.
 //!
 //! Mirrors `stations/system-monitor/scheduler.py`: weekly = Mon 05:00,
-//! monthly = day 1 05:00, both invoking `system-monitor-rs reporter --type=…`.
+//! monthly = day 1 05:00, both invoking `system-monitor reporter --type=…`.
 
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
@@ -194,7 +194,7 @@ fn current_exe_path() -> String {
     std::env::current_exe()
         .ok()
         .and_then(|p| p.to_str().map(|s| s.to_string()))
-        .unwrap_or_else(|| "system-monitor-rs".to_string())
+        .unwrap_or_else(|| "system-monitor".to_string())
 }
 
 fn render_plist_xml(label: &str, exe: &str, kind: ReportKind, logs_dir: &Path) -> String {

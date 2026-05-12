@@ -176,12 +176,12 @@ SERVICES = [
         "name": "system-monitor",
         "type": "binary",
         "cmd": (
-            "/Users/joneshong/.cargo/shared-target/release/system-monitor-rs"
+            "/Users/joneshong/.cargo/shared-target/release/system-monitor"
             f" serve --host 127.0.0.1 --port {get_port('system-monitor')}"
         ),
         "port": get_port("system-monitor"),
         "health": get("system-monitor").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/system-monitor-rs",
+        "workdir": "/Users/joneshong/workshop/stations/system-monitor",
     },
     # Python agent-metrics retired 2026-04-20 — replaced by agent-metrics-rs (below).
     # Kept commented as rollback reference for 30 days, remove after 2026-05-20.

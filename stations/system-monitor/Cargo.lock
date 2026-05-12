@@ -1878,7 +1878,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "system-monitor-rs"
+name = "system-monitor"
 version = "0.1.0"
 dependencies = [
  "anyhow",

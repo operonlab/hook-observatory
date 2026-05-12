@@ -1,16 +1,16 @@
 [package]
-name = "system-monitor-rs"
+name = "system-monitor"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
-description = "Workshop system-monitor — Rust rewrite (sysinfo + axum, replaces Python ~58MB → ~20MB)"
+description = "Workshop system-monitor — host resource & process monitor (sysinfo + axum)"
 
 [[bin]]
-name = "system-monitor-rs"
+name = "system-monitor"
 path = "src/main.rs"
 
 [lib]
-name = "system_monitor_rs"
+name = "system_monitor"
 path = "src/lib.rs"
 
 [dependencies]

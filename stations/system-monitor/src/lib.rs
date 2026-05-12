@@ -1,4 +1,4 @@
-//! system-monitor-rs library root.
+//! system-monitor library root.
 //!
 //! Modules mirror the original Python layout in `stations/system-monitor/`
 //! (collector.py, api.py, memory_guardian.py, reporter.py, ...) to make

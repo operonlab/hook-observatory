@@ -1,7 +1,7 @@
 //! Memory guardian. Phase 3 implementation — replaces
 //! `stations/system-monitor/memory_guardian.py`.
 //!
-//! Pipeline (called once per `system-monitor-rs guardian-tick`):
+//! Pipeline (called once per `system-monitor guardian-tick`):
 //!   1. Snapshot: kern.memorystatus_level, vm_stat compressed, swap, idle
 //!      seconds, top processes (ps), browser kind/total.
 //!   2. Classify presence (Present / BriefAway / Away / Unknown).

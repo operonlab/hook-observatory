@@ -1,19 +1,19 @@
-//! system-monitor-rs CLI entrypoint.
+//! system-monitor CLI entrypoint.
 //!
 //! Subcommands mirror the Python facade so Cronicle / shell scripts can drop
-//! `python3 api.py` → `system-monitor-rs serve` with no other change.
+//! `python3 api.py` → `system-monitor serve` with no other change.
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::net::SocketAddr;
 use tracing_subscriber::EnvFilter;
 
-use system_monitor_rs::config::Settings;
-use system_monitor_rs::{api, guardian, reporter, tmux_status};
+use system_monitor::config::Settings;
+use system_monitor::{api, guardian, reporter, tmux_status};
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "system-monitor-rs",
+    name = "system-monitor",
     version,
     about = "Workshop system-monitor — Rust rewrite (sysinfo + axum)"
 )]
@@ -79,7 +79,7 @@ async fn main() -> Result<()> {
 }
 
 async fn serve(cfg: Settings, host: String, port: u16) -> Result<()> {
-    tracing::info!("system-monitor-rs starting on {host}:{port}");
+    tracing::info!("system-monitor starting on {host}:{port}");
     let app = api::build_router(cfg).await?;
     let addr: SocketAddr = format!("{host}:{port}")
         .parse()

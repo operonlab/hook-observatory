@@ -84,7 +84,7 @@ async fn service_worker() -> impl IntoResponse {
 async fn health(State(s): State<AppState>) -> Json<Value> {
     Json(json!({
         "status": "ok",
-        "service": "system-monitor-rs",
+        "service": "system-monitor",
         "version": env!("CARGO_PKG_VERSION"),
         "hostname": s.cfg.hostname,
     }))

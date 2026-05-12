@@ -2,7 +2,7 @@
 //! with Python `collect_all()` so SDK clients and the dashboard keep working.
 
 use serde_json::Value;
-use system_monitor_rs::collector::{collect_all, Collector};
+use system_monitor::collector::{collect_all, Collector};
 
 const TOP_KEYS: &[&str] = &[
     "timestamp",
