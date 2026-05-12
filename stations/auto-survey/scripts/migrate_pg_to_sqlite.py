@@ -5,7 +5,7 @@ Usage:
     python3 migrate_pg_to_sqlite.py [--dry-run] [--sqlite-path PATH]
 
 Reads from:  postgresql://joneshong:dev_12345@localhost/workshop  (schema: auto_survey)
-Writes to:   stations/auto-survey-rs/data/auto_survey.db  (default)
+Writes to:   stations/auto-survey/data/auto_survey.db  (default)
 
 Prints a migration summary with per-table counts and checksums (MD5 of sorted id list).
 Exits 1 if SQLite count != PG count for any table.
@@ -17,7 +17,7 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ PG_DSN = os.environ.get(
 )
 PG_SCHEMA = "auto_survey"
 
-STATION_ROOT = Path(__file__).resolve().parent.parent  # stations/auto-survey-rs/
+STATION_ROOT = Path(__file__).resolve().parent.parent  # stations/auto-survey/
 DEFAULT_SQLITE_PATH = str(STATION_ROOT / "data" / "auto_survey.db")
 
 MIGRATION_FILE = STATION_ROOT / "migrations" / "20260419000001_init.sql"
@@ -49,6 +49,7 @@ TABLES = ["surveys", "questions", "people", "submissions", "daily_runs"]
 # ---------------------------------------------------------------------------
 # Type conversion helpers
 # ---------------------------------------------------------------------------
+
 
 def _to_text_uuid(v) -> str | None:
     """UUID object or str → 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' lowercase."""
@@ -71,7 +72,7 @@ def _to_iso8601(v) -> str | None:
     if isinstance(v, datetime):
         # Ensure UTC offset is present
         if v.tzinfo is None:
-            v = v.replace(tzinfo=timezone.utc)
+            v = v.replace(tzinfo=UTC)
         return v.isoformat()
     if isinstance(v, date):
         return v.isoformat()
@@ -88,6 +89,7 @@ def _to_int_bool(v) -> int | None:
 # ---------------------------------------------------------------------------
 # Per-table row converters
 # ---------------------------------------------------------------------------
+
 
 def _convert_surveys(row: dict) -> dict:
     return {
@@ -203,6 +205,7 @@ INSERTS = {
 # Checksum helper
 # ---------------------------------------------------------------------------
 
+
 def _checksum(ids: list[str]) -> str:
     """MD5 of sorted id list."""
     joined = ",".join(sorted(ids))
@@ -212,6 +215,7 @@ def _checksum(ids: list[str]) -> str:
 # ---------------------------------------------------------------------------
 # PG helpers
 # ---------------------------------------------------------------------------
+
 
 def _pg_fetch_all(cur, table: str) -> list[dict]:
     """Fetch all rows; gracefully handle missing columns (is_pathfinder / answers_snapshot)."""
@@ -240,6 +244,7 @@ def _pg_fetch_all(cur, table: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Main migration
 # ---------------------------------------------------------------------------
+
 
 def run_migration(sqlite_path: str, dry_run: bool) -> bool:
     """Returns True if counts match across all tables."""
@@ -315,7 +320,7 @@ def run_migration(sqlite_path: str, dry_run: bool) -> bool:
     for table, r in results.items():
         ok_mark = "✓" if r["ok"] else "✗"
         print(
-            f"{table:<20} {r['pg_count']:>8} {str(r['sqlite_count']):>8}  "
+            f"{table:<20} {r['pg_count']:>8} {r['sqlite_count']!s:>8}  "
             f"{r['checksum']:>14}  {ok_mark:>4}"
         )
     print("=" * 60)
@@ -333,6 +338,7 @@ def run_migration(sqlite_path: str, dry_run: bool) -> bool:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description="Migrate auto_survey PG → SQLite")

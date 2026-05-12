@@ -5,7 +5,7 @@
 //!
 //! Prints each SurveyCake URL on its own line. Extra diagnostics go to stderr.
 
-use auto_survey_rs::{config::Settings, line};
+use auto_survey::{config::Settings, line};
 
 #[tokio::main]
 async fn main() {

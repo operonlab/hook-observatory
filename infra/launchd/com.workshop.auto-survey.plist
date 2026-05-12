@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.workshop.auto-survey-rs</string>
+  <string>com.workshop.auto-survey</string>
 
   <!-- Never start on boot, never auto-restart — Cronicle controls lifecycle -->
   <key>RunAtLoad</key>
@@ -14,24 +14,24 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/joneshong/workshop/stations/auto-survey-rs/target/release/auto-survey-rs</string>
+    <string>/Users/joneshong/workshop/stations/auto-survey/target/release/auto-survey</string>
     <string>serve</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/joneshong/workshop/stations/auto-survey-rs</string>
+  <string>/Users/joneshong/workshop/stations/auto-survey</string>
 
   <!-- Fixed log paths — logrotate / workshop_services.py handles rotation -->
   <key>StandardOutPath</key>
-  <string>/opt/homebrew/var/log/workshop/auto-survey-rs/stdout.log</string>
+  <string>/opt/homebrew/var/log/workshop/auto-survey/stdout.log</string>
   <key>StandardErrorPath</key>
-  <string>/opt/homebrew/var/log/workshop/auto-survey-rs/stderr.log</string>
+  <string>/opt/homebrew/var/log/workshop/auto-survey/stderr.log</string>
 
   <key>EnvironmentVariables</key>
   <dict>
     <!-- Database -->
     <key>AUTO_SURVEY_SQLITE_PATH</key>
-    <string>/Users/joneshong/workshop/stations/auto-survey-rs/data/auto_survey.db</string>
+    <string>/Users/joneshong/workshop/stations/auto-survey/data/auto_survey.db</string>
 
     <!-- LLM Backend -->
     <key>AUTO_SURVEY_LLM_BACKEND</key>

@@ -99,7 +99,7 @@ DEFAULTS = {
         "protected_substrings": [
             "uvicorn src.main:app",
             "workshop_services.py",
-            "auto-survey-rs",
+            "auto-survey",
             "remote-node-rs",
         ],
     },
