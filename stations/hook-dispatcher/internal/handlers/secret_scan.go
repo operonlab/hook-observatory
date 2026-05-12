@@ -107,6 +107,7 @@ var ssFalsePositiveTokens = []string{
 // File path substrings that mean "skip this file"
 var ssSkipPathPatterns = []string{
 	"test/", "tests/", "fixtures/", "mocks/",
+	"_archive/", "/archive/",
 	".example", ".sample", ".template",
 }
 
