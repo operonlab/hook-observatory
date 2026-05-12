@@ -261,7 +261,7 @@ impl PricingTable {
     fn cache_path() -> PathBuf {
         dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("ccusage-rs")
+            .join("ccusage")
             .join("pricing.json")
     }
 }

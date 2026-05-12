@@ -1,6 +1,6 @@
 //! Usage collector — port of Python `usage_collector`.
 //!
-//! Wraps `ccusage-rs` binary for Claude Code usage data, normalizes the JSON
+//! Wraps `ccusage` binary for Claude Code usage data, normalizes the JSON
 //! to the legacy `ccusage` format, then merges with LiteLLM provider summary.
 //! Redis key strategy is identical (TTL 600s) so the cache is interoperable
 //! with the Python version during cutover.
@@ -20,7 +20,7 @@ const CACHE_KEY_MODELS: &str = "agent-metrics:usage:models";
 const CACHE_KEY_RAW: &str = "agent-metrics:usage:raw";
 const CACHE_KEY_DAILY: &str = "agent-metrics:usage:daily-cost";
 const CACHE_TTL: usize = 600;
-const CCUSAGE_BIN: &str = "/Users/joneshong/.local/bin/ccusage-rs";
+const CCUSAGE_BIN: &str = "/Users/joneshong/.local/bin/ccusage";
 
 async fn open_redis(cfg: &Settings) -> Option<redis::aio::ConnectionManager> {
     let client = redis::Client::open(cfg.redis_url.clone()).ok()?;
@@ -50,7 +50,7 @@ pub struct CcusageData {
     pub totals: CcusageTotals,
 }
 
-/// Translate ccusage-rs nested JSON into legacy ccusage format.
+/// Translate ccusage nested JSON into legacy ccusage format.
 /// Mirrors `_normalize_rs_json` in Python.
 fn normalize_rs_json(data: &Value) -> CcusageData {
     let mut total_cost = 0.0;

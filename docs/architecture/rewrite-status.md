@@ -44,7 +44,7 @@ last_updated: 2026-05-12
 | agent-metrics | `stations/agent-metrics/` | `stations/agent-metrics-rs/` | `parallel` | 2026-05-12 全部 hardcode 消除（hook-observatory / litellm / fleet 都改 yaml_url，port 10209 考古確認為 typo，fleet 真實 port 10106）+ 2 regression test + quota_writer pre-existing bug 修復 |
 | auto-survey | `stations/auto-survey/`（2026-04-19 已撤）| `stations/auto-survey/` | `archived` | **首例「接管即去綴」執行完成（2026-05-12, commit `be81bd55` + `73832f7f`）**：Cargo bin/lib name 去綴、workshop_services.py / .env / plist 三處 path 同步、新 binary `/release/auto-survey` 已產 (8.3MB)。`workshop_services.py` 內 commented Python entry 待 2026-05-19 保留期屆滿後清。waiting on 少爺執行 `launchctl unload + load` 完成 plist 重註冊 |
 | remote-node | `stations/remote-node/` | `stations/remote-node-rs/` | `parallel` | — |
-| ccusage | — | `stations/ccusage-rs/` | `solo` | 純新建；下次清理週期可考慮去綴 → `stations/ccusage/` |
+| ccusage | — | `stations/ccusage/` | `solo` | 2026-05-12 去綴；新 binary `~/.local/bin/ccusage` 已 cargo install（舊 `ccusage-rs` 已刪）；agent-metrics-rs 內 `CCUSAGE_BIN` path 同步更新 |
 | rlm | — | `stations/rlm/` | `solo` | 已正名，無後綴 |
 | port-registry | `libs/sdk-client/.../port_registry.py` | `libs/port-registry/` | `parallel` | 2026-05-12 去綴；Python (sdk-client 內) 與 Rust crate 並列 |
 | sqlite-pool | — | `libs/sqlite-pool/` | `solo` | 2026-05-12 去綴；純 Rust 無 Python 前身 |

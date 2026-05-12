@@ -21,7 +21,7 @@ use crate::scanner::*;
 use crate::types::{AggregationResult, OutputConfig, UsageEntry};
 
 #[derive(Parser)]
-#[command(name = "ccusage-rs", about = "Claude Code usage tracker (Rust)", version)]
+#[command(name = "ccusage", about = "Claude Code usage tracker (Rust)", version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -151,7 +151,7 @@ fn main() -> Result<()> {
     // Handle completions subcommand (no data processing needed)
     if let Commands::Completions { shell } = &cli.command {
         let mut cmd = Cli::command();
-        generate(*shell, &mut cmd, "ccusage-rs", &mut std::io::stdout());
+        generate(*shell, &mut cmd, "ccusage", &mut std::io::stdout());
         return Ok(());
     }
 

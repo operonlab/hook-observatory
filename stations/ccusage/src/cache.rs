@@ -100,7 +100,7 @@ impl CacheManager {
     pub fn new() -> Self {
         let base = dirs::cache_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
-            .join("ccusage-rs");
+            .join("ccusage");
         let cache_dir = base.join("v5");
 
         // Clean up old cache versions
