@@ -8,6 +8,8 @@ translated_at: 2026-03-28
 
 # 目錄結構與命名規範
 
+> 本文檔是**靜態規範**。各 service 當前的 Rust/Go 重寫進度、開源發行版同步狀態（動態快照）見 [rewrite-status.md](./rewrite-status.md)。開源下游發行版的設計模式見 [distribution-pattern.md](./distribution-pattern.md)。
+
 ## 四層分類法
 
 Workshop 將所有功能組織成四個層級：

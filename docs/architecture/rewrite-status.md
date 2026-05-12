@@ -1,0 +1,108 @@
+---
+doc_version: 1
+status: living-document
+last_updated: 2026-05-12
+---
+
+# 重寫遷移狀態（Rewrite Migration Status）
+
+這是一份**動態快照**，記錄 workshop 內各 service 的語言重寫進度與開源發行版同步狀態。
+規範本身（命名、退場、發行）在 [folder-structure.md](./folder-structure.md)，本文檔只記錄「現在誰是事實源」。
+
+## 命名與生命週期規則（三條鐵律）
+
+1. **新建即正名** — 純新 Rust/Go 專案不掛後綴，直接用最終名（如 `rlm`、`agent-vista`、`hook-dispatcher`）
+2. **重寫掛後綴** — 只在「同名 Python 還活著」期間掛 `-rs` / `-go`，視覺標記「過渡期、有債」
+3. **接管即去綴** — 新版成為事實源時，舊版進 `_archive/`，新版去後綴繼承原名
+
+衍生規則：
+- `_archive/` 是 stations / libs 的標準退場區，README 記載 who/when/replaced_by/commit_hash
+- 後綴出現在 path 即代表「未完成接管」— `grep -r '\-rs/\|\-go/' stations/` 可掃 waitlist
+- 開源發行版採 **上游/下游 Distribution Pattern** — workshop 是事實源，發行版用 `git subtree split` 機械同步
+
+## 狀態定義
+
+| 狀態 | 含義 | 下一步 |
+|------|------|--------|
+| `experimental` | 新版開發中，Python 仍是 production | 跑 feature parity check |
+| `parallel` | 新舊並行，各自有 caller | 排接管時程，或宣告為長期共存（reference impl） |
+| `cutover` | 新版已切換為主，舊版待封存 | 執行接管流程（去綴 + archive） |
+| `archived` | 舊版已封存，新版去綴繼承原名 | — |
+| `solo` | 純新建，無前身 | — |
+
+**特例：雙版本長期共存**
+
+部分 service 採「Rust binary + Python reference impl + 雙 repo 開源」策略（如 session-channel），不走接管去綴流程。這類 service 在表中保留 `parallel` 狀態，並在備註欄明寫共存原因與兩邊 caller 分工。判準：Python 版是否仍有獨立 caller 群（CLI / 排程 / 開源使用者）。
+
+## Rust 重寫狀態
+
+| Service | 舊版位置 | 新版位置 | 狀態 | 備註 |
+|---------|---------|---------|------|------|
+| session-channel | `stations/session-channel/` | `stations/session-channel-rs/` | `parallel` | **長期雙版本並存**：Rust 接管主 service binary；Python 版定位為 reference impl + 開源發行版（`operonlab/session-channel` v0.2）。周邊 supervisor/CLI/wrappers/migrate 仍走 Python。Rust 版預計 6+ 月後另出開源 repo `operonlab/session-channel-rs`。詳見 `handoff/HANDOFF-20260512-1022-session-channel-phase8-opensource.md` |
+| sentinel | `stations/sentinel/` | `stations/sentinel-rs/` | `parallel` | registry.rs 有 38 個 hardcode URL 待 ports.yaml codegen |
+| system-monitor | `stations/system-monitor/` | `stations/system-monitor-rs/` | `parallel` | hardcode port 待 codegen |
+| agent-metrics | `stations/agent-metrics/` | `stations/agent-metrics-rs/` | `parallel` | 4 處 hardcode 待 codegen |
+| auto-survey | `stations/auto-survey/`（已撤）| `stations/auto-survey-rs/` | `cutover` | 待確認 Python 是否已完全退場 |
+| remote-node | `stations/remote-node/` | `stations/remote-node-rs/` | `parallel` | — |
+| ccusage | — | `stations/ccusage-rs/` | `solo` | 純新建；下次清理週期可考慮去綴 → `stations/ccusage/` |
+| rlm | — | `stations/rlm/` | `solo` | 已正名，無後綴 |
+| port-registry | `libs/sdk-client/.../port_registry.py` | `libs/port-registry/` | `parallel` | 2026-05-12 去綴；Python (sdk-client 內) 與 Rust crate 並列 |
+| sqlite-pool | — | `libs/sqlite-pool/` | `solo` | 2026-05-12 去綴；純 Rust 無 Python 前身 |
+| desktop-assistant | — | `apps/desktop-assistant/src-tauri/` | `solo` | Tauri 內嵌 |
+| mycelia | — | `lab/mycelia/` | `solo` | Workspace（8 crates）；lab/ 內為 POC，不適用 stations 規則 |
+
+## Go 重寫狀態
+
+| Service | 舊版位置 | 新版位置 | 狀態 | 備註 |
+|---------|---------|---------|------|------|
+| hook-dispatcher | `voice_notify.py`（已封存）| `stations/hook-dispatcher/` | `archived` | 已完成接管，無後綴 |
+| tmux-webui | `stations/tmux-webui/` | `stations/tmux-webui-go/` | `parallel` | — |
+| agent-vista | — | `stations/agent-vista/` | `solo` | 純新建 |
+| lazy-wrapper | — | `mcp/lazy-wrapper/` | `solo` | 純新建 |
+
+## 開源發行版（Distribution）狀態
+
+採 **上游 / 下游** 心智：workshop 為事實源，發行版 = upstream + adapter shim + standalone deploy。完整規範見 [distribution-pattern.md](./distribution-pattern.md)。
+
+| 內部位置（上游 / 事實源） | 開源 repo（下游 / 發行版） | 同步機制 | 狀態 | 備註 |
+|--------------------------|---------------------------|---------|------|------|
+| `stations/hook-observatory/` | `operonlab/hook-observatory` | `git subtree split` | `released` | 已驗證 pattern（[operonlab-release.md](../../.claude/rules/operonlab-release.md)） |
+| `stations/session-channel/` | `operonlab/session-channel` | 規劃中（Phase 8）| `pre-release` | v0.2 即將開源，Python 版作為發行 base；Rust 版（`-rs`）未來另出 repo |
+| `core/src/modules/memvault/` | `joneshong/memvault-os` | 待設計 sync 腳本 | `worktree-only` | 目前在 `.worktrees/feature/memvault-os/`；下游需 adapter（自帶 PG/Redis、standalone auth、in-mem event bus） |
+
+下游 repo 共通結構（含 adapter shim 三件）已抽到 [distribution-pattern.md](./distribution-pattern.md)，這裡不重複。
+
+少爺自己**不使用任何下游發行版** — 內部一律用 workshop 內版本，避免基礎設施雙開銷（這是少爺先前識別出的反模式）。
+
+## 接管流程（cutover → archived 標準操作）
+
+```
+1. Feature parity check（新版功能 ≥ 舊版）
+2. 切換所有 caller：
+   - scripts/workshop_services.py
+   - launchctl plist
+   - infra/nginx workshop-apps.inc
+   - libs/sdk-client/.../port_registry.py（若有）
+3. 跑一輪完整 sentinel + 手動 smoke test
+4. git mv stations/<name>/ stations/_archive/<name>-py/   ← 第一個 commit：純移動
+5. git mv stations/<name>-rs/ stations/<name>/           ← 第二個 commit：去綴繼承
+6. grep 全 repo 把 import / path / config 引用全部更新   ← 第三個 commit：清引用
+7. 在 stations/_archive/README.md 記一行
+8. 更新本文件（rewrite-status.md）
+```
+
+關鍵：步驟 4-5-6 拆三個 commit，revert 時只動 path、不動邏輯。
+
+## Waitlist（按建議優先順序）
+
+1. ~~**P0** — libs 命名校準~~ ✅ 2026-05-12 完成（直接去綴 `libs/port-registry/`、`libs/sqlite-pool/`）
+2. ~~**P2** — session-channel 接管~~ ❌ 2026-05-12 評估後取消（Python 版定位為 reference impl + 開源發行版，雙版本長期並存）
+3. **P3** — sentinel-rs / agent-metrics-rs / system-monitor-rs hardcode URL 透過 `shared/ports.yaml` codegen 消除（cross-language 漂移債，已記錄在 memory）
+4. **P4** — Distribution Pattern 規格化（hook-observatory 已用 + session-channel 規劃 + memvault-os 規劃）→ 寫成共用文檔
+5. **P5** — 首例 cutover 候選重評估：尋找真正「Python 已無 caller」的 service。從 `parallel` 狀態名單中挑（auto-survey-rs?、tmux-webui-go?）
+
+## 引用
+
+- 命名規範總述：[folder-structure.md](./folder-structure.md)
+- Subtree split pattern：[operonlab-release.md](../../.claude/rules/operonlab-release.md)
+- 多機部署架構：[multi-machine-architecture.md](./multi-machine-architecture.md)
