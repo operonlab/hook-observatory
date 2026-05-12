@@ -3,7 +3,7 @@ env_prefix: "SENTINEL"
 port: 4101
 host: "127.0.0.1"
 database_url: "postgresql+asyncpg://joneshong:REDACTED@localhost/workshop"
-secret_key: "change-me-in-production"
+secret_key: "change-me-in-production"  # nosec; archived module, placeholder value unused
 session_cookie_name: "workshop_session"
 session_max_age: 604800  # 7 days
 login_url: "/login"
