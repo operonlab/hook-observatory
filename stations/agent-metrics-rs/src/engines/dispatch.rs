@@ -223,11 +223,12 @@ pub async fn dispatch_fleet(
     let task_id = format!("fleet-{}", std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
     let started = Instant::now();
-    // TODO: port 10209 is not in shared/schemas/port_registry.yaml — likely a
-    // legacy fleet endpoint. Add yaml entry (or remove this dispatch tier) and
-    // migrate this fallback to crate::config::yaml_url(..).
+    // fleet is in port_registry.yaml at port 10106 (group: station-infra).
+    // Port 10209 was a transient remote-node-rs "shadow" port from HANDOFF.md
+    // Option A (commit da287eaf) — never registered, never the fleet endpoint.
+    // Confirmed: ee6082b5 introduced the TODO; archaeology shows fleet = 10106.
     let base = std::env::var("AGENT_METRICS_FLEET_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:10209".into());
+        .unwrap_or_else(|_| crate::config::yaml_url("fleet", "", 10106));
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build() {
