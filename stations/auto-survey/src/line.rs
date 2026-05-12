@@ -159,8 +159,8 @@ pub fn activate_line_and_go_to_community(name: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Path to the Swift-compiled helper that prints LINE's window info.
-/// Source: `stations/auto-survey-rs/bin/src/get_cg_wid.swift`
-/// Build:  `stations/auto-survey-rs/bin/build.sh`
+/// Source: `stations/auto-survey/bin/src/get_cg_wid.swift`
+/// Build:  `stations/auto-survey/bin/build.sh`
 fn get_cg_wid_binary() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("bin")

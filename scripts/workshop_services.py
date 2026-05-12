@@ -245,20 +245,20 @@ SERVICES = [
     #     "health": get("auto-survey").health_url,
     #     "workdir": "/Users/joneshong/workshop/stations/auto-survey",
     # },
-    # auto-survey-rs: Rust replacement for auto-survey (on-demand, Wed/Fri 10:00-18:00)
-    # Lifecycle managed by Cronicle (ws-auto-survey-rs-start/stop-wed/fri jobs)
+    # auto-survey: Rust binary (Python version retired 2026-04-19, cutover去綴 2026-05-12)
+    # Lifecycle managed by Cronicle (ws-auto-survey-rs-start/stop-wed/fri jobs — names kept for cron history)
     # NOT managed by workshop-launcher daemon — schedule="on-demand"
     {
-        "name": "auto-survey-rs",
+        "name": "auto-survey",
         "type": "binary",
         "schedule": "on-demand",
         "cmd": (
-            "/Users/joneshong/.cargo/shared-target/release/auto-survey-rs"
+            "/Users/joneshong/.cargo/shared-target/release/auto-survey"
             f" serve --host 127.0.0.1 --port {get_port('auto-survey')}"
         ),
         "port": get_port("auto-survey"),
         "health": get("auto-survey").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/auto-survey-rs",
+        "workdir": "/Users/joneshong/workshop/stations/auto-survey",
     },
     {
         "name": "anvil",

@@ -34,7 +34,7 @@ const VOTE_SWAP_THRESHOLD: f64 = 0.8;
 pub async fn run_attendance(pool: &SqlitePool, cfg: &Settings, url: &str, dry_run: bool) -> Result<()> {
     let people = fetch_active_people(pool).await?;
     if people.is_empty() {
-        tracing::info!("No active people found. Import with: auto-survey-rs people import <csv>");
+        tracing::info!("No active people found. Import with: auto-survey people import <csv>");
         return Ok(());
     }
     tracing::info!("Found {} active people", people.len());
@@ -55,7 +55,7 @@ pub async fn run_attendance(pool: &SqlitePool, cfg: &Settings, url: &str, dry_ru
 pub async fn run_quiz(pool: &SqlitePool, cfg: &Settings, url: &str, dry_run: bool) -> Result<()> {
     let people = fetch_active_people(pool).await?;
     if people.is_empty() {
-        tracing::info!("No active people found. Import with: auto-survey-rs people import <csv>");
+        tracing::info!("No active people found. Import with: auto-survey people import <csv>");
         return Ok(());
     }
     tracing::info!("Found {} active people", people.len());

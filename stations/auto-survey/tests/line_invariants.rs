@@ -11,7 +11,7 @@
 //!   5. extract_survey_urls invariants (keyword routing + fallback + normalization)
 //!   6. crop_params pure-function invariants + mutation probe
 
-use auto_survey_rs::line::{
+use auto_survey::line::{
     SCRIPT_ACTIVATE, SCRIPT_ESCAPE, SCRIPT_SCROLL_UP,
     build_activate_script,
     crop_params, extract_surveycake_urls, extract_survey_urls,

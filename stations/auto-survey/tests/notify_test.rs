@@ -1,13 +1,13 @@
 //! Tests for notify::send_bark — mocks the Bark endpoint with wiremock.
 
-use auto_survey_rs::notify;
+use auto_survey::notify;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-fn make_settings(bark_server: &str) -> auto_survey_rs::config::Settings {
-    let mut cfg = auto_survey_rs::config::Settings::from_env();
+fn make_settings(bark_server: &str) -> auto_survey::config::Settings {
+    let mut cfg = auto_survey::config::Settings::from_env();
     // Override at runtime by building a test-only value
-    auto_survey_rs::config::Settings {
+    auto_survey::config::Settings {
         bark_server: bark_server.to_string(),
         bark_device_key: "TEST_DEVICE_KEY".to_string(),
         ..cfg

@@ -1,16 +1,16 @@
 [package]
-name = "auto-survey-rs"
+name = "auto-survey"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
-description = "Workshop auto-survey station — Rust rewrite (on-demand Wed/Fri 10:00-18:00)"
+description = "Workshop auto-survey station (on-demand Wed/Fri 10:00-18:00)"
 
 [[bin]]
-name = "auto-survey-rs"
+name = "auto-survey"
 path = "src/main.rs"
 
 [lib]
-name = "auto_survey_rs"
+name = "auto_survey"
 path = "src/lib.rs"
 
 [dependencies]

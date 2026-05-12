@@ -1,6 +1,6 @@
 //! Integration tests for ocr_client — uses wiremock to simulate the OCR service.
 
-use auto_survey_rs::ocr_client;
+use auto_survey::ocr_client;
 use std::path::Path;
 use wiremock::matchers::{method, path_regex, query_param_contains};
 use wiremock::{Mock, MockServer, ResponseTemplate};

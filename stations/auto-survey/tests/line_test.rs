@@ -4,7 +4,7 @@
 //! - crop_params() dimension calculation (pure function)
 //! - extract_survey_urls() keyword heuristics
 
-use auto_survey_rs::line::{crop_params, extract_surveycake_urls, extract_survey_urls};
+use auto_survey::line::{crop_params, extract_surveycake_urls, extract_survey_urls};
 
 // ---------------------------------------------------------------------------
 // 1. Regex URL extraction
@@ -121,7 +121,7 @@ fn test_extract_survey_urls_no_urls() {
 #[test]
 fn test_applescript_activate_contains_key_lines() {
     // Verify SCRIPT_ACTIVATE contains required AppleScript phrases
-    let script = auto_survey_rs::line::SCRIPT_ACTIVATE;
+    let script = auto_survey::line::SCRIPT_ACTIVATE;
     assert!(script.contains(r#"tell application "LINE" to activate"#));
     assert!(script.contains("delay 1.5"));
     assert!(script.contains("聊天"));
@@ -130,7 +130,7 @@ fn test_applescript_activate_contains_key_lines() {
 
 #[test]
 fn test_applescript_escape_key_code_53() {
-    let script = auto_survey_rs::line::SCRIPT_ESCAPE;
+    let script = auto_survey::line::SCRIPT_ESCAPE;
     // Escape key is key code 53
     assert_eq!(script.matches("key code 53").count(), 2);
     assert_eq!(script.matches("delay 0.2").count(), 2);
@@ -138,7 +138,7 @@ fn test_applescript_escape_key_code_53() {
 
 #[test]
 fn test_applescript_scroll_up_key_code_116() {
-    let script = auto_survey_rs::line::SCRIPT_SCROLL_UP;
+    let script = auto_survey::line::SCRIPT_SCROLL_UP;
     // Page Up key is key code 116
     assert!(script.contains("key code 116"));
     assert!(script.contains("delay 0.5"));

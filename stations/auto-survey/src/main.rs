@@ -1,11 +1,11 @@
-//! auto-survey-rs CLI entrypoint.
+//! auto-survey CLI entrypoint.
 //!
 //! Subcommands mirror `stations/auto-survey/src/auto_survey/cli.py` 1-to-1 so
 //! Cronicle runners / shell scripts can drop `uv run auto-survey X` →
-//! `auto-survey-rs X` with no other change.
+//! `auto-survey X` with no other change.
 //!
 //! Default subcommand (no args) is `serve` — preserves the existing launchd
-//! plist invocation `auto-survey-rs serve`.
+//! plist invocation `auto-survey serve`.
 
 use anyhow::{bail, Context, Result};
 use axum::{routing::get, Json, Router};
@@ -33,7 +33,7 @@ mod web;
 use config::Settings;
 
 #[derive(Parser, Debug)]
-#[command(name = "auto-survey-rs", version, about = "SurveyCake attendance + quiz automation")]
+#[command(name = "auto-survey", version, about = "SurveyCake attendance + quiz automation")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -163,7 +163,7 @@ async fn main() -> Result<()> {
         Command::People(sub) => cmd_people(&cfg, sub).await,
         Command::Init => {
             let _ = open_pool(&cfg).await?;
-            println!("[auto-survey-rs] Database initialised at {}", cfg.sqlite_path);
+            println!("[auto-survey] Database initialised at {}", cfg.sqlite_path);
             Ok(())
         }
     }
@@ -178,7 +178,7 @@ async fn open_pool(cfg: &Settings) -> Result<SqlitePool> {
 // ── serve ────────────────────────────────────────────────────────────────────
 
 async fn serve(cfg: Settings, host: String, port_override: Option<u16>) -> Result<()> {
-    tracing::info!("auto-survey-rs starting on port {}", cfg.web_port);
+    tracing::info!("auto-survey starting on port {}", cfg.web_port);
     let pool = open_pool(&cfg).await?;
 
     let state = web::AppState {
@@ -214,7 +214,7 @@ async fn shutdown_signal() {
 
 async fn status() -> Json<serde_json::Value> {
     Json(json!({
-        "service": "auto-survey-rs",
+        "service": "auto-survey",
         "version": env!("CARGO_PKG_VERSION"),
         "status": "ok",
     }))

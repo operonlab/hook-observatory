@@ -14,8 +14,8 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 // ---------- helpers shared by multiple tests ----------
 
 /// Build a minimal Settings that points at the mock server.
-fn mock_settings(base_url: &str) -> auto_survey_rs::config::Settings {
-    auto_survey_rs::config::Settings {
+fn mock_settings(base_url: &str) -> auto_survey::config::Settings {
+    auto_survey::config::Settings {
         sqlite_path: ":memory:".to_string(),
         llm_backend: "litellm".to_string(),
         llm_model: "test-model".to_string(),
@@ -53,7 +53,7 @@ fn make_question(subject_id: &str, text: &str, opts: Vec<&str>) -> serde_json::V
 
 #[test]
 fn test_strip_letter_prefix() {
-    use auto_survey_rs::analyzer::strip_letter_prefix;
+    use auto_survey::analyzer::strip_letter_prefix;
     assert_eq!(strip_letter_prefix("A. 圓形"), "圓形");
     assert_eq!(strip_letter_prefix("B. 方形"), "方形");
     assert_eq!(strip_letter_prefix("圓形"), "圓形"); // no prefix → unchanged
@@ -62,7 +62,7 @@ fn test_strip_letter_prefix() {
 
 #[test]
 fn test_resolve_letter_to_option() {
-    use auto_survey_rs::analyzer::resolve_letter_to_option;
+    use auto_survey::analyzer::resolve_letter_to_option;
     let opts = vec!["圓形".to_string(), "方形".to_string(), "三角形".to_string(), "橢圓形".to_string()];
     assert_eq!(resolve_letter_to_option("A", &opts), "圓形");
     assert_eq!(resolve_letter_to_option("B", &opts), "方形");
@@ -75,8 +75,8 @@ fn test_resolve_letter_to_option() {
 
 #[test]
 fn test_parse_answers_answers_format() {
-    use auto_survey_rs::analyzer::parse_answers;
-    use auto_survey_rs::models::Question;
+    use auto_survey::analyzer::parse_answers;
+    use auto_survey::models::Question;
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -99,8 +99,8 @@ fn test_parse_answers_answers_format() {
 
 #[test]
 fn test_parse_answers_flat_format() {
-    use auto_survey_rs::analyzer::parse_answers;
-    use auto_survey_rs::models::Question;
+    use auto_survey::analyzer::parse_answers;
+    use auto_survey::models::Question;
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -123,8 +123,8 @@ fn test_parse_answers_flat_format() {
 
 #[test]
 fn test_parse_answers_strips_markdown_fences() {
-    use auto_survey_rs::analyzer::parse_answers;
-    use auto_survey_rs::models::Question;
+    use auto_survey::analyzer::parse_answers;
+    use auto_survey::models::Question;
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -149,8 +149,8 @@ fn test_parse_answers_strips_markdown_fences() {
 
 #[test]
 fn test_build_prompt_golden() {
-    use auto_survey_rs::analyzer::build_prompt;
-    use auto_survey_rs::models::Question;
+    use auto_survey::analyzer::build_prompt;
+    use auto_survey::models::Question;
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -281,7 +281,7 @@ async fn test_retry_on_5xx() {
 
 #[test]
 fn test_reanalyze_prompt_contains_previous_wrong() {
-    use auto_survey_rs::models::Question;
+    use auto_survey::models::Question;
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -301,6 +301,6 @@ fn test_reanalyze_prompt_contains_previous_wrong() {
 
     // Simulate LLM re-answering with B
     let raw = r#"{"answers": [{"subject_id": "subject-3", "answer": "B"}]}"#;
-    let result = auto_survey_rs::analyzer::parse_answers(raw, &[q]).unwrap();
+    let result = auto_survey::analyzer::parse_answers(raw, &[q]).unwrap();
     assert_eq!(result.get("subject-3").unwrap(), "錯誤");
 }

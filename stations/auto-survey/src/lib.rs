@@ -1,4 +1,4 @@
-//! auto-survey-rs library crate — exposes modules for integration tests.
+//! auto-survey library crate — exposes modules for integration tests.
 
 pub mod analyzer;
 pub mod config;
