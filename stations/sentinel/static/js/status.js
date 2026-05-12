@@ -882,7 +882,9 @@ function connectSSE() {
     });
 
     es.onerror = () => {
-        console.warn('[Sentinel] SSE disconnected, reconnecting...');
+        // EventSource auto-reconnects; demoted to debug to avoid console noise
+        // from CloudFlare HTTP/3/QUIC RTO blips on long-idle SSE connections.
+        console.debug('[Sentinel] SSE disconnected, reconnecting...');
         es.close();
         setTimeout(() => {
             refresh();        // Full refresh to catch any missed updates
