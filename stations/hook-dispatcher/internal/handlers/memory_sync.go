@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
 func init() {
@@ -35,9 +36,9 @@ func init() {
 	})
 }
 
-const (
-	memorySyncCoreAPI = "http://localhost:10000/api/memvault"
-)
+// memorySyncCoreAPI is resolved from the cross-language port registry
+// (core = 10000) at package init.
+var memorySyncCoreAPI = portregistry.URL("core", "/api/memvault", 10000)
 
 var memorySyncTypeMap = map[string]string{
 	"user":      "general",

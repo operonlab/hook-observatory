@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
 const (
@@ -29,12 +30,15 @@ const (
 	uwCreateThreshold   = 5       // min create-proposal lines before alerting
 	uwMaxFileSize       = 100_000 // bytes — truncate beyond this
 
-	// Anvil HTTP API
-	uwAnvilBase       = "http://127.0.0.1:10301"
 	uwThresholdBase   = 0.7
 	uwThresholdFactor = 0.02
 	uwMinInvocations  = 5
 )
+
+// uwAnvilBase points at the anvil station via the cross-language port
+// registry (anvil = 10301). Resolved at init so yaml is single source of
+// truth.
+var uwAnvilBase = portregistry.URL("anvil", "", 10301)
 
 func init() {
 	entry := core.Entry{

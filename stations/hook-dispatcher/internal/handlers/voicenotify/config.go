@@ -16,6 +16,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
 // Env-overridable configuration.
@@ -28,13 +30,13 @@ import (
 // edge-tts branch. The Go port now actually exercises the station so
 // operators can swap engines centrally (apple / qwen3-tts / kokoro / ...).
 var (
-	TTSURL       = envOr("CLAUDE_TTS_URL", "http://localhost:10201/synthesize")
+	TTSURL       = envOr("CLAUDE_TTS_URL", portregistry.URL("tts", "/synthesize", 10201))
 	TTSEngine    = envOr("CLAUDE_TTS_ENGINE", "edge")
 	TTSVoice     = envOr("CLAUDE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
 	Voice        = envOr("CLAUDE_VOICE_ID", "zh-CN-XiaoxiaoNeural") // edge-tts fallback
 	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")              // edge-tts fallback
 	PlaybackVol  = envOr("CLAUDE_VOICE_VOLUME", "0.4")
-	WebuiURL     = envOr("TMUX_WEBUI_URL", "http://127.0.0.1:10105")
+	WebuiURL     = envOr("TMUX_WEBUI_URL", portregistry.URL("tmux-webui", "", 10105))
 	DebounceTTL  = envOrInt("CLAUDE_VOICE_DEBOUNCE", 20)
 	SettleWindow = envOrInt("CLAUDE_VOICE_SETTLE", 8)
 )

@@ -23,10 +23,14 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
+// rerBarkServer points at the bark notification daemon (port 8090 in the
+// registry). Resolved at init so yaml is single source of truth.
+var rerBarkServer = portregistry.URL("bark", "", 8090)
+
 const (
-	rerBarkServer    = "http://localhost:8090"
 	rerBarkDeviceKey = "gx7KnK5f8iAKuqNLWzy5hP"
 
 	rerMinEditsForWarn = 5

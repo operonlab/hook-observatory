@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
 const (
@@ -28,6 +29,16 @@ const (
 	sessionChannelInboxFetchSecs  = 2
 	sessionChannelInboxMaxItems   = 6
 )
+
+// sessionChannelBaseURL returns the configured session-channel URL, or the
+// port-registry default (session-channel = 10101). Centralising the lookup
+// keeps the two call sites (inbox poll + async send) in lock-step.
+func sessionChannelBaseURL() string {
+	if v := core.Cfg().GetService("session_channel_url"); v != "" {
+		return v
+	}
+	return portregistry.URL("session-channel", "", 10101)
+}
 
 // Topics polled on UserPromptSubmit. Order = display order in injected text.
 // Both `broadcast` (singular, dashboard footer default) and `broadcasts`
@@ -217,10 +228,7 @@ func sessionChannelHandleUserPromptSubmit(_ string) core.HookResult {
 	}
 	var items []inboxItem
 
-	baseURL := core.Cfg().GetService("session_channel_url")
-	if baseURL == "" {
-		baseURL = "http://127.0.0.1:10101"
-	}
+	baseURL := sessionChannelBaseURL()
 	client := &http.Client{Timeout: time.Duration(sessionChannelInboxFetchSecs) * time.Second}
 
 	for _, topic := range sessionChannelInboxTopics {
@@ -631,10 +639,7 @@ func sessionChannelPaneID() string {
 }
 
 func sessionChannelSendAsync(topic, text, priority, tag string, meta map[string]any) {
-	baseURL := core.Cfg().GetService("session_channel_url")
-	if baseURL == "" {
-		baseURL = "http://127.0.0.1:10101"
-	}
+	baseURL := sessionChannelBaseURL()
 
 	body := map[string]any{
 		"topic":    topic,

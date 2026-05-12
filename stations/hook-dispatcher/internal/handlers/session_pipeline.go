@@ -31,6 +31,7 @@ import (
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
 	"github.com/joneshong/hook-dispatcher/internal/handlers/sessionpipeline"
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
 func init() {
@@ -42,10 +43,12 @@ func init() {
 	})
 }
 
-const (
-	sessionPipelineObservatoryDefault = "http://127.0.0.1:10100"
-	sessionPipelineObsSecretDefault   = "workshop-v2-dev-key"
-)
+const sessionPipelineObsSecretDefault = "workshop-v2-dev-key"
+
+// sessionPipelineObservatoryDefault points at the hook-observatory service
+// via the cross-language port registry (hook-observatory = 10100). Resolved
+// at package init so a yaml-side port change is reflected without edits.
+var sessionPipelineObservatoryDefault = portregistry.URL("hook-observatory", "", 10100)
 
 func sessionPipelineHandle(_, _ string, _ map[string]any, rawInput string) core.HookResult {
 	var data map[string]any
