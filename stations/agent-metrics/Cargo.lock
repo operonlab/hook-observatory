@@ -3,7 +3,7 @@
 version = 3
 
 [[package]]
-name = "agent-metrics-rs"
+name = "agent-metrics"
 version = "0.3.0"
 dependencies = [
  "anyhow",

@@ -1,6 +1,6 @@
 //! Provider balance sync — port of `schedules/runners/ws_provider_balance_sync.py`.
 //!
-//! Cronicle invokes `agent-metrics-rs provider-balance-sync` (every few hours).
+//! Cronicle invokes `agent-metrics provider-balance-sync` (every few hours).
 //! Internally:
 //!   1. Use camoufox-cli (Python wrapper, persistent Firefox profile w/ user cookies)
 //!      to open each provider's billing/balance page and eval the body innerText.

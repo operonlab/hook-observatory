@@ -1,4 +1,4 @@
-//! agent-metrics-rs binary entry.
+//! agent-metrics binary entry.
 //!
 //! Subcommands:
 //!   migrate           apply SQLite migrations
@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
-#[command(name = "agent-metrics-rs", version)]
+#[command(name = "agent-metrics", version)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -69,13 +69,13 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let cfg = agent_metrics_rs::config::Settings::from_env();
+    let cfg = agent_metrics::config::Settings::from_env();
 
     match cli.cmd {
         Cmd::Migrate => {
             tracing::info!(path = %cfg.sqlite_path, "running migrations");
-            let pool = agent_metrics_rs::db::init_pool(&cfg.sqlite_path).await?;
-            agent_metrics_rs::db::run_migrations(&pool).await?;
+            let pool = agent_metrics::db::init_pool(&cfg.sqlite_path).await?;
+            agent_metrics::db::run_migrations(&pool).await?;
             tracing::info!("migrations applied");
             Ok(())
         }
@@ -86,54 +86,54 @@ async fn main() -> Result<()> {
         Cmd::SysmonOnce => {
             // Network rates need two ticks to compute — first call seeds the
             // baseline, second call gives a real reading.
-            let _seed = agent_metrics_rs::sysmon::collect_all().await;
-            let snap = agent_metrics_rs::sysmon::collect_all().await;
+            let _seed = agent_metrics::sysmon::collect_all().await;
+            let snap = agent_metrics::sysmon::collect_all().await;
             println!("{}", serde_json::to_string(&snap)?);
             Ok(())
         }
         Cmd::SysmonLoop => {
-            let pool = agent_metrics_rs::db::init_pool(&cfg.sqlite_path).await?;
-            agent_metrics_rs::db::run_migrations(&pool).await?;
+            let pool = agent_metrics::db::init_pool(&cfg.sqlite_path).await?;
+            agent_metrics::db::run_migrations(&pool).await?;
             // No SSE subscribers in standalone mode — pass a bus anyway so the
             // tick code path is exercised identically to `serve`.
-            let bus = agent_metrics_rs::web::sse::EventBus::new(64);
-            let state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size)
+            let bus = agent_metrics::web::sse::EventBus::new(64);
+            let state = agent_metrics::loops::LoopState::new(cfg.sysmon_history_size)
                 .with_event_bus(bus);
-            agent_metrics_rs::loops::run_sysmon_loop(state, cfg, pool).await
+            agent_metrics::loops::run_sysmon_loop(state, cfg, pool).await
         }
         Cmd::LitellmStatus => {
-            let r = agent_metrics_rs::collectors::litellm::get_litellm_status(&cfg).await;
+            let r = agent_metrics::collectors::litellm::get_litellm_status(&cfg).await;
             println!("{}", serde_json::to_string(&r)?);
             Ok(())
         }
         Cmd::LitellmSummary => {
-            let r = agent_metrics_rs::collectors::litellm::get_litellm_manual_summary(&cfg).await;
+            let r = agent_metrics::collectors::litellm::get_litellm_manual_summary(&cfg).await;
             println!("{}", serde_json::to_string(&r)?);
             Ok(())
         }
         Cmd::UsageMtd => {
-            let r = agent_metrics_rs::collectors::usage::get_month_to_date(&cfg).await;
+            let r = agent_metrics::collectors::usage::get_month_to_date(&cfg).await;
             println!("{}", serde_json::to_string(&r)?);
             Ok(())
         }
         Cmd::UsageByModel { days } => {
-            let r = agent_metrics_rs::collectors::usage::get_model_breakdown(&cfg, days).await;
+            let r = agent_metrics::collectors::usage::get_model_breakdown(&cfg, days).await;
             println!("{}", serde_json::to_string(&r)?);
             Ok(())
         }
         Cmd::UsageToday => {
-            let r = agent_metrics_rs::collectors::usage::get_today_cost(&cfg).await;
+            let r = agent_metrics::collectors::usage::get_today_cost(&cfg).await;
             println!("{}", serde_json::to_string(&r)?);
             Ok(())
         }
         Cmd::QuotaCurrent => {
-            let r = agent_metrics_rs::collectors::quota::get_quota(&cfg).await;
+            let r = agent_metrics::collectors::quota::get_quota(&cfg).await;
             println!("{}", serde_json::to_string(&r)?);
             Ok(())
         }
         Cmd::ProviderBalanceSync => {
             let n =
-                agent_metrics_rs::collectors::provider_balance::run_once(&cfg.redis_url).await?;
+                agent_metrics::collectors::provider_balance::run_once(&cfg.redis_url).await?;
             // Exit non-zero if nothing succeeded (matches Python behavior).
             if n == 0 {
                 anyhow::bail!("provider-balance-sync: 0 providers ok");
@@ -142,7 +142,7 @@ async fn main() -> Result<()> {
         }
         Cmd::DashscopeQuotaSync => {
             let ok =
-                agent_metrics_rs::collectors::dashscope_quota::run_once(&cfg.redis_url).await?;
+                agent_metrics::collectors::dashscope_quota::run_once(&cfg.redis_url).await?;
             if !ok {
                 anyhow::bail!("dashscope-quota-sync: scrape or parse failed");
             }
@@ -150,7 +150,7 @@ async fn main() -> Result<()> {
         }
         Cmd::ModelCatalogSync => {
             let ok =
-                agent_metrics_rs::collectors::model_catalog::run_once(&cfg.redis_url).await?;
+                agent_metrics::collectors::model_catalog::run_once(&cfg.redis_url).await?;
             if !ok {
                 anyhow::bail!("model-catalog-sync: scrape, merge, or store failed");
             }
@@ -158,24 +158,24 @@ async fn main() -> Result<()> {
         }
         Cmd::QuotaRefresh => {
             let (raw_cc, raw_cx, raw_gm) =
-                agent_metrics_rs::collectors::quota_writer::raw_dump(&cfg).await;
+                agent_metrics::collectors::quota_writer::raw_dump(&cfg).await;
             eprintln!("=== raw cc ===\n{}", serde_json::to_string_pretty(&raw_cc)?);
             eprintln!("=== raw cx ===\n{}", serde_json::to_string_pretty(&raw_cx)?);
             eprintln!("=== raw gm ===\n{}", serde_json::to_string_pretty(&raw_gm)?);
-            let r = agent_metrics_rs::collectors::quota_writer::refresh_once(&cfg).await?;
+            let r = agent_metrics::collectors::quota_writer::refresh_once(&cfg).await?;
             println!("{}", serde_json::to_string_pretty(&r)?);
             Ok(())
         }
         Cmd::Serve => {
-            let pool = agent_metrics_rs::db::init_pool(&cfg.sqlite_path).await?;
-            agent_metrics_rs::db::run_migrations(&pool).await?;
+            let pool = agent_metrics::db::init_pool(&cfg.sqlite_path).await?;
+            agent_metrics::db::run_migrations(&pool).await?;
             // Single shared broadcast bus — sysmon_loop, aggregator, and
             // maestro all emit into it; /events/stream subscribers receive
             // every event without polling.
-            let event_bus = agent_metrics_rs::web::sse::EventBus::new(64);
-            let loop_state = agent_metrics_rs::loops::LoopState::new(cfg.sysmon_history_size)
+            let event_bus = agent_metrics::web::sse::EventBus::new(64);
+            let loop_state = agent_metrics::loops::LoopState::new(cfg.sysmon_history_size)
                 .with_event_bus(event_bus.clone());
-            let session_store = agent_metrics_rs::session::SessionStore::default();
+            let session_store = agent_metrics::session::SessionStore::default();
 
             // Track background tasks so we can flush + abort cleanly on Ctrl+C.
             let sysmon_handle = {
@@ -183,7 +183,7 @@ async fn main() -> Result<()> {
                 let c = cfg.clone();
                 let p = pool.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = agent_metrics_rs::loops::run_sysmon_loop(s, c, p).await {
+                    if let Err(e) = agent_metrics::loops::run_sysmon_loop(s, c, p).await {
                         tracing::error!(error = %e, "sysmon_loop_exited");
                     }
                 })
@@ -194,7 +194,7 @@ async fn main() -> Result<()> {
                 let c = cfg.clone();
                 let bus = event_bus.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = agent_metrics_rs::aggregator::run_aggregator(
+                    if let Err(e) = agent_metrics::aggregator::run_aggregator(
                         store,
                         p,
                         c,
@@ -211,24 +211,24 @@ async fn main() -> Result<()> {
                 let c = cfg.clone();
                 tokio::spawn(async move {
                     if let Err(e) =
-                        agent_metrics_rs::collectors::quota_writer::run_quota_loop(c, 60).await
+                        agent_metrics::collectors::quota_writer::run_quota_loop(c, 60).await
                     {
                         tracing::error!(error = %e, "quota_writer_exited");
                     }
                 })
             };
 
-            let app_state = agent_metrics_rs::web::AppState {
+            let app_state = agent_metrics::web::AppState {
                 settings: std::sync::Arc::new(cfg.clone()),
                 pool: pool.clone(),
                 loop_state,
                 session_store: session_store.clone(),
                 event_bus: event_bus.clone(),
             };
-            let app = agent_metrics_rs::web::build_router(app_state);
+            let app = agent_metrics::web::build_router(app_state);
 
             let addr: std::net::SocketAddr = format!("{}:{}", cfg.host, cfg.port).parse()?;
-            tracing::info!(%addr, "agent-metrics-rs serving");
+            tracing::info!(%addr, "agent-metrics serving");
             let listener = tokio::net::TcpListener::bind(addr).await?;
 
             let shutdown = async {
@@ -243,7 +243,7 @@ async fn main() -> Result<()> {
             tracing::info!("flushing pending snapshots before exit");
             let pending = session_store.collect_pending_snapshots().await;
             if !pending.is_empty() {
-                if let Err(e) = agent_metrics_rs::aggregator::final_flush(&pool, &pending).await {
+                if let Err(e) = agent_metrics::aggregator::final_flush(&pool, &pending).await {
                     tracing::error!(error = %e, "final_flush_failed");
                 } else {
                     tracing::info!(count = pending.len(), "final_flush_done");
@@ -259,7 +259,7 @@ async fn main() -> Result<()> {
             let _ = quota_handle.await;
 
             pool.close().await;
-            tracing::info!("agent-metrics-rs stopped cleanly");
+            tracing::info!("agent-metrics stopped cleanly");
             Ok(())
         }
     }

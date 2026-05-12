@@ -100,7 +100,7 @@ pub fn build_router(state: AppState) -> Router {
 async fn health() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({
         "status": "ok",
-        "service": "agent-metrics-rs",
+        "service": "agent-metrics",
         "version": env!("CARGO_PKG_VERSION"),
     }))
 }

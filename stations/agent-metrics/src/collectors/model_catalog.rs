@@ -1,6 +1,6 @@
 //! Model catalog full sync — port of `schedules/runners/ws_model_catalog_sync.py`.
 //!
-//! Cronicle invokes `agent-metrics-rs model-catalog-sync` weekly (Mon 19:00).
+//! Cronicle invokes `agent-metrics model-catalog-sync` weekly (Mon 19:00).
 //! Steps:
 //!   1. Parse LiteLLM config (~/.config/litellm/config.yaml) for configured
 //!      providers + Smart/Fast/Value annotations.

@@ -1,6 +1,6 @@
 //! DashScope (Qwen) free quota sync — port of `ws_dashscope_quota_sync.py`.
 //!
-//! Cronicle invokes `agent-metrics-rs dashscope-quota-sync`. Scrapes the
+//! Cronicle invokes `agent-metrics dashscope-quota-sync`. Scrapes the
 //! Alibaba Cloud Model Studio free-quota dashboard via camoufox-cli, parses
 //! the bilingual (CN/EN) UI, and writes Redis under
 //! `agent-metrics:dashscope:free_quota` (7-day TTL).

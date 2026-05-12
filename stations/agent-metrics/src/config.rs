@@ -46,7 +46,7 @@ impl Settings {
         let default_templates = parent.join("agent-metrics").join("templates");
 
         Self {
-            service_name: env_or("SERVICE_NAME", "agent-metrics-rs"),
+            service_name: env_or("SERVICE_NAME", "agent-metrics"),
             host: env_or("HOST", "127.0.0.1"),
             port: env_or(
                 "PORT",

@@ -1,4 +1,4 @@
-//! agent-metrics-rs — library entry point.
+//! agent-metrics — library entry point.
 //!
 //! Modules are introduced phase-by-phase:
 //!   Phase 1: config, db

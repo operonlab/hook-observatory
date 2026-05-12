@@ -1,16 +1,16 @@
 [package]
-name = "agent-metrics-rs"
+name = "agent-metrics"
 version = "0.3.0"
 edition = "2021"
 rust-version = "1.80"
-description = "Workshop agent-metrics station — Rust rewrite (sysmon + guardian + sweep + collectors + dispatch)"
+description = "Workshop agent-metrics station (sysmon + guardian + sweep + collectors + dispatch)"
 
 [[bin]]
-name = "agent-metrics-rs"
+name = "agent-metrics"
 path = "src/main.rs"
 
 [lib]
-name = "agent_metrics_rs"
+name = "agent_metrics"
 path = "src/lib.rs"
 
 [dependencies]

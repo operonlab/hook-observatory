@@ -183,7 +183,7 @@ SERVICES = [
         "health": get("system-monitor").health_url,
         "workdir": "/Users/joneshong/workshop/stations/system-monitor",
     },
-    # Python agent-metrics retired 2026-04-20 — replaced by agent-metrics-rs (below).
+    # Python agent-metrics retired 2026-04-20 — replaced by agent-metrics (below).
     # Kept commented as rollback reference for 30 days, remove after 2026-05-20.
     # NOTE: maestro/task_manager engines (routes /maestro/*, /projects/*) are
     # the Phase 5b deferred scope. The Rust binary returns 404 for those paths
@@ -203,13 +203,13 @@ SERVICES = [
     {
         "name": "agent-metrics",
         "type": "binary",
-        "cmd": ("/Users/joneshong/.cargo/shared-target/release/agent-metrics-rs serve"),
+        "cmd": ("/Users/joneshong/.cargo/shared-target/release/agent-metrics serve"),
         "port": get_port("agent-metrics"),
         "health": get("agent-metrics").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/agent-metrics-rs",
+        "workdir": "/Users/joneshong/workshop/stations/agent-metrics",
         "env": {
             "AGENT_METRICS_PORT": str(get_port("agent-metrics")),
-            "AGENT_METRICS_SQLITE_PATH": "/Users/joneshong/workshop/stations/agent-metrics-rs/data/agent_metrics.sqlite",
+            "AGENT_METRICS_SQLITE_PATH": "/Users/joneshong/workshop/stations/agent-metrics/data/agent_metrics.sqlite",
         },
     },
     # quota sidecar retired 2026-04-20 — Phase 5b-2 ported quota_collector
