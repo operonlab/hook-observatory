@@ -39,7 +39,7 @@ last_updated: 2026-05-12
 | Service | 舊版位置 | 新版位置 | 狀態 | 備註 |
 |---------|---------|---------|------|------|
 | session-channel | `stations/session-channel/` | `stations/session-channel-rs/` | `parallel` | **長期雙版本並存**：Rust 接管主 service binary；Python 版定位為 reference impl + 開源發行版（`operonlab/session-channel` v0.2）。周邊 supervisor/CLI/wrappers/migrate 仍走 Python。Rust 版預計 6+ 月後另出開源 repo `operonlab/session-channel-rs`。詳見 `handoff/HANDOFF-20260512-1022-session-channel-phase8-opensource.md` |
-| sentinel | `stations/sentinel/` | `stations/sentinel-rs/` | `parallel` | registry.rs 有 38 個 hardcode URL 待 ports.yaml codegen |
+| sentinel | `stations/sentinel/` | `stations/sentinel-rs/` | `parallel` | 2026-05-12 hardcode URL 全部改用 codegen（frontend×8 + capture-console + file-manager），加 3 個 regression test 擋退步 |
 | system-monitor | `stations/system-monitor/` | `stations/system-monitor-rs/` | `parallel` | hardcode port 待 codegen |
 | agent-metrics | `stations/agent-metrics/` | `stations/agent-metrics-rs/` | `parallel` | 4 處 hardcode 待 codegen |
 | auto-survey | `stations/auto-survey/`（已撤）| `stations/auto-survey-rs/` | `cutover` | 待確認 Python 是否已完全退場 |
@@ -97,7 +97,11 @@ last_updated: 2026-05-12
 
 1. ~~**P0** — libs 命名校準~~ ✅ 2026-05-12 完成（直接去綴 `libs/port-registry/`、`libs/sqlite-pool/`）
 2. ~~**P2** — session-channel 接管~~ ❌ 2026-05-12 評估後取消（Python 版定位為 reference impl + 開源發行版，雙版本長期並存）
-3. **P3** — sentinel-rs / agent-metrics-rs / system-monitor-rs hardcode URL 透過 `shared/ports.yaml` codegen 消除（cross-language 漂移債，已記錄在 memory）
+3. **P3** — hardcode URL 透過 `shared/ports.yaml` codegen 消除（cross-language 漂移債）
+   - ✅ sentinel-rs（2026-05-12，commit 待定）
+   - ⏳ agent-metrics-rs（memory 標 4 處 hardcode）
+   - ⏳ system-monitor-rs
+   - ⏳ hook-dispatcher-go
 4. **P4** — Distribution Pattern 規格化（hook-observatory 已用 + session-channel 規劃 + memvault-os 規劃）→ 寫成共用文檔
 5. **P5** — 首例 cutover 候選重評估：尋找真正「Python 已無 caller」的 service。從 `parallel` 狀態名單中挑（auto-survey-rs?、tmux-webui-go?）
 
