@@ -131,16 +131,21 @@ fn read_from_file(field: &str, max_age: f64) -> Option<String> {
 }
 
 async fn read_from_api(metric: &str, field: &str) -> Option<String> {
+    // Port resolved from shared/schemas/port_registry.yaml (codegen at build time).
+    // Falls back to 10103 if yaml is missing the entry so the binary stays bootable.
+    let port = workshop_port_registry::get("agent-metrics")
+        .map(|s| s.port)
+        .unwrap_or(10103);
     let (url, key) = if is_quota(metric) {
-        ("http://127.0.0.1:10103/quota/formatted", metric)
+        (format!("http://127.0.0.1:{port}/quota/formatted"), metric)
     } else {
-        ("http://127.0.0.1:10103/sysmon/current", field)
+        (format!("http://127.0.0.1:{port}/sysmon/current"), field)
     };
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(1))
         .build()
         .ok()?;
-    let resp = client.get(url).send().await.ok()?;
+    let resp = client.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }

@@ -48,16 +48,23 @@ impl Settings {
         Self {
             service_name: env_or("SERVICE_NAME", "agent-metrics-rs"),
             host: env_or("HOST", "127.0.0.1"),
-            port: env_or("PORT", "10103").parse().unwrap_or(10103),
+            port: env_or(
+                "PORT",
+                &workshop_port_registry::get("agent-metrics")
+                    .map(|s| s.port.to_string())
+                    .unwrap_or_else(|| "10103".into()),
+            )
+            .parse()
+            .unwrap_or(10103),
             debug: env_bool("DEBUG", false),
 
             sqlite_path: env_or("SQLITE_PATH", default_sqlite.to_string_lossy().as_ref()),
             redis_url: env_or("REDIS_URL", "redis://localhost:6379/0"),
 
-            litellm_base_url: env_or("LITELLM_BASE_URL", "http://127.0.0.1:4000"),
+            litellm_base_url: env_or("LITELLM_BASE_URL", &yaml_url("litellm", "", 4000)),
             litellm_master_key: env_or("LITELLM_MASTER_KEY", "sk-litellm-local-dev"),
 
-            hook_url: env_or("HOOK_URL", "http://127.0.0.1:10100/api/hooks"),
+            hook_url: env_or("HOOK_URL", &yaml_url("hook-observatory", "/api/hooks", 10100)),
             fallback_path: env_or("FALLBACK_PATH", "/tmp/agent-metrics-latest.json"),
 
             sysmon_collect_interval: env_or("SYSMON_COLLECT_INTERVAL", "5")
@@ -99,6 +106,16 @@ pub fn station_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+/// Build a service URL by looking up port from ports.yaml codegen,
+/// falling back to the supplied port if the service is absent from the
+/// registry (keeps service bootable when yaml has not been updated yet).
+pub fn yaml_url(service: &str, path: &str, fallback_port: u16) -> String {
+    let port = workshop_port_registry::get(service)
+        .map(|s| s.port)
+        .unwrap_or(fallback_port);
+    format!("http://127.0.0.1:{port}{path}")
+}
+
 fn env_or(key: &str, default: &str) -> String {
     let full = format!("AGENT_METRICS_{key}");
     std::env::var(&full).unwrap_or_else(|_| default.to_string())
@@ -109,6 +126,29 @@ fn env_bool(key: &str, default: bool) -> bool {
     match std::env::var(&full) {
         Ok(v) => matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"),
         Err(_) => default,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// yaml_url must derive port from port_registry.yaml when the service exists.
+    /// Regression guard for the drift-debt migration (P3, 2026-05-12).
+    #[test]
+    fn yaml_url_uses_registry_port_when_present() {
+        let url = yaml_url("hook-observatory", "/api/hooks", 9999);
+        let expected_port = workshop_port_registry::get("hook-observatory")
+            .expect("hook-observatory must be in port_registry.yaml")
+            .port;
+        assert_eq!(url, format!("http://127.0.0.1:{expected_port}/api/hooks"));
+    }
+
+    /// yaml_url falls back to fallback_port if the service is not in yaml.
+    #[test]
+    fn yaml_url_falls_back_when_service_missing() {
+        let url = yaml_url("nonexistent-service-xyz", "/api", 12345);
+        assert_eq!(url, "http://127.0.0.1:12345/api");
     }
 }
 

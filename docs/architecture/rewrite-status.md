@@ -40,8 +40,8 @@ last_updated: 2026-05-12
 |---------|---------|---------|------|------|
 | session-channel | `stations/session-channel/` | `stations/session-channel-rs/` | `parallel` | **長期雙版本並存**：Rust 接管主 service binary；Python 版定位為 reference impl + 開源發行版（`operonlab/session-channel` v0.2）。周邊 supervisor/CLI/wrappers/migrate 仍走 Python。Rust 版預計 6+ 月後另出開源 repo `operonlab/session-channel-rs`。詳見 `handoff/HANDOFF-20260512-1022-session-channel-phase8-opensource.md` |
 | sentinel | `stations/sentinel/` | `stations/sentinel-rs/` | `parallel` | 2026-05-12 hardcode URL 全部改用 codegen（frontend×8 + capture-console + file-manager），加 3 個 regression test 擋退步 |
-| system-monitor | `stations/system-monitor/` | `stations/system-monitor-rs/` | `parallel` | hardcode port 待 codegen |
-| agent-metrics | `stations/agent-metrics/` | `stations/agent-metrics-rs/` | `parallel` | 4 處 hardcode 待 codegen |
+| system-monitor | `stations/system-monitor/` | `stations/system-monitor-rs/` | `parallel` | 2026-05-12 tmux_status.rs port 10103 改 yaml codegen |
+| agent-metrics | `stations/agent-metrics/` | `stations/agent-metrics-rs/` | `parallel` | 2026-05-12 hook-observatory/litellm hardcode 改 yaml codegen + 2 regression test；port 10209 (fleet legacy) 仍 hardcode 待釐清 |
 | auto-survey | `stations/auto-survey/`（已撤）| `stations/auto-survey-rs/` | `cutover` | 待確認 Python 是否已完全退場 |
 | remote-node | `stations/remote-node/` | `stations/remote-node-rs/` | `parallel` | — |
 | ccusage | — | `stations/ccusage-rs/` | `solo` | 純新建；下次清理週期可考慮去綴 → `stations/ccusage/` |
@@ -98,10 +98,12 @@ last_updated: 2026-05-12
 1. ~~**P0** — libs 命名校準~~ ✅ 2026-05-12 完成（直接去綴 `libs/port-registry/`、`libs/sqlite-pool/`）
 2. ~~**P2** — session-channel 接管~~ ❌ 2026-05-12 評估後取消（Python 版定位為 reference impl + 開源發行版，雙版本長期並存）
 3. **P3** — hardcode URL 透過 `shared/ports.yaml` codegen 消除（cross-language 漂移債）
-   - ✅ sentinel-rs（2026-05-12，commit 待定）
-   - ⏳ agent-metrics-rs（memory 標 4 處 hardcode）
-   - ⏳ system-monitor-rs
-   - ⏳ hook-dispatcher-go
+   - ✅ sentinel-rs（2026-05-12, commit `1fcdb897`）
+   - ✅ agent-metrics-rs（2026-05-12, 加 `config::yaml_url` helper + 2 regression test；port 10209 為 yaml 缺漏的 legacy fleet 端點，標 TODO 待釐清）
+   - ✅ system-monitor-rs（2026-05-12, tmux_status.rs port 10103 改 yaml codegen）
+   - ⏳ hook-dispatcher-go（13 處 hardcode，需先開發 Go codegen 工具 `libs/go-port-registry/` — yaml header 標為 v2 規劃，獨立任務）
+6. **P6** — port 10209 (legacy fleet) 釐清：補進 ports.yaml 或從 agent-metrics-rs 移除該 dispatch tier
+7. **P7** — Go codegen 工具 `libs/go-port-registry/` 開發（unblock hook-dispatcher 收尾）
 4. **P4** — Distribution Pattern 規格化（hook-observatory 已用 + session-channel 規劃 + memvault-os 規劃）→ 寫成共用文檔
 5. **P5** — 首例 cutover 候選重評估：尋找真正「Python 已無 caller」的 service。從 `parallel` 狀態名單中挑（auto-survey-rs?、tmux-webui-go?）
 

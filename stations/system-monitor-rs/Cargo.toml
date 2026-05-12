@@ -58,6 +58,9 @@ once_cell = "1"
 # Redis pub/sub for notifier
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 
+# Workshop shared crates
+workshop-port-registry = { path = "../../libs/port-registry" }
+
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.6"

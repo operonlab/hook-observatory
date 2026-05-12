@@ -414,7 +414,8 @@ pub async fn check_tier_available(tier: &str, _settings: &Settings) -> bool {
     }
     let url = match tier {
         "relay" => std::env::var("AGENT_METRICS_RELAY_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:10100/health".into()),
+            .unwrap_or_else(|_| crate::config::yaml_url("hook-observatory", "/health", 10100)),
+        // TODO: port 10209 not in port_registry.yaml — see dispatch.rs note.
         "fleet" => std::env::var("AGENT_METRICS_FLEET_URL")
             .unwrap_or_else(|_| "http://127.0.0.1:10209/health".into()),
         _ => return false,

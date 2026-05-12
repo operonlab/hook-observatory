@@ -184,7 +184,7 @@ pub async fn dispatch_relay(
         .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
     let started = Instant::now();
     let url = std::env::var("AGENT_METRICS_RELAY_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:10100/run".into());
+        .unwrap_or_else(|_| crate::config::yaml_url("hook-observatory", "/run", 10100));
     let body = serde_json::json!({
         "prompt": prompt,
         "cwd": cwd,
@@ -223,6 +223,9 @@ pub async fn dispatch_fleet(
     let task_id = format!("fleet-{}", std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
     let started = Instant::now();
+    // TODO: port 10209 is not in shared/schemas/port_registry.yaml — likely a
+    // legacy fleet endpoint. Add yaml entry (or remove this dispatch tier) and
+    // migrate this fallback to crate::config::yaml_url(..).
     let base = std::env::var("AGENT_METRICS_FLEET_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:10209".into());
     let client = match reqwest::Client::builder()
