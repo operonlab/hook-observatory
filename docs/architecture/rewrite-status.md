@@ -42,7 +42,7 @@ last_updated: 2026-05-12
 | sentinel | `stations/sentinel/` | `stations/sentinel-rs/` | `parallel` | 2026-05-12 hardcode URL 全部改用 codegen（frontend×8 + capture-console + file-manager），加 3 個 regression test 擋退步 |
 | system-monitor | `stations/system-monitor/` | `stations/system-monitor-rs/` | `parallel` | 2026-05-12 tmux_status.rs port 10103 改 yaml codegen |
 | agent-metrics | `stations/agent-metrics/` | `stations/agent-metrics-rs/` | `parallel` | 2026-05-12 全部 hardcode 消除（hook-observatory / litellm / fleet 都改 yaml_url，port 10209 考古確認為 typo，fleet 真實 port 10106）+ 2 regression test + quota_writer pre-existing bug 修復 |
-| auto-survey | `stations/auto-survey/`（已撤）| `stations/auto-survey-rs/` | `cutover` | 待確認 Python 是否已完全退場 |
+| auto-survey | `stations/auto-survey/`（2026-04-19 已撤）| `stations/auto-survey/` | `archived` | **首例「接管即去綴」執行完成（2026-05-12, commit `be81bd55` + `73832f7f`）**：Cargo bin/lib name 去綴、workshop_services.py / .env / plist 三處 path 同步、新 binary `/release/auto-survey` 已產 (8.3MB)。`workshop_services.py` 內 commented Python entry 待 2026-05-19 保留期屆滿後清。waiting on 少爺執行 `launchctl unload + load` 完成 plist 重註冊 |
 | remote-node | `stations/remote-node/` | `stations/remote-node-rs/` | `parallel` | — |
 | ccusage | — | `stations/ccusage-rs/` | `solo` | 純新建；下次清理週期可考慮去綴 → `stations/ccusage/` |
 | rlm | — | `stations/rlm/` | `solo` | 已正名，無後綴 |
@@ -109,7 +109,12 @@ last_updated: 2026-05-12
 6. ~~**P6** — port 10209 (legacy fleet) 釐清~~ ✅ 2026-05-12（commit `6c69724a`，考古發現 10209 是 remote-node-rs 觀察期臨時 port，fleet 真實 port 10106，改用 yaml_url("fleet",...)）
 7. ~~**P7** — Go codegen 工具 `libs/go-port-registry/`~~ ✅ 2026-05-12（commit `9246a661`，含 9 個 round-trip test；yaml header 已去除 "v2 planned" 標記）
 8. **P5** — 首例 cutover 候選評估 ✅ 2026-05-12 完成（commit `e50f149a`，報告 `docs/architecture/cutover-candidates.md`，推薦首例 **auto-survey**：Python entry 已 retired 2026-04-19，保留期 2026-05-19 將屆滿）
-9. **P8** — 執行 auto-survey 接管（去綴 + archive）— 待少爺確認後執行
+9. ~~**P8** — 執行 auto-survey 接管~~ ✅ 2026-05-12（首例完成）
+   - commit `be81bd55` git mv 純 rename
+   - commit `73832f7f` Cargo metadata + caller refs 同步
+   - **少爺需手動**：`launchctl unload ~/Library/LaunchAgents/com.workshop.auto-survey-rs.plist && launchctl load ~/Library/LaunchAgents/com.workshop.auto-survey-rs.plist`（plist 內 path 已 live update，重註冊後新 binary `auto-survey` 生效）
+   - **保留期屆滿後（2026-05-19）**：清 `scripts/workshop_services.py:236-247` commented Python entry 與 `~/Library/LaunchAgents/*.disabled-2026-05-04`
+   - **規範完備**：`stations/_archive/README.md` 首例範例已立
 4. **P4** — Distribution Pattern 規格化（hook-observatory 已用 + session-channel 規劃 + memvault-os 規劃）→ 寫成共用文檔
 5. **P5** — 首例 cutover 候選重評估：尋找真正「Python 已無 caller」的 service。從 `parallel` 狀態名單中挑（auto-survey-rs?、tmux-webui-go?）
 
