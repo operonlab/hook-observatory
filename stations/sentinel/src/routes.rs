@@ -44,7 +44,7 @@ pub async fn status_one(
 }
 
 pub async fn health() -> Json<Value> {
-    Json(json!({ "status": "healthy", "service": "sentinel-rs", "version": env!("CARGO_PKG_VERSION") }))
+    Json(json!({ "status": "healthy", "service": "sentinel", "version": env!("CARGO_PKG_VERSION") }))
 }
 
 // ─── Agent Operations ──────────────────────────────────────

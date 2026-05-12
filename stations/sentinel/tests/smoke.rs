@@ -1,6 +1,6 @@
 //! Integration smoke test: exercises real endpoints against a running service.
 //!
-//! These tests require no mocks. They skip gracefully if sentinel-rs
+//! These tests require no mocks. They skip gracefully if sentinel
 //! is not running on :4102. For the full comparison suite see
 //! scripts/parity_check.sh.
 
@@ -15,14 +15,14 @@ async fn endpoint_health_returns_healthy() {
     {
         Ok(r) => r,
         Err(_) => {
-            eprintln!("skip: sentinel-rs not running on :4102");
+            eprintln!("skip: sentinel not running on :4102");
             return;
         }
     };
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["status"], "healthy");
-    assert_eq!(body["service"], "sentinel-rs");
+    assert_eq!(body["service"], "sentinel");
 }
 
 #[tokio::test]

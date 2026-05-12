@@ -27,7 +27,7 @@ use config::Config;
 use state::InterventionEngine;
 
 #[derive(Parser, Debug)]
-#[command(name = "sentinel-rs", about = "Workshop sentinel (Rust + SQLite)")]
+#[command(name = "sentinel", about = "Workshop sentinel (Rust + SQLite)")]
 struct Cli {
     #[arg(long, default_value = "config.yaml")]
     config: String,
@@ -49,13 +49,13 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sentinel_rs=info,tower_http=info".into()),
+                .unwrap_or_else(|_| "sentinel=info,tower_http=info".into()),
         )
         .init();
 
     let cli = Cli::parse();
     let cfg = Arc::new(Config::load(&cli.config)?);
-    tracing::info!(port = cfg.port, db = %cfg.database_path.display(), "sentinel-rs starting");
+    tracing::info!(port = cfg.port, db = %cfg.database_path.display(), "sentinel starting");
 
     std::fs::create_dir_all(&cfg.lock_dir).ok();
     std::fs::create_dir_all(&cfg.log_dir).ok();

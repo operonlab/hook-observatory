@@ -30,7 +30,7 @@ pub async fn run_one(client: &reqwest::Client, check: &Check) -> CheckResult {
 pub fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
-        .user_agent("sentinel-rs/0.1")
+        .user_agent("sentinel/0.1")
         .build()
         .expect("build reqwest client")
 }

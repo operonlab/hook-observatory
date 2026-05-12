@@ -162,12 +162,12 @@ SERVICES = [
         "name": "sentinel",
         "type": "binary",
         "cmd": (
-            "/Users/joneshong/.cargo/shared-target/release/sentinel-rs"
-            " --config /Users/joneshong/workshop/stations/sentinel-rs/config.yaml"
+            "/Users/joneshong/.cargo/shared-target/release/sentinel"
+            " --config /Users/joneshong/workshop/stations/sentinel/config.yaml"
         ),
         "port": get_port("sentinel"),
         "health": get("sentinel").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/sentinel-rs",
+        "workdir": "/Users/joneshong/workshop/stations/sentinel",
     },
     # Python system-monitor retired 2026-05-01 — replaced by system-monitor-rs.
     # Rollback: revert this block (uvicorn entry) + keep stations/system-monitor/.

@@ -1,12 +1,12 @@
 [package]
-name = "sentinel-rs"
+name = "sentinel"
 version = "0.1.0"
 edition = "2021"
-description = "Workshop sentinel — Rust + SQLite rewrite of stations/sentinel"
+description = "Workshop sentinel — service health monitor (Rust + SQLite)"
 license = "MIT"
 
 [[bin]]
-name = "sentinel-rs"
+name = "sentinel"
 path = "src/main.rs"
 
 [dependencies]

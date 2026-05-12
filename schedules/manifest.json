@@ -172,38 +172,6 @@
       "enabled": false
     },
     {
-      "name": "ws-sysmon-weekly",
-      "label": "com.joneshong.scheduler.ws-sysmon-weekly",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py ws-sysmon-weekly && ~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=weekly",
-      "schedule": {
-        "calendar": {
-          "Weekday": 1,
-          "Hour": 17,
-          "Minute": 30
-        }
-      },
-      "description": "[已停用 2026-05-01] 每週一 17:30: 系統監控週報（磁碟+硬體+AI 建議）⚡quota-gate",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": false
-    },
-    {
-      "name": "ws-sysmon-monthly",
-      "label": "com.joneshong.scheduler.ws-sysmon-monthly",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/lib/quota_gate.py ws-sysmon-monthly && ~/.local/bin/python3 ~/workshop/stations/system-monitor/reporter.py --type=monthly",
-      "schedule": {
-        "calendar": {
-          "Day": 1,
-          "Hour": 17,
-          "Minute": 30
-        }
-      },
-      "description": "[已停用 2026-05-01] 每月 1 日 17:30: 系統監控月報（深度分析+容量規劃）⚡quota-gate",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": false
-    },
-    {
       "name": "blink-reinstall",
       "label": "com.joneshong.blink-reinstall",
       "command": "~/Blink-Shell-GPL-Builder/reinstall-blink-auto.sh",
@@ -724,18 +692,6 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
-    },
-    {
-      "name": "ws-sentinel-check",
-      "label": "com.joneshong.scheduler.ws-sentinel-check",
-      "command": "~/workshop/stations/sentinel/.venv/bin/python3 ~/workshop/schedules/runners/ws_sentinel_check.py",
-      "schedule": {
-        "interval": 300
-      },
-      "description": "[已停用 2026-05-01: sentinel-rs 內建 light_loop(30s) 已涵蓋此功能] 每 5 分鐘: light health check — HTTP probe all services → sentinel DB + Bark on failure",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": false
     },
     {
       "name": "ws-db-backup-gdrive",
