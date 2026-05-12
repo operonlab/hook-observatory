@@ -145,11 +145,17 @@ SERVICES = [
     },
     {
         "name": "session-channel",
-        "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py",
+        # Migrated 2026-05-12 from Python uvicorn → Rust channel-service.
+        # Python source kept at stations/session-channel/ as reference impl.
+        # Rollback: restore the uvicorn cmd below + restart.
+        #   "type": "uvicorn",
+        #   "cmd": "/Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py",
+        #   "workdir": "/Users/joneshong/workshop/stations/session-channel",
+        "type": "binary",
+        "cmd": "/Users/joneshong/workshop/stations/session-channel-rs/target/release/channel-service",
         "port": get_port("session-channel"),
         "health": get("session-channel").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/session-channel",
+        "workdir": "/Users/joneshong/workshop/stations/session-channel-rs",
         "env": {"SESSION_CHANNEL_PORT": str(get_port("session-channel"))},
     },
     {
