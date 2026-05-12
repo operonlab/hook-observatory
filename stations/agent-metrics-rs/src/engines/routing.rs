@@ -415,9 +415,12 @@ pub async fn check_tier_available(tier: &str, _settings: &Settings) -> bool {
     let url = match tier {
         "relay" => std::env::var("AGENT_METRICS_RELAY_URL")
             .unwrap_or_else(|_| crate::config::yaml_url("hook-observatory", "/health", 10100)),
-        // TODO: port 10209 not in port_registry.yaml — see dispatch.rs note.
+        // fleet = port 10106 in port_registry.yaml (station-infra group).
+        // 10209 was a transient remote-node-rs shadow port (commit da287eaf),
+        // never fleet's registered endpoint. See dispatch.rs comment for full
+        // archaeology (resolved in P6, commit ee6082b5 follow-up).
         "fleet" => std::env::var("AGENT_METRICS_FLEET_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:10209/health".into()),
+            .unwrap_or_else(|_| crate::config::yaml_url("fleet", "/health", 10106)),
         _ => return false,
     };
     let client = match reqwest::Client::builder()
