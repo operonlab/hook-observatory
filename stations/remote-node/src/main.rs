@@ -11,7 +11,7 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "remote-node-rs",
+    name = "remote-node",
     about = "Proxy station forwarding requests to Windows GPU server"
 )]
 struct Cli {
@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(
         port = cfg.port,
         remote = %cfg.remote_url,
-        "remote-node-rs starting"
+        "remote-node starting"
     );
 
     let state = state::AppState::new(cfg.clone())?;

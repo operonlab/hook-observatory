@@ -1,4 +1,4 @@
-//! Integration tests for remote-node-rs
+//! Integration tests for remote-node
 //!
 //! Strategy: wiremock acts as the Windows GPU server (外部 I/O boundary — mock OK per 六鐵律 #5).
 //! A real Rust binary is spawned via `cargo run --release`, polled on /health until ready,
@@ -67,7 +67,7 @@ async fn spawn_remote_node(config_path: &PathBuf) -> tokio::process::Child {
     // Use the pre-built release binary directly. Running `cargo run` per test
     // serialises on the Cargo lock; 18 parallel tests then time-out waiting for
     // rebuild checks. Assume `cargo build --release` ran before `cargo test`.
-    let bin = manifest_dir.join("target/release/remote-node-rs");
+    let bin = manifest_dir.join("target/release/remote-node");
     let mut child = tokio::process::Command::new(&bin)
         .args([
             "--config",
@@ -94,7 +94,7 @@ async fn spawn_remote_node(config_path: &PathBuf) -> tokio::process::Child {
     loop {
         if tokio::time::Instant::now() > deadline {
             let _ = child.kill().await;
-            panic!("remote-node-rs did not start within 60s on port {}", port);
+            panic!("remote-node did not start within 60s on port {}", port);
         }
         if let Ok(resp) = client.get(&url).timeout(Duration::from_secs(1)).send().await {
             if resp.status().is_success() {

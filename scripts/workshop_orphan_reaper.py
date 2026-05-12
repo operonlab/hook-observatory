@@ -44,7 +44,7 @@ PROTECTED_PATTERNS = {
     "sentinel",  # health checker
     # launchd-managed Rust stations (PPID=1 is expected, launchd owns lifecycle)
     "auto-survey-rs/target/release/auto-survey-rs",
-    "remote-node-rs/target/release/remote-node-rs",
+    "remote-node/target/release/remote-node",
 }
 
 

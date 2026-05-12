@@ -33,7 +33,7 @@ RUST_DIRS: list[str] = [
     "stations/agent-metrics-rs/src",
     "stations/system-monitor-rs/src",
     "stations/auto-survey-rs/src",
-    "stations/remote-node-rs/src",
+    "stations/remote-node/src",
 ]
 
 # Go station source directories to scan

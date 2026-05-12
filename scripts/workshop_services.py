@@ -329,12 +329,12 @@ SERVICES = [
         "name": "remote-node",
         "type": "binary",
         "cmd": (
-            "/Users/joneshong/.cargo/shared-target/release/remote-node-rs"
-            " --config /Users/joneshong/workshop/stations/remote-node-rs/config.yaml"
+            "/Users/joneshong/.cargo/shared-target/release/remote-node"
+            " --config /Users/joneshong/workshop/stations/remote-node/config.yaml"
         ),
         "port": get_port("remote-node"),
         "health": get("remote-node").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/remote-node-rs",
+        "workdir": "/Users/joneshong/workshop/stations/remote-node",
     },
     {
         # 2026-05-10: switched to Go rewrite for a one-week trial.

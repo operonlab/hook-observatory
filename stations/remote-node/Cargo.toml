@@ -1,12 +1,12 @@
 [package]
-name = "remote-node-rs"
+name = "remote-node"
 version = "0.1.0"
 edition = "2021"
-description = "Workshop remote-node — Rust rewrite of stations/remote-node (HTTP proxy to Windows GPU server)"
+description = "Workshop remote-node — HTTP proxy to Windows GPU server"
 license = "MIT"
 
 [[bin]]
-name = "remote-node-rs"
+name = "remote-node"
 path = "src/main.rs"
 
 [dependencies]
