@@ -208,18 +208,6 @@
       "enabled": false
     },
     {
-      "name": "tmux-webui",
-      "label": "com.joneshong.tmux-webui",
-      "command": "/opt/homebrew/bin/uv run ~/workshop/stations/tmux-webui/server.py --host 127.0.0.1 --port 8765",
-      "schedule": {
-        "run_at_load": true
-      },
-      "description": "tmux Web UI — WebSocket bridge（KeepAlive daemon, port 8765）",
-      "category": "jonathan",
-      "type": "daemon",
-      "enabled": true
-    },
-    {
       "name": "workshop-launcher",
       "label": "com.workshop.launcher",
       "command": "~/.local/bin/python3 ~/workshop/scripts/workshop_services.py daemon",

@@ -56,7 +56,7 @@ last_updated: 2026-05-12
 | Service | 舊版位置 | 新版位置 | 狀態 | 備註 |
 |---------|---------|---------|------|------|
 | hook-dispatcher | `voice_notify.py`（已封存）| `stations/hook-dispatcher/` | `archived` | 已完成接管，無後綴；2026-05-12 13 處 hardcode URL 全改 `libs/go-port-registry` codegen，附帶修復 memvault.go 把 10205(translate) 改成 core 10000 |
-| tmux-webui | `stations/tmux-webui/` | `stations/tmux-webui-go/` | `parallel` | — |
+| tmux-webui | `stations/_archive/tmux-webui-py/` | `stations/tmux-webui/` | `archived` | **2026-05-12 完成接管去綴**。Python `server.py` 進 _archive；Go 去綴；workshop_services.py workdir 同步；manifest 內舊 tmux-webui job 移除（multi-daemon entry 重複，workshop-launcher 已管）。Live binary `~/.local/bin/tmux-webui` (PID 33103, port 10105, `/` 回 200) |
 | agent-vista | — | `stations/agent-vista/` | `solo` | 純新建 |
 | lazy-wrapper | — | `mcp/lazy-wrapper/` | `solo` | 純新建 |
 

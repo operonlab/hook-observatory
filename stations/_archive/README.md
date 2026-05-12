@@ -16,7 +16,8 @@
 | 2026-05-12 | `stations/sentinel/` (Python, → `sentinel-py/`) | `stations/sentinel/` (Rust，由 `sentinel-rs` rename) | `8242b49b` (cutover step 2) | Rust binary 已 production 跑數週，Python schedule job (`ws-sentinel-check`) 自 2026-05-01 enabled=false。本次直接 git mv 進 `_archive/` |
 | 2026-05-12 | `stations/system-monitor/` (Python, → `system-monitor-py/`) | `stations/system-monitor/` (Rust，由 `system-monitor-rs` rename) | `c4dec64f` (cutover step 2) | Rust binary 已 production 跑數週（RSS 58MB→15MB），Python schedule jobs (`ws-sysmon-weekly` / `ws-sysmon-monthly`) 自 2026-05-01 enabled=false。本次 git mv 進 `_archive/` |
 | 2026-05-12 | `stations/remote-node/` (Python, → `remote-node-py/`) | `stations/remote-node/` (Rust，由 `remote-node-rs` rename) | `1b87b39e` (cutover step 2) | HTTP proxy to Windows GPU；Rust binary 已 production；本次 git mv 進 `_archive/` |
-| 2026-05-12 | `stations/agent-metrics/` (Python, → `agent-metrics-py/`) | `stations/agent-metrics/` (Rust，由 `agent-metrics-rs` rename) | (本次 cutover commit) | Python 自 2026-04-20 retired，提前接管（保留期至 2026-05-20）；Rust binary `/release/agent-metrics` live |
+| 2026-05-12 | `stations/agent-metrics/` (Python, → `agent-metrics-py/`) | `stations/agent-metrics/` (Rust，由 `agent-metrics-rs` rename) | `318e79ff` (cutover step 2) | Python 自 2026-04-20 retired，提前接管（保留期至 2026-05-20）；Rust binary `/release/agent-metrics` live |
+| 2026-05-12 | `stations/tmux-webui/` (Python `server.py`, → `tmux-webui-py/`) | `stations/tmux-webui/` (Go，由 `tmux-webui-go` rename) | (本次 cutover commit) | Python server.py 在 manifest enabled=true 但實際無 process listen，純殘留；Go binary `~/.local/bin/tmux-webui` live。一併從 manifest 移除多餘 daemon entry |
 
 ## 規則衍生
 
