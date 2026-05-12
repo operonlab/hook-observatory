@@ -31,8 +31,8 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dashmap = "6"
 futures = "0.3"
-workshop-sqlite-pool = { path = "../../libs/rust-sqlite-pool" }
-workshop-port-registry = { path = "../../libs/rust-port-registry" }
+workshop-sqlite-pool = { path = "../../libs/sqlite-pool" }
+workshop-port-registry = { path = "../../libs/port-registry" }
 
 [dev-dependencies]
 tempfile = "3"

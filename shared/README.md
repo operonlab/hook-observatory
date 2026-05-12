@@ -35,11 +35,11 @@ shared/
 | 語言 | 機制 | 入口 |
 |------|------|------|
 | Python | Runtime 載入 | `libs/sdk-client/sdk_client/port_registry.py` |
-| Rust | Build-time codegen | `libs/rust-port-registry/build.rs` → `OUT_DIR/ports.rs` |
+| Rust | Build-time codegen | `libs/port-registry/build.rs` → `OUT_DIR/ports.rs` |
 | Go (v2) | `//go:generate` 預期 | (尚未實作) |
 
 新 station 接入步驟：
-1. **Rust**：`Cargo.toml` 加 `workshop-port-registry = { path = "../../libs/rust-port-registry" }`，程式碼用 `workshop_port_registry::{PORTS, get, by_group}`
+1. **Rust**：`Cargo.toml` 加 `workshop-port-registry = { path = "../../libs/port-registry" }`，程式碼用 `workshop_port_registry::{PORTS, get, by_group}`
 2. **Python**：直接 `from sdk_client.port_registry import get_port, get_url`
 3. **Go (v2)**：等 `libs/go-port-registry/` 落地
 
@@ -57,7 +57,7 @@ shared/
 **做**：
 - `schemas/port_registry.yaml`（37 個 service）
 - Python runtime loader
-- Rust shared crate `libs/rust-port-registry/`
+- Rust shared crate `libs/port-registry/`
 - 試金石：`stations/sentinel-rs` 38 條 HTTP check 從 PORTS 動態組
 - `scripts/check_schema_drift.py` + 接 sentinel light_check
 

@@ -2,7 +2,7 @@
 #
 # Consumed by:
 #   - libs/sdk-client/sdk_client/port_registry.py        (Python, runtime load)
-#   - libs/rust-port-registry/build.rs                    (Rust, build-time codegen)
+#   - libs/port-registry/build.rs                    (Rust, build-time codegen)
 #   - (v2) libs/go-port-registry                          (Go, //go:generate)
 #
 # Schema mirrors port_registry.py:23-44 ServicePort dataclass.

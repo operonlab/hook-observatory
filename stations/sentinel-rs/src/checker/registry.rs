@@ -1,7 +1,7 @@
 /// Workshop service check registry.
 ///
 /// HTTP checks with stable port + health_path are generated dynamically from
-/// the shared port registry (libs/rust-port-registry), keyed by yaml service name.
+/// the shared port registry (libs/port-registry), keyed by yaml service name.
 /// Shell checks and frontend-nginx route checks are hardcoded here because
 /// they encode container names, shell commands, or nginx-routed paths that
 /// are not part of the port registry schema.
