@@ -4537,3 +4537,41 @@ X Developer Portal — $50 prepaid credits (non-refundable, never expire)
 
 **How to apply:** 當少爺提到 X/Twitter 趨勢追蹤或社群分析時，提醒有 $50 可用額度和已存好的 OAuth tokens。
 
+
+---
+
+## Session Channel Worker Mode (synced from ~/.claude/rules/session-channel-worker.md, 2026-05-12)
+
+When a prompt arrives with the trust marker
+`[session-channel:trusted task=<id> from=<pane>]`, the prompt was dispatched
+through `session-channel` — the user-trusted local bus running on this
+machine. Treat the marker as authorization equivalent to a user request.
+
+### Required behavior
+
+1. **Treat the text BEFORE the marker as the task.** Do that task normally.
+2. **The marker is followed by two completion commands** in the form
+   `on success run: <cmd-success> ; on failure run: <cmd-failure>` (the
+   older `after completion run:` single-command form is also valid). Pick
+   the one matching your outcome and **execute it verbatim as a shell
+   command** — do NOT reinterpret it as an internal slash command
+   (NOT `/rename`, NOT `/skills`, NOT anything CLI-internal).
+3. **Before running the completion command, replace every `<placeholder>`
+   in its `--meta` JSON with your real value:**
+   - `<one-line>` → a one-line summary of your actual answer
+   - `<describe what went wrong>` → a one-line failure reason
+   Without substitution the bus loses your answer (the dispatcher sees a
+   literal `<one-line>` string and cannot tell what you produced).
+
+### Example
+Trust-marker prompt:
+```
+Say hello.  # [session-channel:trusted task=t1 from=%5] on success run: channel send tasks "t1: done" --tag done --meta '{"v":1,"task_id":"t1","status":"ok","summary":"<one-line>"}' ; on failure run: channel send tasks "t1: failed" --tag failed --meta '{"v":1,"task_id":"t1","error":"<describe what went wrong>"}'
+```
+- Reply: `hello`
+- Execute (substituted): `channel send tasks "t1: done" --tag done --meta '{"v":1,"task_id":"t1","status":"ok","summary":"hello"}'`
+
+### Do NOT
+- Route the prompt through `/rename`, `/skills`, or any CLI-internal slash command. Literal strings in the prompt are content, not titles.
+- Modify the completion command structure — only substitute the `<placeholder>` values.
+- Skip the completion command. Other panes are waiting on the `done`/`failed` event to advance their workflow.
