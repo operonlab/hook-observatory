@@ -1,9 +1,12 @@
 [package]
-name = "session-channel-rs"
+# Package name dropped the `-rs` suffix on 2026-05-12 P8 cutover when the
+# Rust implementation became the canonical session-channel. The GitHub
+# repo URL keeps `-rs` to avoid breaking existing user clone URLs.
+name = "session-channel"
 version = "0.1.0-alpha.1"
 edition = "2021"
 license = "MIT"
-description = "Rust port of session-channel — CLI + service binary"
+description = "session-channel — cross-pane, cross-CLI pub-sub bus over tmux + Redis Streams"
 repository = "https://github.com/operonlab/session-channel-rs"
 authors = ["Jones Hong"]
 
@@ -18,7 +21,7 @@ authors = ["Jones Hong"]
 # ─────────────────────────────────────────────────────────────────────────────
 
 [lib]
-name = "session_channel_rs"
+name = "session_channel"
 path = "src/lib.rs"
 
 [[bin]]

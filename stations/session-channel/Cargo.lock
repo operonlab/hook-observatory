@@ -1358,7 +1358,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "session-channel-rs"
+name = "session-channel"
 version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",

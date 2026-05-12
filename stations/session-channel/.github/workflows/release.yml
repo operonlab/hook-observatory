@@ -1,4 +1,4 @@
-# Release workflow — session-channel-rs
+# Release workflow — session-channel
 #
 # Fires on every `v*` tag push and builds pre-compiled binaries for four
 # target triples, then attaches them as assets to the GitHub Release.
@@ -94,13 +94,13 @@ jobs:
         run: echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
       # Bundle both binaries into a single tarball for the release asset.
-      # Name format: session-channel-rs-<tag>-<triple>.tar.gz
+      # Name format: session-channel-<tag>-<triple>.tar.gz
       - name: Bundle tarball
         id: bundle
         run: |
           TAG="${{ steps.tag.outputs.TAG }}"
           TRIPLE="${{ matrix.target }}"
-          ARCHIVE="session-channel-rs-${TAG}-${TRIPLE}.tar.gz"
+          ARCHIVE="session-channel-${TAG}-${TRIPLE}.tar.gz"
           BIN_DIR="target/${TRIPLE}/release"
           tar -czf "${ARCHIVE}" \
             -C "${BIN_DIR}" channel channel-service

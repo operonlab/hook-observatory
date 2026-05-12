@@ -1,4 +1,4 @@
-//! Adversarial unit tests for `session_channel_rs::service::auth`.
+//! Adversarial unit tests for `session_channel::service::auth`.
 //!
 //! Strategy: written from the Python `itsdangerous` spec (NOT from the Rust
 //! source) — these are mutation-killer tests targeted at the most likely
@@ -12,7 +12,7 @@
 //! 5. Python `itsdangerous` interop — a real Python-issued cookie verifies
 //!    against the Rust verifier with the same secret.
 
-use session_channel_rs::service::auth::{extract_identity, sign, verify, AuthIdentity};
+use session_channel::service::auth::{extract_identity, sign, verify, AuthIdentity};
 
 // ─────────────────────────────────────────────────────────────────────────
 // 1. max_age boundary mutation killers

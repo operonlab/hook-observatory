@@ -1,4 +1,4 @@
-//! Library crate for session-channel-rs.
+//! Library crate for session-channel.
 //!
 //! Exposes the service-side modules (store / auth / routes / config) so the
 //! `channel-service` binary AND integration tests can link them.

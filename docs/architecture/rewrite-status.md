@@ -30,15 +30,15 @@ last_updated: 2026-05-12
 | `archived` | 舊版已封存，新版去綴繼承原名 | — |
 | `solo` | 純新建，無前身 | — |
 
-**特例：雙版本長期共存**
+**~~特例：雙版本長期共存~~（2026-05-12 廢止）**
 
-部分 service 採「Rust binary + Python reference impl + 雙 repo 開源」策略（如 session-channel），不走接管去綴流程。這類 service 在表中保留 `parallel` 狀態，並在備註欄明寫共存原因與兩邊 caller 分工。判準：Python 版是否仍有獨立 caller 群（CLI / 排程 / 開源使用者）。
+少爺 2026-05-12 推翻原「雙版本長期共存」設計。新原則：Py/JS 是迭代用過渡語言，Rust/Go 是最終事實源；1:1 復刻 + 測試通過後立即 cutover，不存在長期 `parallel` 狀態。例外只剩有不可替代依賴的 Python lib（TTS / ASR / LLM SDK 等深度綁 PyTorch / HuggingFace / Whisper 生態）。詳見 [feedback-rust-go-rewrite-priority](../../../.claude/projects/-Users-joneshong-workshop/memory/feedback-rust-go-rewrite-priority.md)。
 
 ## Rust 重寫狀態
 
 | Service | 舊版位置 | 新版位置 | 狀態 | 備註 |
 |---------|---------|---------|------|------|
-| session-channel | `stations/session-channel/` | `stations/session-channel-rs/` | `parallel` | **長期雙版本並存**：Rust 接管主 service binary；Python 版定位為 reference impl + 開源發行版（`operonlab/session-channel` v0.2）。周邊 supervisor/CLI/wrappers/migrate 仍走 Python。Rust 版預計 6+ 月後另出開源 repo `operonlab/session-channel-rs`。詳見 `handoff/HANDOFF-20260512-1022-session-channel-phase8-opensource.md` |
+| session-channel | `stations/_archive/session-channel-py/` | `stations/session-channel/` | `archived` | **2026-05-12 完成接管去綴**（P8 cutover）。Python 進 `_archive/session-channel-py/`；Rust 去綴繼承原名；workshop_services daemon 跑新 binary `/release/channel-service`（PID 63344 live, `/health` 回 `{"status":"ok"}`）；CLI symlink `~/.local/bin/channel` 重指；Cargo package + lib name 同步去後綴；47 tests parallel 全綠。OSS GitHub repo URL 保留 `operonlab/session-channel-rs`（不破 existing user clone URL），但 repo 內 README/Cargo.toml package name 已去後綴 |
 | sentinel | `stations/_archive/sentinel-py/` | `stations/sentinel/` | `archived` | **2026-05-12 完成接管去綴**（commit `8242b49b`）。Python 版進 _archive；Rust 去綴繼承原名；workshop-launcher daemon spawn 新 binary `/release/sentinel`（PID 75499 live）；ws-sentinel-check disabled job 自 manifest 移除。Hardcode URL codegen 改造（commit `1fcdb897`）+ 3 regression test 也都同步繼承 |
 | system-monitor | `stations/_archive/system-monitor-py/` | `stations/system-monitor/` | `archived` | **2026-05-12 完成接管去綴**（commit `c4dec64f`）。Python 版進 _archive；Rust 去綴繼承原名；workshop-launcher daemon 跑新 binary `/release/system-monitor`（PID 39394 live）；ws-sysmon-{weekly,monthly} disabled job 自 manifest 移除。Hardcode codegen 改造（commit `ee6082b5`）繼承 |
 | agent-metrics | `stations/_archive/agent-metrics-py/` | `stations/agent-metrics/` | `archived` | **2026-05-12 完成接管去綴**。Python 進 _archive；Rust 去綴；workshop-launcher daemon 跑新 binary `/release/agent-metrics`（PID 23455 live, `/health` 回 `{"service":"agent-metrics"}`）。提前接管（Python 保留期至 2026-05-20，commented rollback entry 至該日清）。Hardcode codegen + quota_writer fix 繼承 |
@@ -100,7 +100,7 @@ last_updated: 2026-05-12
 ## Waitlist（按建議優先順序）
 
 1. ~~**P0** — libs 命名校準~~ ✅ 2026-05-12 完成（直接去綴 `libs/port-registry/`、`libs/sqlite-pool/`）
-2. ~~**P2** — session-channel 接管~~ ❌ 2026-05-12 評估後取消（Python 版定位為 reference impl + 開源發行版，雙版本長期並存）
+2. **P2** — session-channel 接管 ✅ 2026-05-12 完成（雙版本特例廢止，標準 cutover 流程：archive + rename + Cargo metadata 去綴 + 47 tests 全綠 + service live-restarted）
 3. ~~**P3** — hardcode URL 透過 `shared/ports.yaml` codegen 消除~~ ✅ 2026-05-12 全部完成
    - ✅ sentinel-rs（commit `1fcdb897`）
    - ✅ agent-metrics-rs（並行 agent commit `ee6082b5` + `6c69724a`）

@@ -145,17 +145,15 @@ SERVICES = [
     },
     {
         "name": "session-channel",
-        # Migrated 2026-05-12 from Python uvicorn → Rust channel-service.
-        # Python source kept at stations/session-channel/ as reference impl.
-        # Rollback: restore the uvicorn cmd below + restart.
-        #   "type": "uvicorn",
-        #   "cmd": "/Users/joneshong/workshop/stations/session-channel/.venv/bin/python3 main.py",
-        #   "workdir": "/Users/joneshong/workshop/stations/session-channel",
+        # P8 cutover 2026-05-12: Rust takeover; Python archived at
+        # stations/_archive/session-channel-py/. Rust is now the canonical
+        # implementation — new features land here. See
+        # ~/.claude/projects/-Users-joneshong-workshop/memory/feedback-rust-go-rewrite-priority.md
         "type": "binary",
-        "cmd": "/Users/joneshong/workshop/stations/session-channel-rs/target/release/channel-service",
+        "cmd": "/Users/joneshong/workshop/stations/session-channel/target/release/channel-service",
         "port": get_port("session-channel"),
         "health": get("session-channel").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/session-channel-rs",
+        "workdir": "/Users/joneshong/workshop/stations/session-channel",
         "env": {"SESSION_CHANNEL_PORT": str(get_port("session-channel"))},
     },
     {

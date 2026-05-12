@@ -1,4 +1,4 @@
-/// Data-flow integration tests for session_channel_rs::service::store.
+/// Data-flow integration tests for session_channel::service::store.
 ///
 /// These tests target invariants that are likely to be broken by common
 /// mutations (reversed order, missing SREM, off-by-one in trim, wrong
@@ -11,7 +11,7 @@
 ///
 /// Real Redis on 127.0.0.1:6379/0 is required.
 use redis::AsyncCommands;
-use session_channel_rs::service::store;
+use session_channel::service::store;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // ─────────────────────────────────────────────────────────────────────────────
