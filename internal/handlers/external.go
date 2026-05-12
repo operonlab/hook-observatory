@@ -23,11 +23,13 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
 // recallEndpoint is the Core API URL for server-side recall text building.
 // Replaces the former fork of ~/workshop/mcp/memvault/scripts/recall.py.
-const recallEndpoint = "http://localhost:10000/api/memvault/recall/text"
+// Resolved from the cross-language port registry (core = 10000).
+var recallEndpoint = portregistry.URL("core", "/api/memvault/recall/text", 10000)
 
 func init() {
 	core.Register("UserPromptSubmit", core.Entry{
@@ -104,10 +106,11 @@ func externalSkillTracker(_, _ string, _ map[string]any, rawInput string) core.H
 // skill_tracker in-process implementation
 // ---------------------------------------------------------------------------
 
-const (
-	skillTrackerCoreAPI = "http://localhost:10000"
-	skillTrackerSpaceID = "default"
-)
+const skillTrackerSpaceID = "default"
+
+// skillTrackerCoreAPI is resolved from the cross-language port registry
+// (core = 10000) at package init.
+var skillTrackerCoreAPI = portregistry.URL("core", "", 10000)
 
 var skillTrackerKnowledgeSkills = map[string]bool{
 	"smart-search":     true,

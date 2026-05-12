@@ -9,12 +9,18 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
+	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
 )
 
-const (
-	defaultMemvaultBase = "http://127.0.0.1:10205"
-	memvaultTimeout     = 10 * time.Second
-)
+const memvaultTimeout = 10 * time.Second
+
+// defaultMemvaultBase points at the Workshop core service (port 10000),
+// which hosts the /api/memvault/* routes — memvault is a Core module, not
+// a standalone station. The previous hardcoded 10205 was a stale port
+// (10205 in the registry is `translate`) and every request silently 404'd.
+// Resolved from the cross-language port registry so a future move would
+// only require a yaml edit.
+var defaultMemvaultBase = portregistry.URL("core", "", 10000)
 
 // MemvaultClient is a thin HTTP wrapper around the memvault service.
 // Base URL is resolved from config (memvault_url) or the default.
