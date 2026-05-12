@@ -13,6 +13,7 @@
 | 日期 | 原 station | 取代為 | 取代版本 commit | 原因 |
 |------|-----------|-------|----------------|------|
 | 2026-04-19 | `stations/auto-survey/` (Python) | `stations/auto-survey/` (Rust，由 `auto-survey-rs` rename) | `9d34...`（retired commit）/ `<本次 cutover commit>` | Rust binary 性能與部署簡便；Python source 早於 2026-04-19 已刪除，本 README 補登。實際 directory 未進入 `_archive/`（已撤），workshop_services.py 內留 commented entry 至 2026-05-19 過保留期後可清 |
+| 2026-05-12 | `stations/sentinel/` (Python, → `sentinel-py/`) | `stations/sentinel/` (Rust，由 `sentinel-rs` rename) | `8242b49b` (cutover step 2) | Rust binary 已 production 跑數週，Python schedule job (`ws-sentinel-check`) 自 2026-05-01 enabled=false。本次直接 git mv 進 `_archive/` |
 
 ## 規則衍生
 

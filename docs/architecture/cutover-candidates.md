@@ -3,7 +3,7 @@
 | Service | workshop_services.py 用哪版 | Python caller 證據 | 接管建議 |
 |---------|---------------------------|-------------------|---------|
 | auto-survey | ~~Rust binary `auto-survey-rs`~~ → **`auto-survey`（去綴）** | ~~`workshop_services.py:241-246` 全在 comment 內~~ | ✅ **2026-05-12 已執行接管**（commits `be81bd55` + `73832f7f`） |
-| sentinel | **Rust binary** (`sentinel-rs`) — `workshop_services.py` 直接用 `sentinel-rs` binary，無 Python entry | `schedules/manifest.json:731` ws-sentinel-check 命令指向 Python venv，但 `enabled: false`，description 標明「已停用 2026-05-01」 | **可接管**（需同步清除已停用排程） |
+| sentinel | ~~Rust binary `sentinel-rs`~~ → **`sentinel`（去綴）** | ~~ws-sentinel-check disabled job~~ | ✅ **2026-05-12 已執行接管**（commit `8242b49b` + manifest 同時清 disabled job） |
 | system-monitor | **Rust binary** (`system-monitor-rs`) — Python entry 已替換，rollback comment 保留於 `workshop_services.py:173` | `schedules/manifest.json:177,193` ws-sysmon-weekly / ws-sysmon-monthly 指向 Python `reporter.py`，但兩者 `enabled: false`，description 標明「已停用 2026-05-01」 | **可接管**（需同步清除已停用排程） |
 
 ## 首例推薦
