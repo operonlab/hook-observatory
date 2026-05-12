@@ -425,7 +425,7 @@ fn parse_cc(data: &Value) -> serde_json::Map<String, Value> {
                 None => (limit - used).max(0.0),
             };
             let s = if balance <= 0.0 {
-                format!("${:.2}/${:.0} {}% 余$0", used, limit, pct)
+                "off".to_string()
             } else {
                 format!("${:.2}/${:.0} {}% 余${:.2}", used, limit, pct, balance)
             };
