@@ -6,7 +6,7 @@ Stages (in order):
     2. extract  — memvault knowledge extraction (via extract_async.py)
     3. archive  — session-archiver scan + score
     4. reflect  — quality scoring + context efficiency metrics
-    5. log      — observatory event logging
+    5. log      — pipeline summary to local logger
 
 Fail-safe: each stage is wrapped in try/except so failures don't abort the
 pipeline.  Exception: if redact FAILS, extract is skipped (never extract
@@ -80,7 +80,6 @@ class SessionPipelineClient:
     Args:
         projects_dir: Root dir for Claude projects (default ~/.claude/projects).
         scripts_dir:  memvault scripts directory.
-        observatory_url: Hook Observatory base URL (default port_registry).
         core_api_url: Core API base URL (default port_registry).
     """
 
@@ -88,17 +87,12 @@ class SessionPipelineClient:
         self,
         projects_dir: str | None = None,
         scripts_dir: str | None = None,
-        observatory_url: str | None = None,
         core_api_url: str | None = None,
     ) -> None:
         from sdk_client import port_registry
 
         self.projects_dir = projects_dir or os.path.expanduser("~/.claude/projects")
         self.scripts_dir = scripts_dir or os.path.expanduser("~/workshop/mcp/memvault/scripts")
-        self.observatory_url = (
-            observatory_url
-            or os.environ.get("HOOK_OBS_URL", port_registry.get_url("hook-observatory"))
-        ).rstrip("/")
         self.core_api_url = (
             core_api_url or os.environ.get("CORE_API_URL", port_registry.get_url("core"))
         ).rstrip("/")
@@ -198,7 +192,7 @@ class SessionPipelineClient:
                     details={"skipped": True, "reason": skip_reason},
                 )
             )
-            # Still log to observatory so the skip is observable
+            # Still emit a log entry so the skip is observable
             log_result = self._stage_log(session_id, result)
             result.stages.append(log_result)
             result.total_duration_ms = int((time.monotonic() - pipeline_start) * 1000)
@@ -239,7 +233,6 @@ class SessionPipelineClient:
         return {
             "projects_dir": self.projects_dir,
             "scripts_dir": self.scripts_dir,
-            "observatory_url": self.observatory_url,
             "extract_script": str(Path(self.scripts_dir) / "extract_async.py"),
         }
 
@@ -273,7 +266,7 @@ class SessionPipelineClient:
             {
                 "order": 5,
                 "name": "log",
-                "description": "Log pipeline execution to hook observatory",
+                "description": "Log pipeline execution summary to local logger",
                 "fail_behavior": "pipeline continues",
             },
         ]
@@ -599,47 +592,28 @@ class SessionPipelineClient:
         session_id: str,
         pipeline_result: PipelineResult,
     ) -> StageResult:
-        """Stage 4: Log pipeline execution to hook observatory."""
+        """Stage 5: Log pipeline execution summary to local logger.
+
+        Previously POSTed to hook-observatory `/api/events`; that station was
+        archived 2026-05-13 (Phase A cutover — hook execution moved to the
+        Go binary `~/.claude/hooks/hook-dispatcher` and the dashboard ingest
+        endpoint no longer exists). Pipeline summaries are now emitted via
+        the standard Python logger only. Hook-dispatcher's own JSONL spool
+        (~/.hook-observatory/spool/) is the source of truth for hook events.
+        """
         t0 = time.monotonic()
         stage = StageResult(name="log")
         try:
-            # Build a compact summary so we don't POST megabytes of data
             stages_summary = [
                 {"name": s.name, "success": s.success, "duration_ms": s.duration_ms}
                 for s in pipeline_result.stages
             ]
-            payload = {
-                "event_type": "SessionPipeline",
-                "session_id": session_id,
-                "data": {
-                    "transcript_path": pipeline_result.transcript_path,
-                    "stages": stages_summary,
-                    "total_duration_ms": pipeline_result.total_duration_ms,
-                },
-            }
-            try:
-                import httpx
-
-                resp = httpx.post(
-                    f"{self.observatory_url}/api/events",
-                    json=payload,
-                    headers={
-                        "x-local-key": os.environ.get("HOOK_OBS_SECRET_KEY", "workshop-v2-dev-key")
-                    },
-                    timeout=5,
-                )
-                stage.details = {"status_code": resp.status_code}
-                if resp.status_code >= 400:
-                    # Non-fatal — observatory may be offline
-                    stage.success = False
-                    stage.error = f"observatory returned {resp.status_code}"
-            except Exception:
-                # Observatory offline — fall back to local log
-                log.info(
-                    "session_pipeline completed (observatory offline): %s",
-                    json.dumps(stages_summary),
-                )
-                stage.details = {"fallback": "local_log"}
+            log.info(
+                "session_pipeline completed session=%s stages=%s",
+                session_id,
+                json.dumps(stages_summary),
+            )
+            stage.details = {"sink": "local_log", "stages": len(stages_summary)}
         except Exception as exc:
             stage.success = False
             stage.error = str(exc)
