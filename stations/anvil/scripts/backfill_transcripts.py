@@ -27,9 +27,10 @@ from pathlib import Path
 ANVIL_BASE = "http://127.0.0.1:10301/api/anvil"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 
-# Tool registry for CLI/MCP backfill
+# Tool registry for CLI/MCP backfill — moved to hook-dispatcher 2026-05-13
+# (was: stations/hook-observatory/handlers/tool_registry.json)
 _REGISTRY_PATH = (
-    Path.home() / "workshop" / "stations" / "hook-observatory" / "handlers" / "tool_registry.json"
+    Path.home() / "workshop" / "stations" / "hook-dispatcher" / "assets" / "tool_registry.json"
 )
 _MCP_REGISTRY: dict[str, str] = {}
 _CLI_REGISTRY: dict[str, str] = {}
