@@ -30,6 +30,7 @@ dependencies = [
     "igraph>=0.11",
     "workshop-text-ops",
     "pydantic-ai[openai]>=1.77",
+    "immutables>=0.21",
 ]
 
 [build-system]
