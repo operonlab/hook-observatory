@@ -4,7 +4,7 @@ packages:
   - libs/live2d-core
   - apps/desktop-assistant
   - stations/agent-vista/frontend
-  - stations/hook-observatory/frontend
+  # stations/hook-observatory/frontend removed 2026-05-13 (Python dashboard archived)
   - stations/video-edit/frontend
   - stations/sandbox-executor
 

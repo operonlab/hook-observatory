@@ -79,14 +79,8 @@ ignore = [
 "core/src/modules/auth/oauth.py" = ["S106"]  # OAuth URL param named access_token_url
 "core/src/modules/memvault/kg_services.py" = ["E402"]  # conditional import after type definitions
 "core/src/shared/services.py" = ["UP046"]  # Generic[] syntax for BaseCRUDService readability
-"stations/hook-observatory/handlers/auto_format.py" = ["S603", "S607"]  # trusted hardcoded subprocess calls
-"stations/hook-observatory/handlers/base.py" = ["S603"]  # trusted subprocess utility
-"stations/hook-observatory/handlers/relay_signal.py" = ["S108", "S110"]  # /tmp advisory cache + fail-open
-"stations/hook-observatory/handlers/sentinel_notify.py" = ["S110", "S310"]  # fail-open + localhost URL
-"stations/hook-observatory/handlers/session_pipeline.py" = ["S110", "S603"]  # fail-open + trusted subprocess
-"stations/hook-observatory/handlers/verify_commit.py" = ["S108"]  # /tmp state file
-"stations/hook-observatory/handlers/context_supervisor.py" = ["RUF001"]  # Chinese UI strings in notifications
-"stations/hook-observatory/handlers/voice_notify.py" = ["RUF001", "S108", "S110", "S310", "S311", "S603", "S607"]  # Chinese TTS + trusted subprocess + /tmp audio
+# hook-observatory Python handlers removed 2026-05-13 (archived to
+# stations/_archive/hook-observatory-py/); ruff exclusions deleted with them.
 "scripts/workshop_services.py" = ["S603", "S607"]  # trusted service management subprocess calls
 "stations/sentinel/prompt_templates.py" = ["E501", "RUF001"]  # long prompt template strings + Chinese
 "stations/sentinel/main.py" = ["E501", "S603", "S607"]  # Claude CLI subprocess + long strings

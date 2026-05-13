@@ -2,3 +2,6 @@ bin/
 *.test
 *.out
 coverage.*
+
+# Local config overrides — config.example.yaml is the tracked template
+config.yaml

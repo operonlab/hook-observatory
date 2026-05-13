@@ -1,5 +1,11 @@
 # Stage 3 — Ready for settings.json Switch
 
+> **Historical document — Stage 3 went live 2026-04-17.** Python source
+> was fully archived 2026-05-13 (see
+> `stations/_archive/hook-observatory-py/_DEPRECATED.md`); `context_supervisor`
+> stayed out of parity baseline (line 57) and was eventually abandoned
+> rather than ported.
+
 > Status: Binary installed, shadow 100% match, Python fallback armed
 > Date: 2026-04-17
 

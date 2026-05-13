@@ -6,7 +6,8 @@ use tokio::time::timeout;
 /// Mirrors Python remediation.py SIMPLE_RESTART_MAP (2026-04-18 snapshot).
 pub const WORKSHOP_SERVICES: &[&str] = &[
     "core", "paper", "intelflow", "invest",
-    "hook-observatory", "session-channel", "system-monitor",
+    // hook-observatory removed 2026-05-13 (Python dashboard archived)
+    "session-channel", "system-monitor",
     "agent-metrics", "agent-vista", "litellm",
     "auto-survey", "capture-console", "anvil", "blog",
     "cronicle", "mcpproxy", "tmux-webui", "fleet",

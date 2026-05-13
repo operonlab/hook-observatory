@@ -40,15 +40,9 @@ Steps:
 4. Reload nginx: nginx -s reload
 5. Verify: curl -s http://127.0.0.1/ | head -5
 "#,
-        "hook-observatory" => r#"Hook Observatory (port 10100) is unhealthy.
-Failure: {detail}
-
-Steps:
-1. Check logs: tail -50 /opt/homebrew/var/log/workshop/hook-observatory/$(date +%Y-%m-%d).log
-2. Check process: lsof -i :10100
-3. Restart: /Users/joneshong/workshop/scripts/workshop-services.sh restart hook-observatory
-4. Verify: curl -s http://127.0.0.1:10100/
-"#,
+        // hook-observatory removed 2026-05-13 — Python dashboard archived; no
+        // listen port. If sentinel still routes a check there it should be a
+        // configuration leftover; remove the registry entry.
         "postgres" => r#"PostgreSQL container is unhealthy.
 Failure: {detail}
 

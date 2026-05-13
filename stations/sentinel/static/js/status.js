@@ -63,8 +63,7 @@ const SERVICE_DISPLAY = {
     'frontend-memvault-render': '記憶金庫渲染 (Deep)',
     'frontend-intelflow-render':'情報研究渲染 (Deep)',
     // external
-    'hook-observatory':         'Hook 監控台',
-    'hook-observatory-render':  'Hook 監控台渲染 (Deep)',
+    // hook-observatory removed 2026-05-13 (Python dashboard archived)
     'agent-vista':              'Agent Vista',
     'agent-vista-render':       'Agent Vista 渲染 (Deep)',
     'system-monitor':           '系統監控',

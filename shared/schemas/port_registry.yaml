@@ -48,13 +48,10 @@ services:
     optional: false
 
   # ── Stations: Infra & Ops ──
-  - name: hook-observatory
-    port: 10100
-    group: station-infra
-    health_path: /
-    env_var: HOOK_OBS_URL
-    nginx_path: /apps/hook/
-    optional: false
+  # hook-observatory (port 10100) removed 2026-05-13 — Python FastAPI
+  # dashboard archived; session-channel dashboard supersedes its observability
+  # role. Hook execution is a CLI binary (hook-dispatcher) with no listen
+  # port. Port 10100 is now free for reuse.
   - name: session-channel
     port: 10101
     group: station-infra
