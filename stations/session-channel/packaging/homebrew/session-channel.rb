@@ -15,7 +15,7 @@
 class SessionChannel < Formula
   desc "Cross-pane, cross-CLI pub-sub bus over tmux + Redis Streams"
   homepage "https://github.com/operonlab/session-channel"
-  version "0.2.0"
+  version "0.2.2"
   license "MIT"
 
   on_macos do
