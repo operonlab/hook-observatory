@@ -37,13 +37,9 @@ pub struct Settings {
 impl Settings {
     pub fn from_env() -> Self {
         let cargo_dir = station_dir();
-        let parent = cargo_dir
-            .parent()
-            .map(PathBuf::from)
-            .unwrap_or(cargo_dir.clone());
         let default_sqlite = cargo_dir.join("data").join("agent_metrics.sqlite");
-        let default_static = parent.join("agent-metrics").join("static");
-        let default_templates = parent.join("agent-metrics").join("templates");
+        let default_static = cargo_dir.join("static");
+        let default_templates = cargo_dir.join("templates");
 
         Self {
             service_name: env_or("SERVICE_NAME", "agent-metrics"),
@@ -83,8 +79,7 @@ impl Settings {
 
             routing_table_path: env_or(
                 "ROUTING_TABLE_PATH",
-                parent
-                    .join("agent-metrics")
+                cargo_dir
                     .join("config")
                     .join("routing_table.yaml")
                     .to_string_lossy()
