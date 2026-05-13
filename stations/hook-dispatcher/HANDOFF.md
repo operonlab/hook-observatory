@@ -1,5 +1,13 @@
 # hook-dispatcher — Stage 1/2/3 Handoff
 
+> **Historical document — Stage 3 cutover completed 2026-04-17, full
+> hook-observatory Python source archived 2026-05-13** (see
+> `stations/_archive/hook-observatory-py/_DEPRECATED.md`). Kept for
+> reference; the migration tables / Stage 2 split / dependency lists
+> below describe the work as it stood during the cutover, not current
+> state. `context_supervisor` was explicitly **not** ported to Go — the
+> feature was abandoned 2026-05-13 (concept good, scoring inaccurate).
+
 > Status: **Stage 3 ✅ PRODUCTION** — `~/.claude/settings.json` now calls Go binary for all 10 hook events
 > Plan: `~/.claude/plans/p1-agent-majestic-hickey.md`
 > Branch: main (uncommitted)
