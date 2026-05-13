@@ -91,3 +91,6 @@ memvault_*.html
 # Root-level scratch SQLite file (accidentally created by tools that default
 # to ./workshop.db; canonical workshop DBs live under stations/*/data/)
 /workshop.db
+
+# Handoff archive — completed handoff scratch notes kept locally
+/handoff/_done/
