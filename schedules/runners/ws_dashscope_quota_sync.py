@@ -45,6 +45,7 @@ LOG_FILE = LOG_DIR / "ws-dashscope-quota-sync.log"
 REDIS_KEY = "agent-metrics:dashscope:free_quota"
 REDIS_TTL = 86400 * 7  # 7 days (free quota changes slowly)
 CFX_SESSION = "dashscope-sync"
+COOKIES_FILE = HOME / ".camoufox-profiles/master-login-cookies.json"
 TARGET_URL = (
     "https://modelstudio.console.alibabacloud.com/ap-southeast-1/"
     "?tab=dashboard#/model-usage/free-quota"
@@ -74,7 +75,21 @@ def _cfx(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
 def scrape_with_camoufox() -> str | None:
     """Scrape DashScope free quota page via camoufox-cli (primary)."""
     try:
-        open_r = _cfx("--persistent", "open", TARGET_URL)
+        # camoufox-cli only persists non-HttpOnly cookies to master profile;
+        # Alibaba's login_aliyunid_ticket / JSESSIONID are HttpOnly. We export
+        # them once after a manual OAuth login and re-import on every run.
+        if COOKIES_FILE.exists():
+            blank_r = _cfx("--persistent", "open", "about:blank")
+            if blank_r.returncode != 0:
+                log(f"ERROR: camoufox blank open failed: {blank_r.stderr[:200]}")
+                return None
+            imp_r = _cfx("cookies", "import", str(COOKIES_FILE))
+            if imp_r.returncode != 0:
+                log(f"WARN: cookies import failed: {imp_r.stderr[:200]}")
+            open_r = _cfx("open", TARGET_URL)
+        else:
+            log("WARN: no master-login-cookies.json; relying on profile state")
+            open_r = _cfx("--persistent", "open", TARGET_URL)
         if open_r.returncode != 0:
             log(f"ERROR: camoufox open failed: {open_r.stderr[:200]}")
             return None
