@@ -87,3 +87,7 @@ stations/voice-gateway/static/sherpa-onnx-wasm-kws-main.*
 
 # Memvault debug captures (raw HTML response bodies from manual testing)
 memvault_*.html
+
+# Root-level scratch SQLite file (accidentally created by tools that default
+# to ./workshop.db; canonical workshop DBs live under stations/*/data/)
+/workshop.db
