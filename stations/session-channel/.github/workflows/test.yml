@@ -1,0 +1,59 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  test:
+    name: cargo fmt + clippy + test
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      SESSION_CHANNEL_REDIS_URL: redis://127.0.0.1:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      # The default suite covers unit + auth/cookie killers. Every test in
+      # tests/e2e_parity.rs is marked #[ignore] because they require a
+      # running operonlab/session-channel-py reference service at
+      # PYTHON_PORT (10101 by default) for byte-level parity comparison;
+      # CI does not provision Python. Devs run `cargo test -- --ignored`
+      # locally on a box with the reference service.
+      # --all-targets covers integration tests (tests/) + binary unit tests
+      # (the cmd::doctor::tests module lives inside the `channel` binary).
+      # Using --tests alone would skip the bin unit tests.
+      - name: cargo test (default suite)
+        run: cargo test --all-targets

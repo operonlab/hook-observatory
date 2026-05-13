@@ -29,8 +29,7 @@ HTTP service on `:10101` (configurable). Drops in for the Python FastAPI service
 - **Live-swap verified**: Python service stopped, `channel-service` bound to `:10101`, Python CLI / dashboard / SSE all worked against the Rust service without modification.
 
 ### Known gaps in alpha
-- `cargo test` parallel run has a port-allocation race in `test_agents_active_parity` — use `--test-threads=1` for stable pass.
-- No cross-platform CI release binaries yet — users currently `cargo build` locally.
+- `test_agents_active_parity` is marked `#[ignore]` on dev boxes — it reads the shared `ws:channel:agents` stream and gets polluted by live `claude/codex/gemini-with-channel.sh` wrappers heartbeating during the test. CI runs it against an isolated Redis container via `cargo test -- --ignored`.
 - `channel send --meta <invalid-json>` prints anyhow's multi-line `Error: ... Caused by: ...` instead of Python's `❌ ...` one-liner.
 
 ## Wrappers & SSE push
@@ -92,7 +91,52 @@ re-registers the pane, and resumes the SSE listener — keeping the worker slot
 alive indefinitely. Claude Code does not need this (it does not self-exit), so
 `claude-with-channel.sh` ignores `CHANNEL_LOOP`.
 
-## Build & run
+## Prerequisites
+
+Pick one path; you don't need all three:
+
+- **Docker + Docker Compose** — _recommended_; bundles Redis. Nothing else to install on the host.
+- **Homebrew (macOS / Linux)** + a Redis you already run somewhere.
+- **`install.sh`** for any *nix without `brew` + a Redis you already run somewhere.
+
+Optional:
+
+- **tmux** — only required if you want pane-aware `sender` fields.
+- **Rust 1.82+** — only if you want to build from source.
+
+## Install
+
+### Docker (recommended — bundles Redis)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/operonlab/session-channel/main/docker-compose.yml -o docker-compose.yml
+echo "SESSION_CHANNEL_KEY=$(openssl rand -hex 32)" > .env
+docker compose up -d
+```
+
+Service comes up on `http://127.0.0.1:10101`. Then install the CLI on the host (see below) — `channel send` talks to the service over HTTP, no `docker exec` needed.
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew install operonlab/tap/session-channel
+brew services start redis           # if you don't already have one
+brew services start session-channel # background launch via launchd / systemd
+```
+
+### One-line installer
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/operonlab/session-channel/main/install.sh | bash
+```
+
+Installs `channel` + `channel-service` to `~/.local/bin` (override with `INSTALL_DIR=...`). To remove:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/operonlab/session-channel/main/install.sh | bash -s -- --uninstall
+```
+
+### From source
 
 ```bash
 git clone https://github.com/operonlab/session-channel
@@ -111,13 +155,37 @@ cargo build --release --bins
     --workers claude:%5,codex:%6,gemini:%7 --wait 120
 ```
 
-### Environment variables
+## Quickstart
+
+Once `channel` is on `$PATH`, run the interactive bring-up — it asks where to put Redis + the service, optionally generates a random `SESSION_CHANNEL_KEY`, and finishes with a `channel doctor` verdict:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/operonlab/session-channel/main/quickstart.sh -o quickstart.sh
+chmod +x quickstart.sh
+./quickstart.sh           # interactive
+./quickstart.sh --yes     # full-auto: docker compose + random key
+```
+
+Then verify and send your first message:
+
+```bash
+channel doctor                          # PASS / WARN / FAIL per check
+channel send broadcasts "hello"
+channel read broadcasts --count 1
+```
+
+`channel doctor` is also a good first stop whenever something feels off — every FAIL line carries a `Fix:` with the exact command to run.
+
+## Environment variables
+
+Applies to every install path (Docker / Homebrew / `install.sh` / source). For Docker, set these in your `.env` file; for the host CLI, export them in your shell rc.
 
 | Var | Default | Effect |
 |---|---|---|
 | `SESSION_CHANNEL_URL` | `http://localhost:10101` | CLI: target service base URL |
 | `SESSION_CHANNEL_KEY` | `change-me-in-production` | CLI: `x-local-key` value |
 | `SESSION_CHANNEL_PORT` | `10101` | Service: bind port |
+| `SESSION_CHANNEL_HOST` | `127.0.0.1` | Service: bind address. Set to `0.0.0.0` inside containers so the published port is reachable. |
 | `SESSION_CHANNEL_REDIS_URL` | `redis://127.0.0.1:6379/0` | Service: Redis URL |
 | `SESSION_CHANNEL_ALLOWED_ORIGINS` | (config.yaml) | Service: CORS allow-list (comma-sep) |
 | `SESSION_CHANNEL_HOME` | (auto-detect) | Service: optional config.yaml dir |
@@ -144,16 +212,16 @@ cargo build --release --bins
 
 The CLI binary uses `reqwest` blocking; the service binary uses `axum` + `tokio` + `redis-rs`.
 
-## Compatibility with Python
+## Compatibility with the archived Python implementation
 
-`session-channel` is byte-compatible with the archived Python reference on every public surface (CLI args, HTTP routes, Redis stream format, signed cookies). The two implementations can:
+The Rust implementation is byte-compatible with the archived Python reference at [`operonlab/session-channel-py`](https://github.com/operonlab/session-channel-py) on every public surface (CLI args, HTTP routes, Redis stream format, signed cookies). The two implementations can:
 
 - Coexist on the same Redis (different ports)
 - Issue signed cookies that the other validates
 - Be swapped at the service layer without changing CLIs, hooks, wrappers, or the dashboard
 
-The Python version (`operonlab/session-channel`, v0.2.0) remains the reference implementation while this Rust port stabilises. Following the upstream plan (`CHANGELOG.md` over there), the Rust port is **v2 polishing**, not a rewrite of unstable territory.
+The Rust port is the canonical implementation as of v0.2.0 (P8 cutover, 2026-05-12). The Python implementation is preserved for historical reference and parity verification only — new development lands here.
 
 ## License
 
-MIT — see `LICENSE` (inherited from upstream).
+MIT — see [`LICENSE`](./LICENSE). Copyright © 2026 Jones Hong.

@@ -1,0 +1,15 @@
+target/
+.git/
+.github/
+.worktrees/
+tests/
+wrappers/
+docs/
+*.md
+.env
+.env.*
+!.env.example
+docker-compose.yml
+Dockerfile
+install.sh
+quickstart.sh
