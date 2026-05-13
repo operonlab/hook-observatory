@@ -208,6 +208,7 @@ SERVICES = [
         "env": {
             "AGENT_METRICS_PORT": str(get_port("agent-metrics")),
             "AGENT_METRICS_SQLITE_PATH": "/Users/joneshong/workshop/stations/agent-metrics/data/agent_metrics.sqlite",
+            "AGENT_METRICS_SYSMON_COLLECT_INTERVAL": "1",
         },
     },
     # quota sidecar retired 2026-04-20 — Phase 5b-2 ported quota_collector
