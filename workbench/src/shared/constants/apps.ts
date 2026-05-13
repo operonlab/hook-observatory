@@ -294,6 +294,16 @@ export const APP_LIST: AppInfo[] = [
     externalUrl: '/apps/mlt-editor/',
   },
   {
+    id: 'tmux-as-bridge',
+    name: 'tmux as bridge',
+    description: 'tmux 三個月堆疊紀錄影片 · 從狀態列到多 agent 編排',
+    icon: '📼',
+    path: '/tmux-as-bridge',
+    color: '#41ff97',
+    status: 'external',
+    externalUrl: '/apps/tmux-as-bridge/',
+  },
+  {
     id: 'toolbox',
     name: '工具箱',
     description: '獨立靜態網頁小工具集合 — SRT 修正、FSM 儀表板、PWA Debug…',
