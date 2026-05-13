@@ -7,13 +7,13 @@ import (
 
 func TestIsIntermediateChinese(t *testing.T) {
 	cases := map[string]bool{
-		"接下來我會處理這個":        true,
-		"好的，我先來看看":          true,
-		"讓我繼續處理":             true,
-		"您希望我怎麼做？":          true,
-		"請選擇":                  true,
-		"任務已全部完成":            false,
-		"測試通過":                 false,
+		"接下來我會處理這個": true,
+		"好的，我先來看看":  true,
+		"讓我繼續處理":    true,
+		"您希望我怎麼做？":  true,
+		"請選擇":       true,
+		"任務已全部完成":   false,
+		"測試通過":      false,
 	}
 	for msg, want := range cases {
 		if got := IsIntermediate(msg); got != want {
@@ -24,12 +24,12 @@ func TestIsIntermediateChinese(t *testing.T) {
 
 func TestIsIntermediateEnglish(t *testing.T) {
 	cases := map[string]bool{
-		"Let me continue with the next step":           true,
-		"I'll now run the tests":                       true,
-		"starting with the config file":                true,
-		"Alright, moving on to the database":           true,
-		"All tests passed. Done.":                      false,
-		"Job complete.":                                false,
+		"Let me continue with the next step": true,
+		"I'll now run the tests":             true,
+		"starting with the config file":      true,
+		"Alright, moving on to the database": true,
+		"All tests passed. Done.":            false,
+		"Job complete.":                      false,
 	}
 	for msg, want := range cases {
 		if got := IsIntermediate(msg); got != want {

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: go vet
+        run: go vet ./...
+      - name: gofmt
+        run: |
+          gofmt -d . | tee /tmp/fmt.out
+          [ ! -s /tmp/fmt.out ]
+      - name: go test
+        run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: darwin, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: linux,  goarch: amd64 }
+          - { goos: linux,  goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Cross-build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p dist
+          go build -ldflags="-s -w" \
+            -o dist/hook-dispatcher-${{ matrix.goos }}-${{ matrix.goarch }} \
+            ./cmd/hook-dispatcher
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hook-dispatcher-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*

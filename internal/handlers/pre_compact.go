@@ -29,9 +29,9 @@ import (
 
 // PreCompactPayload is the JSON shape sent by Claude Code for the PreCompact event.
 type PreCompactPayload struct {
-	SessionID   string `json:"session_id"`
-	Trigger     string `json:"trigger"`      // "manual" | "auto"
-	Cwd         string `json:"cwd"`
+	SessionID      string `json:"session_id"`
+	Trigger        string `json:"trigger"` // "manual" | "auto"
+	Cwd            string `json:"cwd"`
 	TranscriptPath string `json:"transcript_path"`
 }
 
@@ -87,7 +87,8 @@ func preCompactHandle(eventType, _ string, _ map[string]any, rawInput string) co
 }
 
 // pcWriteCheckpoint persists a compact checkpoint JSON to:
-//   ~/.claude/data/pre-compact/<session_id>.json
+//
+//	~/.claude/data/pre-compact/<session_id>.json
 //
 // If session_id is empty, uses "unknown" to still produce a file.
 func pcWriteCheckpoint(payload PreCompactPayload) error {

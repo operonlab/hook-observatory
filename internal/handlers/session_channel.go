@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
-	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
+	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
 )
 
 const (
@@ -235,7 +235,7 @@ func sessionChannelHandleUserPromptSubmit(_ string) core.HookResult {
 		since := cursor[topic]
 		if since == "" {
 			// First time: anchor at "now - 1h" so we don't flood with stale messages.
-			anchorMs := time.Now().Add(-1*time.Hour).UnixMilli()
+			anchorMs := time.Now().Add(-1 * time.Hour).UnixMilli()
 			since = fmt.Sprintf("%d-0", anchorMs)
 		}
 		msgs, lastID := sessionChannelFetchSince(client, baseURL, topic, since)

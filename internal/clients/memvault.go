@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
-	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
+	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
 )
 
 const memvaultTimeout = 10 * time.Second

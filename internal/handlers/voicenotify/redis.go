@@ -90,9 +90,9 @@ func DebounceOK(eventType, sessionID string) bool {
 	return true
 }
 
-func activeKey(ident string) string   { return fmt.Sprintf("tts:active_agents:%s", ident) }
-func lastActKey(ident string) string  { return fmt.Sprintf("tts:last_activity:%s", ident) }
-func pendingKey(ident string) string  { return fmt.Sprintf("tts:pending:%s", ident) }
+func activeKey(ident string) string  { return fmt.Sprintf("tts:active_agents:%s", ident) }
+func lastActKey(ident string) string { return fmt.Sprintf("tts:last_activity:%s", ident) }
+func pendingKey(ident string) string { return fmt.Sprintf("tts:pending:%s", ident) }
 
 // TrackSubagentStart increments the active-agent counter and cancels any
 // pending deferred announcement.

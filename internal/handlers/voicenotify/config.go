@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
+	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
 )
 
 // Env-overridable configuration.
@@ -34,7 +34,7 @@ var (
 	TTSEngine    = envOr("CLAUDE_TTS_ENGINE", "edge")
 	TTSVoice     = envOr("CLAUDE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
 	Voice        = envOr("CLAUDE_VOICE_ID", "zh-CN-XiaoxiaoNeural") // edge-tts fallback
-	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")              // edge-tts fallback
+	Rate         = envOr("CLAUDE_VOICE_RATE", "+20%")               // edge-tts fallback
 	PlaybackVol  = envOr("CLAUDE_VOICE_VOLUME", "0.4")
 	WebuiURL     = envOr("TMUX_WEBUI_URL", portregistry.URL("tmux-webui", "", 10105))
 	DebounceTTL  = envOrInt("CLAUDE_VOICE_DEBOUNCE", 20)
@@ -92,28 +92,28 @@ var NumCN = []string{"零", "一", "二", "三", "四", "五", "六", "七", "�
 
 // TeammateTypes are agent/subagent types that should never trigger Stop TTS.
 var TeammateTypes = map[string]bool{
-	"Plan":                                   true,
-	"Explore":                                true,
-	"Code":                                   true,
-	"Debug":                                  true,
-	"Review":                                 true,
-	"worker":                                 true,
-	"explorer":                               true,
-	"reviewer":                               true,
-	"designer":                               true,
-	"foreman":                                true,
-	"researcher":                             true,
-	"browser":                                true,
-	"media":                                  true,
-	"codex-dispatcher":                       true,
-	"gemini-dispatcher":                      true,
-	"copilot-dispatcher":                     true,
-	"writer":                                 true,
-	"statusline-setup":                       true,
-	"claude-code-guide":                      true,
+	"Plan":               true,
+	"Explore":            true,
+	"Code":               true,
+	"Debug":              true,
+	"Review":             true,
+	"worker":             true,
+	"explorer":           true,
+	"reviewer":           true,
+	"designer":           true,
+	"foreman":            true,
+	"researcher":         true,
+	"browser":            true,
+	"media":              true,
+	"codex-dispatcher":   true,
+	"gemini-dispatcher":  true,
+	"copilot-dispatcher": true,
+	"writer":             true,
+	"statusline-setup":   true,
+	"claude-code-guide":  true,
 	"audit-context-building:function-analyzer": true,
-	"chaos-engineer":                         true,
-	"general-purpose":                        true,
+	"chaos-engineer":  true,
+	"general-purpose": true,
 }
 
 func envOr(key, fallback string) string {

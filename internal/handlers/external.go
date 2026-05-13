@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
-	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
+	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
 )
 
 // recallEndpoint is the Core API URL for server-side recall text building.
@@ -113,12 +113,12 @@ const skillTrackerSpaceID = "default"
 var skillTrackerCoreAPI = portregistry.URL("core", "", 10000)
 
 var skillTrackerKnowledgeSkills = map[string]bool{
-	"smart-search":     true,
-	"company-intel":    true,
+	"smart-search":      true,
+	"company-intel":     true,
 	"competitive-intel": true,
-	"content-writer":   true,
-	"brainstorming":    true,
-	"meeting-insights": true,
+	"content-writer":    true,
+	"brainstorming":     true,
+	"meeting-insights":  true,
 }
 
 func skillTrackerInProc(rawInput string) {
@@ -362,11 +362,11 @@ func progressiveExtractInProc(rawInput string) {
 	stateFile := filepath.Join(progressiveDir, sessionID+".json")
 
 	type progressiveState struct {
-		SessionID        string   `json:"session_id"`
-		LineCount        int      `json:"line_count"`
-		Observations     []string `json:"observations"`
-		UpdatedAt        string   `json:"updated_at"`
-		CompactionCount  int      `json:"compaction_count"`
+		SessionID       string   `json:"session_id"`
+		LineCount       int      `json:"line_count"`
+		Observations    []string `json:"observations"`
+		UpdatedAt       string   `json:"updated_at"`
+		CompactionCount int      `json:"compaction_count"`
 	}
 
 	var priorState *progressiveState
@@ -464,7 +464,10 @@ func progressiveExtractInProc(rawInput string) {
 
 	if r == nil || r.ExitCode != 0 {
 		progressiveLog(fmt.Sprintf("Claude call failed (exit %d) in %.1fs.", func() int {
-			if r == nil { return -1 }; return r.ExitCode
+			if r == nil {
+				return -1
+			}
+			return r.ExitCode
 		}(), elapsed.Seconds()))
 		return
 	}

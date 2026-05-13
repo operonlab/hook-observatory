@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	trivialSizeBytes  int64 = 3_000
-	minRealMsgsBytes  int64 = 50_000
-	scanLinesCap            = 100
+	trivialSizeBytes int64 = 3_000
+	minRealMsgsBytes int64 = 50_000
+	scanLinesCap           = 100
 )
 
 // RunPipeline is the Go orchestrator for a SessionEnd session pipeline.

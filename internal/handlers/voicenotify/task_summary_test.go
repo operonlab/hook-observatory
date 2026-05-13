@@ -53,7 +53,7 @@ func TestTaskSummaryFromPrompt_StripsFillerPrefixes(t *testing.T) {
 
 func TestTaskSummaryFromPrompt_StripsLeadingEmoji(t *testing.T) {
 	cases := map[string]string{
-		"✳ 修 emoji 過濾 bug":    "修 emoji 過濾 bug",
+		"✳ 修 emoji 過濾 bug":     "修 emoji 過濾 bug",
 		"⚡relay 任務 dispatch":   "relay 任務 dispatch",
 		"⠐ Claude Code 修 hook": "Claude Code 修 hook",
 	}
@@ -242,7 +242,7 @@ func TestWriteTaskSummary_LongOldContentNotProtected(t *testing.T) {
 	long := strings.Repeat("舊", 40)
 	_ = os.WriteFile(path, []byte(long), 0o644)
 
-	WriteTaskSummary(path, "新")  // < 6 rune fail upstream — but WriteTaskSummary itself accepts any non-empty
+	WriteTaskSummary(path, "新") // < 6 rune fail upstream — but WriteTaskSummary itself accepts any non-empty
 	WriteTaskSummary(path, "新 summary OK 覆蓋")
 	got, _ := os.ReadFile(path)
 	if string(got) != "新 summary OK 覆蓋" {
@@ -330,8 +330,8 @@ func TestIsSystemPrompt_RejectsHumanPrompts(t *testing.T) {
 		"幫我修 voice_notify 的 emoji 過濾 bug",
 		"我想加 UserPromptSubmit hook",
 		"generate-session.sh 這個檔在哪",
-		"Could you generate a test for this?",  // human-phrased, not template
-		"請 summarize 這個 PR 給我聽",            // mixed but human
+		"Could you generate a test for this?", // human-phrased, not template
+		"請 summarize 這個 PR 給我聽",               // mixed but human
 		// "你是 X" prefix but not a system role — must NOT trigger Guard 0.6.
 		"你是怎麼處理 cache 的",
 		"你是不是該重啟 redis 看看",
