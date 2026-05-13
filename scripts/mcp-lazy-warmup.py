@@ -25,7 +25,7 @@ ALWAYS_ON = {
     "taskflow",
     "sandbox-executor",
     "tmux-relay",
-    "hook-observatory",
+    # hook-observatory removed 2026-05-13 (Python dashboard + MCP server archived)
     "session-channel",
     "fleet",
     "capture",

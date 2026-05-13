@@ -184,16 +184,9 @@ export const APP_LIST: AppInfo[] = [
     status: 'external',
     externalUrl: '/apps/files/',
   },
-  {
-    id: 'hook-observatory',
-    name: 'Hook 監控台',
-    description: 'Claude Code Hook 事件監控、統計分析',
-    icon: '📡',
-    path: '/hook-observatory',
-    color: '#89b4fa',
-    status: 'external',
-    externalUrl: '/apps/hook/',
-  },
+  // hook-observatory (Hook 監控台) removed 2026-05-13 — Python FastAPI
+  // dashboard archived to stations/_archive/hook-observatory-py/. Session
+  // Channel dashboard below takes over the observability role.
   {
     id: 'session-channel',
     name: 'Session 頻道',

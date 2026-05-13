@@ -92,24 +92,10 @@ location /apps/channel/ {
     add_header Cache-Control "no-store" always;
 }
 
-# --- hook-observatory (proxy + websocket, AUTH) ---
-location = /apps/hook { return 301 /apps/hook/; }
-
-location /apps/hook/ {
-    auth_request /_v2_auth_check;
-    error_page 401 = @auth_redirect;
-    limit_req zone=global burst=100 nodelay;
-    proxy_pass http://127.0.0.1:10100/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto https;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
-    proxy_buffering off;
-    add_header Cache-Control "no-store" always;
-}
+# hook-observatory (/apps/hook/ → 127.0.0.1:10100) removed 2026-05-13 —
+# Python FastAPI dashboard archived; session-channel dashboard takes over
+# observability. If you still have an active Nginx config on the host that
+# references this path, run `nginx -t` then reload after this file syncs.
 
 # --- tmux-webui (proxy + websocket, AUTH) ---
 location = /apps/tmux { return 301 /apps/tmux/; }

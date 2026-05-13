@@ -201,7 +201,7 @@ fn build_checks() -> Vec<Check> {
         ("intelflow",       "intelflow",        None,                                        None,                         "internal", false, 10),
         ("invest",          "invest",           None,                                        None,                         "internal", false, 10),
         // stations (infra)
-        ("hook-observatory","hook-observatory", None,                                        None,                         "external", false, 10),
+        // hook-observatory removed 2026-05-13 — Python dashboard archived; no listen port
         ("session-channel", "session-channel",  None,                                        None,                         "external", false, 10),
         ("system-monitor",  "system-monitor",   None,                                        None,                         "external", false, 10),
         ("tmux-webui",      "tmux-webui",       None,                                        None,                         "external", false, 10),

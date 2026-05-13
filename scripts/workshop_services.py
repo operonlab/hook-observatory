@@ -134,15 +134,11 @@ SERVICES = [
         "health": get("agent-vista").health_url,
         "workdir": "/Users/joneshong/workshop/stations/agent-vista",
     },
-    {
-        "name": "hook-observatory",
-        "type": "uvicorn",
-        "cmd": "/Users/joneshong/workshop/stations/hook-observatory/.venv/bin/python3 main.py",
-        "port": get_port("hook-observatory"),
-        "health": get("hook-observatory").health_url,
-        "workdir": "/Users/joneshong/workshop/stations/hook-observatory",
-        "env": {"HOOK_OBS_PORT": str(get_port("hook-observatory"))},
-    },
+    # hook-observatory removed 2026-05-13 — Python source archived to
+    # stations/_archive/hook-observatory-py/; the FastAPI dashboard's
+    # observability function is taken over by session-channel's dashboard.
+    # Hook execution itself runs through the Go binary at
+    # ~/.claude/hooks/hook-dispatcher (sources at stations/hook-dispatcher/).
     {
         "name": "session-channel",
         # P8 cutover 2026-05-12: Rust takeover; Python archived at
