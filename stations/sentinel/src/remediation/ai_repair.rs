@@ -1,10 +1,10 @@
 //! Layer 3 AI repair via tmux-relay (1:1 port of remediation.py Remediator).
 //!
 //! Flow:
-//!   1. `pane_pool.sh acquire 1` → pane id
+//!   1. `python3 pane_pool.py acquire 1` → pane id
 //!   2. Build prompt via prompt_templates::build_repair_prompt
 //!   3. Signal file: /tmp/sentinel-repair-<svc>-<ts>
-//!   4. `relay.sh <pane> "" "claude -p <shlex-quoted prompt>" --no-forward --signal <signal>`
+//!   4. `python3 relay.py <pane> "" "claude -p <shlex-quoted prompt>" --no-forward --signal <signal>`
 //!   5. repair_loop polls signal file (async) — success if no "error" substring
 //!
 //! Timeout default: 600s. Managed by Remediator.active_jobs map.
@@ -18,8 +18,9 @@ use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
 
-const PANE_POOL_SCRIPT: &str = "/Users/joneshong/.claude/skills/tmux-relay/scripts/pane_pool.sh";
-const RELAY_SCRIPT: &str = "/Users/joneshong/.claude/skills/tmux-relay/scripts/relay.sh";
+const PANE_POOL_SCRIPT: &str = "/Users/joneshong/.claude/skills/tmux-relay/scripts/pane_pool.py";
+const RELAY_SCRIPT: &str = "/Users/joneshong/.claude/skills/tmux-relay/scripts/relay.py";
+const PYTHON3: &str = "/Users/joneshong/.local/bin/python3";
 const SIGNAL_DIR: &str = "/tmp";
 const ACQUIRE_TIMEOUT_SEC: u64 = 15;
 const DISPATCH_TIMEOUT_SEC: u64 = 30;
@@ -76,11 +77,11 @@ impl AiRepairEngine {
 
         // Script presence check
         if !std::path::Path::new(PANE_POOL_SCRIPT).exists() {
-            tracing::warn!("pane_pool.sh missing at {}", PANE_POOL_SCRIPT);
+            tracing::warn!("pane_pool.py missing at {}", PANE_POOL_SCRIPT);
             return Outcome::PaneUnavailable;
         }
         if !std::path::Path::new(RELAY_SCRIPT).exists() {
-            tracing::warn!("relay.sh missing at {}", RELAY_SCRIPT);
+            tracing::warn!("relay.py missing at {}", RELAY_SCRIPT);
             return Outcome::PaneUnavailable;
         }
 
@@ -160,7 +161,7 @@ impl AiRepairEngine {
 async fn acquire_pane() -> Option<String> {
     let out = timeout(
         Duration::from_secs(ACQUIRE_TIMEOUT_SEC),
-        Command::new("bash")
+        Command::new(PYTHON3)
             .args([PANE_POOL_SCRIPT, "acquire", "1"])
             .output(),
     )
@@ -181,7 +182,7 @@ async fn acquire_pane() -> Option<String> {
 async fn relay_dispatch(pane: &str, command: &str, signal_file: &std::path::Path) -> bool {
     let out = timeout(
         Duration::from_secs(DISPATCH_TIMEOUT_SEC),
-        Command::new("bash")
+        Command::new(PYTHON3)
             .args([
                 RELAY_SCRIPT,
                 pane,
