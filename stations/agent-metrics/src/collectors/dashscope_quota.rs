@@ -27,6 +27,13 @@ const CFX_SESSION: &str = "dashscope-sync";
 const TARGET_URL: &str = "https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=dashboard#/model-usage/free-quota";
 const FALLBACK_JSON_PATH: &str = "/tmp/agent-metrics-qwen-quota.json";
 const LOCK_FILE_PATH: &str = "/tmp/ws_dashscope_quota_sync.lock";
+const COOKIES_REL_PATH: &str = ".camoufox-profiles/master-login-cookies.json";
+
+fn cookies_file_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    let path = std::path::PathBuf::from(home).join(COOKIES_REL_PATH);
+    path.exists().then_some(path)
+}
 
 async fn cfx(args: &[&str], timeout_s: u64) -> Result<std::process::Output> {
     let mut cmd = Command::new("camoufox-cli");
@@ -43,11 +50,51 @@ async fn cfx_close() {
 }
 
 async fn scrape_with_camoufox() -> Option<String> {
-    let opened = match cfx(&["--persistent", "open", TARGET_URL], 30).await {
-        Ok(o) => o,
-        Err(e) => {
-            tracing::error!(error = %e, "cfx_open_failed");
+    // camoufox-cli only persists non-HttpOnly cookies to the master profile.
+    // Alibaba's login_aliyunid_ticket / JSESSIONID are HttpOnly, so we export
+    // them once after a manual OAuth login and re-import on every run.
+    let opened = if let Some(cookies) = cookies_file_path() {
+        let blank = match cfx(&["--persistent", "open", "about:blank"], 30).await {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::error!(error = %e, "cfx_blank_open_failed");
+                return None;
+            }
+        };
+        if !blank.status.success() {
+            tracing::error!(
+                stderr = %String::from_utf8_lossy(&blank.stderr),
+                "cfx_blank_open_nonzero"
+            );
+            cfx_close().await;
             return None;
+        }
+        let cookies_str = cookies.to_string_lossy();
+        match cfx(&["cookies", "import", &cookies_str], 15).await {
+            Ok(o) if !o.status.success() => {
+                tracing::warn!(
+                    stderr = %String::from_utf8_lossy(&o.stderr),
+                    "cookies_import_nonzero"
+                );
+            }
+            Err(e) => tracing::warn!(error = %e, "cookies_import_failed"),
+            _ => {}
+        }
+        match cfx(&["open", TARGET_URL], 30).await {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::error!(error = %e, "cfx_open_failed");
+                return None;
+            }
+        }
+    } else {
+        tracing::warn!("no master-login-cookies.json; relying on profile state");
+        match cfx(&["--persistent", "open", TARGET_URL], 30).await {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::error!(error = %e, "cfx_open_failed");
+                return None;
+            }
         }
     };
     if !opened.status.success() {
