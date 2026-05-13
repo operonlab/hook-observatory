@@ -154,11 +154,17 @@ pub fn build_fill_script(
       }}
     }}
 
-    // 8. Wait for redirect to result page (detect URL change)
+    // 8. Wait for form to unmount OR result text appears.
+    // (SurveyCake quiz does NOT change URL after submit; waiting for URL change
+    // burns 30s every time. Watch for the success indicator instead.)
     try {{
       await page.waitForFunction(
-        (oldUrl) => window.location.href !== oldUrl,
-        preSubmitUrl,
+        () => {{
+          const t = document.body.innerText;
+          return /成績|分數|Score|感謝|你的|本次/.test(t)
+            || !document.querySelector('[data-qa^="subject-"]');
+        }},
+        null,
         {{ timeout: 30000 }}
       );
     }} catch (e) {{}}
