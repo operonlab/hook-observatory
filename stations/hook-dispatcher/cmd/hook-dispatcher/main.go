@@ -115,4 +115,3 @@ func pythonFallback(eventType string, raw []byte) bool {
 	}
 	return true
 }
-

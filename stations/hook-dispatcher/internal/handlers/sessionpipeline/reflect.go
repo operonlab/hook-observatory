@@ -514,16 +514,16 @@ func StageReflect(sessionID, transcriptPath string, stagesOK, stagesFail int) St
 
 func reflectDetails(m ReflectMetrics) map[string]any {
 	return map[string]any{
-		"outcome":           m.Outcome,
-		"quality_score":     m.QualityScore,
-		"tool_success_rate": m.ToolSuccessRate,
+		"outcome":            m.Outcome,
+		"quality_score":      m.QualityScore,
+		"tool_success_rate":  m.ToolSuccessRate,
 		"context_efficiency": m.ContextEfficiency,
-		"turn_count":        m.TurnCount,
-		"total_tokens":      m.TotalTokens,
-		"db_written":        false,
-		"reflection_fed":    m.ReflectionFed,
-		"invariant_count":   m.InvariantCount,
-		"derived_count":     m.DerivedCount,
-		"failure_patterns":  m.FailurePatterns,
+		"turn_count":         m.TurnCount,
+		"total_tokens":       m.TotalTokens,
+		"db_written":         false,
+		"reflection_fed":     m.ReflectionFed,
+		"invariant_count":    m.InvariantCount,
+		"derived_count":      m.DerivedCount,
+		"failure_patterns":   m.FailurePatterns,
 	}
 }
