@@ -414,7 +414,7 @@
     {
       "name": "ws-dashscope-quota-sync",
       "label": "com.joneshong.scheduler.ws-dashscope-quota-sync",
-      "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs dashscope-quota-sync",
+      "command": "/Users/joneshong/.cargo/shared-target/release/agent-metrics dashscope-quota-sync",
       "schedule": {
         "calendar": {
           "Hour": 18,
@@ -429,7 +429,7 @@
     {
       "name": "ws-provider-balance-sync",
       "label": "com.joneshong.scheduler.ws-provider-balance-sync",
-      "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs provider-balance-sync",
+      "command": "/Users/joneshong/.cargo/shared-target/release/agent-metrics provider-balance-sync",
       "schedule": {
         "calendar": {
           "Hour": 18,
@@ -444,7 +444,7 @@
     {
       "name": "ws-model-catalog-sync",
       "label": "com.joneshong.scheduler.ws-model-catalog-sync",
-      "command": "/Users/joneshong/workshop/stations/agent-metrics-rs/target/release/agent-metrics-rs model-catalog-sync",
+      "command": "/Users/joneshong/.cargo/shared-target/release/agent-metrics model-catalog-sync",
       "schedule": {
         "calendar": {
           "DayOfWeek": 1,
@@ -453,6 +453,18 @@
         }
       },
       "description": "每週一 19:00: 爬 4 大 leaderboard (Arena/LiveBench/AA/OpenRouter) → Borda 共識 → Redis. 2026-04-20 cutover: Python ws_model_catalog_sync.py → agent-metrics-rs model-catalog-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_model_catalog_sync.py",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-statusline-cost-sync",
+      "label": "com.joneshong.scheduler.ws-statusline-cost-sync",
+      "command": "/bin/sh -c '/Users/joneshong/.cargo/shared-target/release/agent-metrics usage-today > /Users/joneshong/.claude/data/llm-usage/daily.json'",
+      "schedule": {
+        "interval": 300
+      },
+      "description": "每 5 分鐘: 寫今天 Claude cost 到 ~/.claude/data/llm-usage/daily.json，供 Claude Code statusline.sh 顯示餘額 (💰)。2026-05-12 補設: agent-metrics 從 Python→Rust 遷移時遺漏此寫檔邏輯（原由 aggregator loop 內部寫），改由 Cronicle 排程接管。",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
