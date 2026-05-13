@@ -413,8 +413,13 @@ pub async fn check_tier_available(tier: &str, _settings: &Settings) -> bool {
         return true;
     }
     let url = match tier {
-        "relay" => std::env::var("AGENT_METRICS_RELAY_URL")
-            .unwrap_or_else(|_| crate::config::yaml_url("hook-observatory", "/health", 10100)),
+        // Relay used to default to hook-observatory's URL (vestigial; that
+        // station was archived 2026-05-13 — Phase A cutover). Now requires
+        // an explicit AGENT_METRICS_RELAY_URL; absent → tier unavailable.
+        "relay" => match std::env::var("AGENT_METRICS_RELAY_URL") {
+            Ok(u) => u,
+            Err(_) => return false,
+        },
         // fleet = port 10106 in port_registry.yaml (station-infra group).
         // 10209 was a transient remote-node-rs shadow port (commit da287eaf),
         // never fleet's registered endpoint. See dispatch.rs comment for full

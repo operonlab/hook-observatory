@@ -6,13 +6,12 @@ Stages (in order):
     2. extract  — memvault knowledge extraction (background)
     3. archive  — session-archiver scan + score
     4. reflect  — quality scoring + context efficiency metrics
-    5. log      — observatory event logging
+    5. log      — pipeline summary to local logger
 
 Usage:
     pipeline run <session_id> [--transcript PATH]   Run full SessionEnd pipeline
     pipeline stages                                  List pipeline stages
     pipeline config                                  Show current configuration
-    pipeline status                                  Show last pipeline run status
 
 Options:
     --json   Output as JSON
@@ -124,36 +123,6 @@ def cmd_config(args: argparse.Namespace) -> None:
             print(f"  {k}: {v}")
 
 
-def cmd_status(args: argparse.Namespace) -> None:
-    """Show status of the last pipeline run (from observatory if available)."""
-    client = SessionPipelineClient()
-    try:
-        import httpx
-
-        resp = httpx.get(
-            f"{client.observatory_url}/api/events",
-            params={"event_type": "SessionPipeline", "limit": 1},
-            headers={"x-local-key": os.environ.get("HOOK_OBS_SECRET_KEY", "workshop-v2-dev-key")},
-            timeout=5,
-        )
-        if resp.status_code == 200:
-            events = resp.json()
-            if isinstance(events, list) and events:
-                latest = events[0]
-                if args.json:
-                    _out(latest, True)
-                else:
-                    print("Last pipeline run:")
-                    _pretty(latest, indent=1)
-                return
-        print("No pipeline run history found in observatory.")
-    except Exception as exc:
-        if args.json:
-            _out({"error": str(exc), "note": "observatory may be offline"}, True)
-        else:
-            print(f"Observatory unavailable ({exc}). No status to display.")
-
-
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
@@ -179,9 +148,6 @@ def build_parser() -> argparse.ArgumentParser:
     # config
     sub.add_parser("config", help="Show current pipeline configuration")
 
-    # status
-    sub.add_parser("status", help="Show last pipeline run status from observatory")
-
     return parser
 
 
@@ -197,7 +163,6 @@ def main() -> None:
         "run": cmd_run,
         "stages": cmd_stages,
         "config": cmd_config,
-        "status": cmd_status,
     }
     dispatch[args.command](args)
 
