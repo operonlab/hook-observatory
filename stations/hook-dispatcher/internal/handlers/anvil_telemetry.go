@@ -60,13 +60,17 @@ var (
 )
 
 func init() {
-	// Load tool_registry.json from hook-observatory handlers dir
-	root := os.Getenv("HOOK_OBSERVATORY_ROOT")
+	// Load tool_registry.json from the hook-dispatcher assets dir.
+	// HOOK_DISPATCHER_ROOT (preferred) / HOOK_OBSERVATORY_ROOT (backward-compat) override default.
+	root := os.Getenv("HOOK_DISPATCHER_ROOT")
+	if root == "" {
+		root = os.Getenv("HOOK_OBSERVATORY_ROOT")
+	}
 	if root == "" {
 		home, _ := os.UserHomeDir()
-		root = filepath.Join(home, "workshop", "stations", "hook-observatory")
+		root = filepath.Join(home, "workshop", "stations", "hook-dispatcher")
 	}
-	regPath := filepath.Join(root, "handlers", "tool_registry.json")
+	regPath := filepath.Join(root, "assets", "tool_registry.json")
 	if data, err := os.ReadFile(regPath); err == nil {
 		var reg struct {
 			MCPServers  map[string]string `json:"mcp_servers"`
