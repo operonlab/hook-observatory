@@ -53,7 +53,6 @@ def _try_import(name: str):
 anvil_telemetry = _try_import("anvil_telemetry")
 attitude_signal = _try_import("attitude_signal")
 context_relay = _try_import("context_relay")
-context_supervisor = _try_import("context_supervisor")
 external = _try_import("external")
 memory_sync = _try_import("memory_sync")
 relay_signal = _try_import("relay_signal")
@@ -113,7 +112,6 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
             ("Bash", rtk_rewrite.handle),
             ("Write|Edit", skill_security.handle),
             _opt(None, session_channel),
-            # context_supervisor: disabled — concept good, scoring inaccurate
             (None, observability.handle),
         ],
         "PostToolUse": [
@@ -125,7 +123,6 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
             _opt(None, anvil_telemetry),
             _opt("Skill", external, "skill_tracker"),
             (None, plan_impl_gate.handle),
-            # context_supervisor: disabled
             (None, observability.handle),
         ],
         "Stop": [
@@ -136,7 +133,6 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
             (None, pm_autopilot.handle),
             _opt(None, voice_notify),
             (None, session_cost.handle),
-            # context_supervisor: disabled
             (None, observability.handle),
         ],
         "Notification": [
@@ -152,7 +148,6 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
             (None, observability.handle),
         ],
         "UserPromptSubmit": [
-            # context_supervisor: disabled
             _opt(None, external, "recall"),
             (None, plan_impl_gate.handle),
             (None, session_namer.handle_color_hint),
@@ -169,7 +164,6 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
             (None, cleanup_versions.handle),
             (None, pm_autopilot.handle),
             _opt(None, utility_watchdog),
-            # context_supervisor: disabled
             (None, observability.handle),
         ],
         "SubagentStart": [
@@ -183,7 +177,6 @@ REGISTRY: dict[str, list[tuple[str | None, Handler]]] = {
             (None, observability.handle),
         ],
         "PreCompact": [
-            # context_supervisor: disabled
             _opt(None, external, "progressive_extract"),
             _opt(None, context_relay),
             (None, observability.handle),
