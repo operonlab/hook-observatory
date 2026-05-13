@@ -33,6 +33,34 @@ LOG_RETAIN_DAYS = 90
 LOG_MAX_SIZE = 10 * 1024 * 1024  # 10MB
 
 
+def _core_preflight() -> tuple[bool, str]:
+    """Verify core/src/main can be imported without errors.
+
+    Runs in a subprocess so DB/Redis connections opened by module-level
+    code are cleaned up on exit — no side effects in the launcher process.
+    Catches missing venv packages (e.g. `immutables`) before uvicorn spawns
+    and then silently dies 30s later.
+    """
+    py = "/Users/joneshong/workshop/.venv/bin/python3"
+    cwd = "/Users/joneshong/workshop/core"
+    try:
+        result = subprocess.run(
+            [py, "-c", "import src.main"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            cwd=cwd,
+        )
+        if result.returncode == 0:
+            return True, ""
+        first_err = result.stderr.strip().splitlines()[0] if result.stderr else "unknown"
+        return False, f"core import failed: {first_err}"
+    except FileNotFoundError:
+        return False, f"core venv python not found at {py}"
+    except subprocess.TimeoutExpired:
+        return False, "core preflight timed out (15s) — import src.main hung"
+
+
 def _litellm_preflight() -> tuple[bool, str]:
     """Verify litellm[proxy] extras are intact in its uv tool env.
 
@@ -84,6 +112,7 @@ SERVICES = [
         "port": get_port("core"),
         "health": f"http://127.0.0.1:{get_port('core')}/docs",
         "workdir": "/Users/joneshong/workshop/core",
+        "preflight": _core_preflight,
     },
     # ── Microservices (extracted from Core) ──
     {
