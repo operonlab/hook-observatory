@@ -19,7 +19,11 @@ pub struct Settings {
     pub litellm_base_url: String,
     pub litellm_master_key: String,
 
-    pub hook_url: String,
+    /// Directory where hook-dispatcher (Go binary) writes Claude Code hook
+    /// events as JSONL. Replaces the old HTTP `hook_url` after the
+    /// hook-observatory station was archived 2026-05-13. Override via
+    /// `AGENT_METRICS_SPOOL_DIR` or `HOOK_OBS_SPOOL_DIR`.
+    pub spool_dir: String,
     pub fallback_path: String,
 
     pub sysmon_collect_interval: u64,
@@ -60,7 +64,10 @@ impl Settings {
             litellm_base_url: env_or("LITELLM_BASE_URL", &yaml_url("litellm", "", 4000)),
             litellm_master_key: env_or("LITELLM_MASTER_KEY", "sk-litellm-local-dev"),
 
-            hook_url: env_or("HOOK_URL", &yaml_url("hook-observatory", "/api/hooks", 10100)),
+            spool_dir: env_or(
+                "SPOOL_DIR",
+                crate::spool::default_spool_dir().to_string_lossy().as_ref(),
+            ),
             fallback_path: env_or("FALLBACK_PATH", "/tmp/agent-metrics-latest.json"),
 
             sysmon_collect_interval: env_or("SYSMON_COLLECT_INTERVAL", "5")
@@ -130,13 +137,15 @@ mod tests {
 
     /// yaml_url must derive port from port_registry.yaml when the service exists.
     /// Regression guard for the drift-debt migration (P3, 2026-05-12).
+    /// Asserted against agent-metrics itself — hook-observatory was the
+    /// original target but that station was archived 2026-05-13.
     #[test]
     fn yaml_url_uses_registry_port_when_present() {
-        let url = yaml_url("hook-observatory", "/api/hooks", 9999);
-        let expected_port = workshop_port_registry::get("hook-observatory")
-            .expect("hook-observatory must be in port_registry.yaml")
+        let url = yaml_url("agent-metrics", "/health", 9999);
+        let expected_port = workshop_port_registry::get("agent-metrics")
+            .expect("agent-metrics must be in port_registry.yaml")
             .port;
-        assert_eq!(url, format!("http://127.0.0.1:{expected_port}/api/hooks"));
+        assert_eq!(url, format!("http://127.0.0.1:{expected_port}/health"));
     }
 
     /// yaml_url falls back to fallback_port if the service is not in yaml.

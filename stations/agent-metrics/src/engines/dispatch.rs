@@ -183,8 +183,21 @@ pub async fn dispatch_relay(
     let task_id = format!("relay-{}", std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0));
     let started = Instant::now();
-    let url = std::env::var("AGENT_METRICS_RELAY_URL")
-        .unwrap_or_else(|_| crate::config::yaml_url("hook-observatory", "/run", 10100));
+    // Relay endpoint is opt-in via env var. The historical default pointed
+    // at hook-observatory's port (vestigial copy-paste — that station was
+    // archived 2026-05-13); without an explicit URL the relay tier is
+    // simply unavailable, which is the correct signal for routing fallback.
+    let url = match std::env::var("AGENT_METRICS_RELAY_URL") {
+        Ok(u) => u,
+        Err(_) => {
+            return AgentResult::fail(
+                task_id,
+                "claude",
+                "Relay tier disabled: AGENT_METRICS_RELAY_URL not set".to_string(),
+                started,
+            )
+        }
+    };
     let body = serde_json::json!({
         "prompt": prompt,
         "cwd": cwd,
