@@ -1,5 +1,7 @@
 # Agent Harness 12 元素 ↔ Workshop 對照表
 
+> 📚 **相關文檔**：[ConardLi 6 核心對照表](./agent-harness-conardli-6core.md) — 另一個切法（職責切片 vs 結構切片），兩者互補。
+
 ## 背景
 
 「Agent Harness」是 Avi Chawla（Daily Dose of Data Science）綜合 Anthropic、OpenAI、LangChain 與業界實踐後提出的視覺化架構，把 agent 系統拆成三圈共 12 個元素：
