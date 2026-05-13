@@ -252,11 +252,11 @@ func StageRedact(sessionID, transcriptPath string) StageResult {
 	}
 
 	r.Details = map[string]any{
-		"file_path":   transcriptPath,
-		"redactions":  totalRedactions,
-		"categories":  cats,
-		"changed":     totalRedactions > 0,
-		"line_count":  lineCount,
+		"file_path":  transcriptPath,
+		"redactions": totalRedactions,
+		"categories": cats,
+		"changed":    totalRedactions > 0,
+		"line_count": lineCount,
 	}
 	r.DurationMs = time.Since(start).Milliseconds()
 	return r

@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
+	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
 )
 
 const liteLLMTimeout = 10 * time.Second

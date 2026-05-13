@@ -32,10 +32,10 @@ var fillerPrefixes = []string{
 // Matches → entire summary is dropped (not redacted) so the audio stays silent
 // rather than reading partial credentials aloud.
 var sensitiveRegexes = []*regexp.Regexp{
-	regexp.MustCompile(`sk-[A-Za-z0-9_-]{20,}`),                            // OpenAI / Anthropic style
-	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),                                 // AWS access key
-	regexp.MustCompile(`ghp_[A-Za-z0-9]{20,}`),                             // GitHub personal token
-	regexp.MustCompile(`xox[baprs]-[A-Za-z0-9-]{10,}`),                     // Slack token
+	regexp.MustCompile(`sk-[A-Za-z0-9_-]{20,}`),        // OpenAI / Anthropic style
+	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),             // AWS access key
+	regexp.MustCompile(`ghp_[A-Za-z0-9]{20,}`),         // GitHub personal token
+	regexp.MustCompile(`xox[baprs]-[A-Za-z0-9-]{10,}`), // Slack token
 	regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+`),
 }
 

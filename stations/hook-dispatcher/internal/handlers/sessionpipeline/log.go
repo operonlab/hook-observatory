@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
+	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
 )
 
 const obsSecretDefault = "workshop-v2-dev-key"

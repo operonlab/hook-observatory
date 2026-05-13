@@ -31,7 +31,7 @@ import (
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
 	"github.com/joneshong/hook-dispatcher/internal/handlers/sessionpipeline"
-	portregistry "github.com/joneshong/workshop/libs/go-port-registry"
+	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
 )
 
 func init() {
