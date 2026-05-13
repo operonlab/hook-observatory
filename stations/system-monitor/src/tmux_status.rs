@@ -57,11 +57,52 @@ pub async fn print(_cfg: &Settings, kind: &str) -> Result<()> {
     let line = match kind {
         "system" => render_system().await,
         "llm" => render_llm().await,
+        "ex-segment" => render_ex_segment().await,
         // Pass-through single sub-metric.
         other => get_metric(other).await,
     };
     print!("{line}");
     Ok(())
+}
+
+/// EX segment — Claude Code top-up balance pill (hidden when balance is 0).
+/// Ports `tmux_status.sh ex_segment()` from the archived Python/shell version.
+/// Value format example: `$3.24/$10 32% 余$0.00`.
+async fn render_ex_segment() -> String {
+    let val = get_metric("cc-ex").await;
+    if val == PLACEHOLDER || val.is_empty() || val == "off" || val == "?" {
+        return String::new();
+    }
+    // Hide when 余$0.00 (no remaining balance).
+    if let Some(after) = val.split('余').nth(1) {
+        let cleaned = after.trim_start_matches('$');
+        let digits: String = cleaned
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        if let Ok(bal) = digits.parse::<f64>() {
+            if bal <= 0.0 {
+                return String::new();
+            }
+        }
+    }
+    let theme = |k: &str| -> String {
+        std::process::Command::new("tmux")
+            .args(["show", "-gqv", k])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
+    };
+    let flamingo = theme("@thm_flamingo");
+    let crust = theme("@thm_crust");
+    let fg = theme("@thm_fg");
+    let s0 = theme("@thm_surface_0");
+    let mantle = theme("@thm_mantle");
+    format!(
+        "#[fg={flamingo},bg={mantle}]#[fg={crust},bg={flamingo}] EX #[fg={fg},bg={s0}] {val} #[fg={s0},bg={mantle}]"
+    )
 }
 
 async fn render_system() -> String {
