@@ -4,11 +4,11 @@ ws_credits_sync.py — Unified LLM credits & quota sync
 
 [DEPRECATED 2026-04-20] Orphaned draft — never registered with launchd/Cronicle.
 Superseded by Rust implementations:
-  - agent-metrics-rs provider-balance-sync   (replaces Section 1)
-  - agent-metrics-rs dashscope-quota-sync    (replaces Section 2)
+  - agent-metrics provider-balance-sync   (replaces Section 1)
+  - agent-metrics dashscope-quota-sync    (replaces Section 2)
   - Section 3 (Google Developer credits) was experimental and not ported;
     if needed, add a new Rust collector under
-    stations/agent-metrics-rs/src/collectors/.
+    stations/agent-metrics/src/collectors/.
 
 This file may be deleted after 2026-05-20 if no consumer surfaces.
 
@@ -622,6 +622,7 @@ def parse_dashscope_quota(text: str) -> dict | None:
         stripped = line.strip()
         if i + 1 < len(lines):
             next_line = lines[i + 1].strip()
+            # Pattern A: number-first, label-next (e.g. "80\n模型总数")
             if (
                 "模型总数" in next_line
                 or "模型總數" in next_line
@@ -659,6 +660,31 @@ def parse_dashscope_quota(text: str) -> dict | None:
                     result["no_free"] = int(stripped.replace(",", ""))
                 except ValueError:
                     pass
+            else:
+                # Pattern B: label-first, number-next (e.g. "额度充沛\n73")
+                # DashScope live layout: healthy / over_50pct / over_80pct / no_free
+                # all appear as label on current line, number on next line.
+                try:
+                    num = int(next_line.replace(",", ""))
+                except ValueError:
+                    num = None
+                if num is not None:
+                    if (
+                        "额度充沛" in stripped
+                        or "額度充沛" in stripped
+                        or "Sufficient quota" in stripped
+                    ):
+                        result["healthy"] = num
+                    elif "使用超50%" in stripped or "over 50% used" in stripped.lower():
+                        result["over_50pct"] = num
+                    elif "使用超80%" in stripped or "over 80% used" in stripped.lower():
+                        result["over_80pct"] = num
+                    elif (
+                        "无免费额度" in stripped
+                        or "無免費額度" in stripped
+                        or "no free quota" in stripped.lower()
+                    ):
+                        result["no_free"] = num
 
         quota_match = re.search(r"剩([\d,]+)/共([\d,]+)", stripped)
         if not quota_match:
