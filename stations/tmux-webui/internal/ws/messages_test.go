@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/operonlab/tmux-webui/internal/metrics"
 )
 
 // ─── outError / outInputError type strings ────────────────────────────────────
@@ -114,8 +116,8 @@ func TestMarshal_outAutocomplete(t *testing.T) {
 	}
 }
 
-func TestMarshal_outMetrics_EmptyMap(t *testing.T) {
-	m := mustMarshal(t, outMetrics{Type: "metrics", Metrics: map[string]any{}})
+func TestMarshal_outMetrics_EmptySnapshot(t *testing.T) {
+	m := mustMarshal(t, outMetrics{Type: "metrics", Metrics: metrics.Snapshot{}})
 	if m["type"] != "metrics" {
 		t.Errorf("type = %q; want %q", m["type"], "metrics")
 	}

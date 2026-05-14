@@ -53,7 +53,8 @@
 //
 //	// In New() or Mux(), after building tx and cfg:
 //	prefixCache := prefix.New(tx)
-//	hub := ws.NewHub(cfg, tx, prefixCache)
+//	prov := metrics.NewStub() // or metrics.NewHTTP(url)
+//	hub := ws.NewHub(cfg, tx, prefixCache, prov)
 //
 //	// Replace the /ws stub in Mux():
 //	//   mux.HandleFunc("/ws", notImplemented(...))

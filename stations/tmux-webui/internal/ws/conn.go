@@ -99,7 +99,7 @@ func (c *Conn) sendInitial(ctx context.Context) {
 	}
 	c.send(outPanes{Type: "panes", Panes: visiblePanes(panes, active)})
 
-	c.send(outMetrics{Type: "metrics", Metrics: map[string]any{}})
+	c.send(outMetrics{Type: "metrics", Metrics: c.hub.prov.Collect(ctx)})
 }
 
 // visiblePanes filters panes to those in the given active window.
