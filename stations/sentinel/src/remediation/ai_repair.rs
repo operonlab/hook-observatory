@@ -23,7 +23,7 @@ const RELAY_SCRIPT: &str = "/Users/joneshong/.claude/skills/tmux-relay/scripts/r
 const PYTHON3: &str = "/Users/joneshong/.local/bin/python3";
 const SIGNAL_DIR: &str = "/tmp";
 const ACQUIRE_TIMEOUT_SEC: u64 = 15;
-const DISPATCH_TIMEOUT_SEC: u64 = 30;
+const DISPATCH_TIMEOUT_SEC: u64 = 60;
 pub const DEFAULT_REPAIR_TIMEOUT_SEC: f64 = 600.0;
 
 #[derive(Debug, Clone)]
@@ -189,6 +189,7 @@ async fn relay_dispatch(pane: &str, command: &str, signal_file: &std::path::Path
                 "",
                 command,
                 "--no-forward",
+                "--detach",
                 "--signal",
                 signal_file.to_str().unwrap_or("/tmp/sentinel-repair-unknown"),
             ])
