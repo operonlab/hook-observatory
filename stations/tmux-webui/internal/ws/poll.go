@@ -46,7 +46,7 @@ func (c *Conn) pollLoop() error {
 
 			// Emit metrics every N ticks.
 			if tickCount%metricsEvery == 0 {
-				c.send(outMetrics{Type: "metrics", Metrics: map[string]any{}})
+				c.send(outMetrics{Type: "metrics", Metrics: c.hub.prov.Collect(c.ctx)})
 			}
 		}
 	}

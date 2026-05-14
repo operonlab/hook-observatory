@@ -34,14 +34,15 @@ type Server struct {
 
 func New(cfg *config.Config, tx *tmuxctl.Client) *Server {
 	pc := prefix.New(tx)
-	hub := ws.NewHub(cfg, tx, pc)
-
-	ac := autocomplete.New(autocomplete.Options{ClaudeDir: cfg.Autocomplete.ClaudeDir})
 
 	var prov metrics.Provider = metrics.NewStub()
 	if cfg.Metrics.Provider == "http" && cfg.Metrics.URL != "" {
 		prov = metrics.NewHTTP(cfg.Metrics.URL)
 	}
+
+	hub := ws.NewHub(cfg, tx, pc, prov)
+
+	ac := autocomplete.New(autocomplete.Options{ClaudeDir: cfg.Autocomplete.ClaudeDir})
 
 	rly, _ := relay.New(cfg.Relay.PaneScript, cfg.Relay.RelayScript, cfg.Relay.SignalDir)
 	// New returns nil when both scripts are empty (disabled by default for OSS).

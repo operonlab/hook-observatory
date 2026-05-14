@@ -1,6 +1,9 @@
 package ws
 
-import "github.com/operonlab/tmux-webui/internal/tmuxctl"
+import (
+	"github.com/operonlab/tmux-webui/internal/metrics"
+	"github.com/operonlab/tmux-webui/internal/tmuxctl"
+)
 
 // ─── Inbound (client → server) ────────────────────────────────────────────────
 
@@ -74,10 +77,10 @@ type outOutput struct {
 	Panes map[string]string `json:"panes"`
 }
 
-// outMetrics carries system metrics (v0: always empty map).
+// outMetrics carries system + LLM usage metrics for the statusline.
 type outMetrics struct {
-	Type    string         `json:"type"`
-	Metrics map[string]any `json:"metrics"`
+	Type    string           `json:"type"`
+	Metrics metrics.Snapshot `json:"metrics"`
 }
 
 // outPing is the heartbeat sent every 15 s.

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/operonlab/tmux-webui/internal/config"
+	"github.com/operonlab/tmux-webui/internal/metrics"
 	"github.com/operonlab/tmux-webui/internal/prefix"
 	"github.com/operonlab/tmux-webui/internal/tmuxctl"
 )
@@ -15,12 +16,14 @@ type Hub struct {
 	cfg   *config.Config
 	tx    *tmuxctl.Client
 	pc    *prefix.Cache
+	prov  metrics.Provider
 	conns sync.Map // map[*Conn]struct{}
 }
 
-// NewHub constructs a Hub. cfg, tx, and pc must not be nil.
-func NewHub(cfg *config.Config, tx *tmuxctl.Client, pc *prefix.Cache) *Hub {
-	return &Hub{cfg: cfg, tx: tx, pc: pc}
+// NewHub constructs a Hub. cfg, tx, pc, and prov must not be nil.
+// Pass metrics.NewStub() for prov when metrics are disabled.
+func NewHub(cfg *config.Config, tx *tmuxctl.Client, pc *prefix.Cache, prov metrics.Provider) *Hub {
+	return &Hub{cfg: cfg, tx: tx, pc: pc, prov: prov}
 }
 
 // add registers a connection.
