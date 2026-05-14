@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-[DEPRECATED 2026-04-20] Replaced by `agent-metrics-rs provider-balance-sync`
-(stations/agent-metrics-rs/src/collectors/provider_balance.rs).
+[DEPRECATED 2026-04-20] Replaced by `agent-metrics provider-balance-sync`
+(stations/agent-metrics/src/collectors/provider_balance.rs).
 
 Cronicle registry repointed to the Rust binary. This file is retained as a
 30-day rollback reference; safe to delete after 2026-05-20.

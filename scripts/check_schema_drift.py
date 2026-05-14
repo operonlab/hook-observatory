@@ -30,7 +30,7 @@ _YAML_PATH = _REPO_ROOT / "shared" / "schemas" / "port_registry.yaml"
 # Rust station source directories to scan
 RUST_DIRS: list[str] = [
     "stations/sentinel-rs/src",
-    "stations/agent-metrics-rs/src",
+    "stations/agent-metrics/src",
     "stations/system-monitor-rs/src",
     "stations/auto-survey-rs/src",
     "stations/remote-node/src",

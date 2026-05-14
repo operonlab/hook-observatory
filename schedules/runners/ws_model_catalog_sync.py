@@ -3,8 +3,8 @@
 ws_model_catalog_sync.py — Weekly model catalog sync from LLM leaderboards
 
 [DEPRECATED 2026-04-20] Replaced by Rust implementation.
-  Active runner: stations/agent-metrics-rs/src/collectors/model_catalog.rs
-  Cronicle command: agent-metrics-rs model-catalog-sync (Mon 19:00)
+  Active runner: stations/agent-metrics/src/collectors/model_catalog.rs
+  Cronicle command: agent-metrics model-catalog-sync (Mon 19:00)
 
 This Python module is kept for 30-day rollback only. To re-enable:
   1. Edit schedules/manifest.json → restore command:
