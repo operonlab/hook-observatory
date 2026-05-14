@@ -85,7 +85,43 @@ async fn read_cc_raw_redis() -> Value {
 
 // ── Anthropic / Claude Code ─────────────────────────────────────
 
+fn token_from_creds_json(raw: &str, source: &str) -> Option<String> {
+    let creds: Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(error = %e, source, raw_prefix = %&raw.chars().take(60).collect::<String>(), "cc_creds_json_parse_failed");
+            return None;
+        }
+    };
+    let token = creds
+        .get("claudeAiOauth")
+        .and_then(|v| v.get("accessToken"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    if token.is_none() {
+        tracing::debug!(source, top_keys = ?creds.as_object().map(|m| m.keys().collect::<Vec<_>>()), "cc_no_access_token_in_creds");
+    }
+    token
+}
+
+/// Claude Code v2 stores the OAuth credentials in `~/.claude/.credentials.json`.
+/// Older builds (and Claude Desktop) stash them in the macOS Keychain under
+/// `Claude Code-credentials`. Try the file first; fall back to the Keychain.
 async fn read_cc_token() -> Option<String> {
+    if let Ok(home) = std::env::var("HOME") {
+        let path = format!("{home}/.claude/.credentials.json");
+        match tokio::fs::read_to_string(&path).await {
+            Ok(body) => {
+                if let Some(t) = token_from_creds_json(&body, "credentials_json") {
+                    return Some(t);
+                }
+            }
+            Err(e) => {
+                tracing::debug!(path, error = %e, "cc_credentials_json_read_failed");
+            }
+        }
+    }
+
     let out = match Command::new("security")
         .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
         .output()
@@ -102,22 +138,7 @@ async fn read_cc_token() -> Option<String> {
         return None;
     }
     let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let creds: Value = match serde_json::from_str(&raw) {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::debug!(error = %e, raw_prefix = %&raw.chars().take(60).collect::<String>(), "cc_security_json_parse_failed");
-            return None;
-        }
-    };
-    let token = creds
-        .get("claudeAiOauth")
-        .and_then(|v| v.get("accessToken"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    if token.is_none() {
-        tracing::debug!(top_keys = ?creds.as_object().map(|m| m.keys().collect::<Vec<_>>()), "cc_no_access_token_in_creds");
-    }
-    token
+    token_from_creds_json(&raw, "keychain")
 }
 
 async fn fetch_cc(client: &reqwest::Client) -> Value {
