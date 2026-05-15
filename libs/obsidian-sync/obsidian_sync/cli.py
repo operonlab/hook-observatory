@@ -92,6 +92,34 @@ def cmd_sync(args: argparse.Namespace) -> int:
         if result.status in ("uploaded", "duplicate"):
             doc_id = result.document_id or f"server-dedup:{h}"
             state.record(rel, h, doc_id)
+            # Phase 3: optionally tell memvault to supersede stale blocks now
+            # that this doc carries the canonical version. Best-effort —
+            # supersede failures must never fail the sync.
+            if (
+                args.supersede_memvault
+                and result.status == "uploaded"
+                and result.document_id
+            ):
+                meta_title = Path(rel).stem
+                superseded = _fire_supersede(
+                    doc_id=result.document_id,
+                    query_text=f"{meta_title}\n{args.vault_label}\n{rel}",
+                    memvault_space=args.supersede_memvault_space,
+                    threshold=args.supersede_threshold,
+                    dry_run=args.supersede_dry_run,
+                )
+                if superseded is not None:
+                    n = len(superseded)
+                    counts["supersede_matches" if args.supersede_dry_run else "superseded"] = (
+                        counts.get(
+                            "supersede_matches" if args.supersede_dry_run else "superseded",
+                            0,
+                        )
+                        + n
+                    )
+                    if n:
+                        tag = "dry" if args.supersede_dry_run else "live"
+                        print(f"  supersede[{tag}] {n} memvault block(s) by doc={result.document_id[:8]}")
         else:
             print(f"FAIL {rel}: status={result.status} {result.error or result.skipped_reason}", file=sys.stderr)
             if failed_log:
@@ -111,6 +139,48 @@ def cmd_sync(args: argparse.Namespace) -> int:
     state.save()
     print(f"\n[done] {counts}", file=sys.stderr)
     return 0 if counts.get("error", 0) == 0 else 2
+
+
+def _fire_supersede(
+    *,
+    doc_id: str,
+    query_text: str,
+    memvault_space: str,
+    threshold: float,
+    dry_run: bool,
+) -> list[str] | None:
+    """Best-effort call to POST /api/memvault/supersede-by-doc.
+
+    Returns the list of (would-be) superseded block_ids, or None on error.
+    Never raises — supersede must not fail the sync.
+    """
+    import os
+    import urllib.error
+    import urllib.request
+
+    body = json.dumps(
+        {
+            "doc_id": doc_id,
+            "query_text": query_text[:4000],
+            "threshold": threshold,
+            "dry_run": dry_run,
+        }
+    ).encode("utf-8")
+    url = f"http://127.0.0.1:10000/api/memvault/supersede-by-doc?space_id={memvault_space}"
+    headers = {"Content-Type": "application/json"}
+    key = os.environ.get("CORE_INTERNAL_API_KEY", "")
+    if key:
+        headers["X-Internal-Key"] = key
+    req = urllib.request.Request(url, data=body, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read())
+            if dry_run:
+                return [m["block_id"] for m in data.get("dry_run_matches", [])]
+            return list(data.get("superseded", []))
+    except Exception as exc:
+        print(f"  supersede error: {str(exc)[:160]}", file=sys.stderr)
+        return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -135,6 +205,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--limit", type=int, default=None, help="Max files to upload this run")
     s.add_argument("--timeout", type=float, default=300.0, help="Per-upload HTTP timeout seconds")
+    # Phase 3: optional supersede-memvault hook after a successful upload.
+    s.add_argument(
+        "--supersede-memvault",
+        action="store_true",
+        help="After each upload, ask memvault to supersede stale blocks above similarity threshold",
+    )
+    s.add_argument(
+        "--supersede-memvault-space",
+        default="default",
+        help="memvault space_id to scan (default: default — memvault uses caller space, not the docvault space)",
+    )
+    s.add_argument(
+        "--supersede-threshold",
+        type=float,
+        default=0.85,
+        help="Cosine similarity threshold for supersede (0.5–1.0; default 0.85, higher = stricter)",
+    )
+    s.add_argument(
+        "--supersede-dry-run",
+        action="store_true",
+        help="With --supersede-memvault, only list candidates — do not invalidate any blocks",
+    )
     s.set_defaults(func=cmd_sync)
     return p
 
