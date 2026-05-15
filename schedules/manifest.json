@@ -3,6 +3,21 @@
   "description": "Unified schedule manifest — configuration template for all scheduled jobs and daemons, synced to Cronicle via seed_jobs.py",
   "jobs": [
     {
+      "name": "ws-blog-to-docvault",
+      "label": "com.joneshong.scheduler.ws-blog-to-docvault",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_blog_to_docvault.py",
+      "schedule": {
+        "calendar": {
+          "Hour": 8,
+          "Minute": 30
+        }
+      },
+      "description": "每日 08:30: Obsidian/blog vault 增量同步到 docvault（早上整理完 inbox 後跑）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-observation-gate-dream",
       "label": "com.joneshong.scheduler.ws-observation-gate-dream",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_observation_gate.py dream-consolidation",
