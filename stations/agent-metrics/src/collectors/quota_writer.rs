@@ -104,60 +104,135 @@ fn token_from_creds_json(raw: &str, source: &str) -> Option<String> {
     token
 }
 
+/// Returns seconds until the CC credential expires.
+/// `claudeAiOauth.expiresAt` is stored as Unix epoch **milliseconds**.
+/// Returns a negative value if already expired, i64::MIN if field missing.
+fn cc_creds_seconds_until_expiry(raw: &str) -> i64 {
+    let creds: Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(_) => return i64::MIN,
+    };
+    let expires_at_ms = creds
+        .get("claudeAiOauth")
+        .and_then(|v| v.get("expiresAt"))
+        .and_then(|v| v.as_i64());
+    match expires_at_ms {
+        Some(ms) => {
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            (ms - now_ms) / 1000
+        }
+        None => i64::MIN,
+    }
+}
+
+/// Read the Keychain entry for "Claude Code-credentials" unconditionally.
+/// Returns the raw JSON string if successful.
+async fn read_cc_creds_keychain() -> Option<String> {
+    let user = std::env::var("USER").unwrap_or_default();
+    let mut args = vec!["find-generic-password", "-s", "Claude Code-credentials"];
+    // Specify account if USER is available (more precise lookup).
+    let user_arg;
+    if !user.is_empty() {
+        user_arg = user.clone();
+        args.extend_from_slice(&["-a", &user_arg]);
+    }
+    args.push("-w");
+
+    let out = Command::new("security").args(&args).output().await.ok()?;
+    if !out.status.success() {
+        tracing::debug!(
+            rc = ?out.status.code(),
+            stderr = %String::from_utf8_lossy(&out.stderr),
+            "cc_keychain_lookup_nonzero"
+        );
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if raw.is_empty() { None } else { Some(raw) }
+}
+
+/// Force a Keychain read, write the result back to file (best-effort), and
+/// return the access token.  Used for 401 self-heal where we skip expiry checks.
+async fn force_keychain_refresh(creds_path: &str) -> Option<String> {
+    let raw = read_cc_creds_keychain().await?;
+    let token = token_from_creds_json(&raw, "keychain_force_refresh")?;
+    match persist_cc_creds_file(creds_path, &raw).await {
+        Ok(()) => tracing::warn!(path = creds_path, "cc_creds_force_refreshed_from_keychain"),
+        Err(e) => tracing::warn!(path = creds_path, error = %e, "cc_creds_force_refresh_write_failed"),
+    }
+    Some(token)
+}
+
 /// Claude Code v2 stores the OAuth credentials in `~/.claude/.credentials.json`.
 /// Older builds (and Claude Desktop) stash them in the macOS Keychain under
-/// `Claude Code-credentials`. Try the file first; fall back to the Keychain.
+/// `Claude Code-credentials`. Try the file first; if the token is expiring
+/// within 5 minutes (or already expired), fetch from Keychain and write back.
 ///
-/// Self-heal: when the Keychain path succeeds but the file is missing, mirror
-/// the raw credentials JSON to disk (mode 0o600) so subsequent calls hit the
-/// fast path. This protects against launchd-spawned processes (PPID=1) whose
-/// Keychain ACL is unpredictable across reboots.
+/// Self-heal: when the Keychain path succeeds but the file is missing or
+/// stale, mirror the raw credentials JSON to disk (mode 0o600) so subsequent
+/// calls hit the fast path.  This protects against launchd-spawned processes
+/// (PPID=1) whose Keychain ACL is unpredictable across reboots, and against
+/// Claude Code silently refreshing the OAuth token without updating the file.
 async fn read_cc_token() -> Option<String> {
     let creds_path = std::env::var("HOME")
         .ok()
         .map(|h| format!("{h}/.claude/.credentials.json"));
 
-    if let Some(path) = creds_path.as_deref() {
+    // --- Step 1: read file ---
+    let file_body = if let Some(path) = creds_path.as_deref() {
         match tokio::fs::read_to_string(path).await {
-            Ok(body) => {
-                if let Some(t) = token_from_creds_json(&body, "credentials_json") {
-                    return Some(t);
-                }
-            }
+            Ok(body) => Some(body),
             Err(e) => {
                 tracing::debug!(path, error = %e, "cc_credentials_json_read_failed");
+                None
             }
         }
-    }
-
-    let out = match Command::new("security")
-        .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
-        .output()
-        .await
-    {
-        Ok(o) => o,
-        Err(e) => {
-            tracing::warn!(error = %e, "cc_security_spawn_failed (no token source available)");
-            return None;
-        }
+    } else {
+        None
     };
-    if !out.status.success() {
-        tracing::warn!(rc = ?out.status.code(), stderr = %String::from_utf8_lossy(&out.stderr), "cc_security_nonzero (no token source available)");
-        return None;
-    }
-    let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let token = token_from_creds_json(&raw, "keychain");
 
-    if token.is_some() {
-        if let Some(path) = creds_path.as_deref() {
-            match persist_cc_creds_file(path, &raw).await {
-                Ok(()) => tracing::warn!(path, "cc_creds_self_healed_from_keychain"),
-                Err(e) => tracing::warn!(path, error = %e, "cc_creds_self_heal_write_failed"),
+    // --- Step 2: check expiry; if file token has ≥5 min left, use it ---
+    let needs_keychain = match file_body.as_deref() {
+        Some(body) => {
+            let secs = cc_creds_seconds_until_expiry(body);
+            if secs < 300 {
+                tracing::debug!(secs_remaining = secs, "cc_file_token_expiring_soon_trying_keychain");
+                true
+            } else {
+                false
             }
+        }
+        None => true,
+    };
+
+    if !needs_keychain {
+        // File is fresh — extract and return token directly.
+        return file_body.as_deref().and_then(|b| token_from_creds_json(b, "credentials_json"));
+    }
+
+    // --- Step 3: try Keychain ---
+    let keychain_body = read_cc_creds_keychain().await;
+
+    if let Some(ref kc_raw) = keychain_body {
+        // Use Keychain value and write back to file (best-effort).
+        let token = token_from_creds_json(kc_raw, "keychain");
+        if token.is_some() {
+            if let Some(path) = creds_path.as_deref() {
+                match persist_cc_creds_file(path, kc_raw).await {
+                    Ok(()) => tracing::warn!(path, "cc_creds_self_healed_from_keychain"),
+                    Err(e) => tracing::warn!(path, error = %e, "cc_creds_self_heal_write_failed"),
+                }
+            }
+            return token;
         }
     }
 
-    token
+    // --- Step 4: Keychain unavailable (launchd env) — fall back to file token ---
+    tracing::warn!("cc_keychain_unavailable_falling_back_to_file_token");
+    file_body.as_deref().and_then(|b| token_from_creds_json(b, "credentials_json_stale_fallback"))
 }
 
 /// Write `body` to `path` atomically with mode 0o600 (parent dir created if missing).
@@ -265,6 +340,45 @@ async fn fetch_cc(client: &reqwest::Client) -> Value {
         // restarts and is the closest analog to the Python `_persist_cc_quota`
         // disk fallback.
         return read_cc_raw_redis().await;
+    }
+
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+        // 401 — the file token is likely stale after a Claude Code OAuth refresh.
+        // Force a Keychain read (bypasses expiry check) and retry once.
+        tracing::warn!("cc_quota_401_refreshing_token_from_keychain");
+        let creds_path = std::env::var("HOME")
+            .ok()
+            .map(|h| format!("{h}/.claude/.credentials.json"))
+            .unwrap_or_default();
+        if let Some(fresh_token) = force_keychain_refresh(&creds_path).await {
+            let retry_resp = client
+                .get("https://api.anthropic.com/api/oauth/usage")
+                .header("Authorization", format!("Bearer {fresh_token}"))
+                .header("anthropic-beta", "oauth-2025-04-20")
+                .send()
+                .await;
+            if let Ok(r) = retry_resp {
+                if r.status().is_success() {
+                    if let Ok(data) = r.json::<Value>().await {
+                        let mut state = CC_STATE.lock().unwrap();
+                        state.last_success = Some(data.clone());
+                        state.last_success_ts = Some(Instant::now());
+                        state.backoff_until = None;
+                        state.consecutive_failures = 0;
+                        state.last_fetch_mode = "live_after_keychain_refresh".into();
+                        return data;
+                    }
+                }
+            }
+        }
+        // Keychain refresh failed or retry still non-200 — fall through to stale cache.
+        tracing::warn!("cc_quota_401_keychain_refresh_failed_using_stale");
+        let mut state = CC_STATE.lock().unwrap();
+        state.last_fetch_mode = "http_status_401_stale_fallback".into();
+        if elapsed_since(state.last_success_ts) <= Duration::from_secs(CC_QUOTA_STALE_MAX_S) {
+            return state.last_success.clone().unwrap_or(Value::Null);
+        }
+        return Value::Null;
     }
 
     if !resp.status().is_success() {
