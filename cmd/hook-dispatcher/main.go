@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 
 	"github.com/joneshong/hook-dispatcher/internal/core"
+	hookmcp "github.com/joneshong/hook-dispatcher/internal/mcp"
+	"github.com/joneshong/hook-dispatcher/internal/spool"
 
 	// Handler packages self-register via init().
 	_ "github.com/joneshong/hook-dispatcher/internal/handlers"
@@ -51,6 +53,16 @@ func main() {
 				payload = os.Args[2]
 			}
 			sessionpipeline.RunnerMain(payload)
+			return
+		case "serve":
+			// MCP server mode (stdio). Reads ~/.hook-observatory/spool/events.jsonl
+			// and exposes hook_obs_{stats,events,tools} tools. Override the spool
+			// dir via HOOK_OBS_SPOOL_DIR for tests.
+			spoolDir := spool.DefaultSpoolDir()
+			if err := hookmcp.ServeStdio(gitSHA, spoolDir); err != nil {
+				os.Stderr.WriteString("mcp serve: " + err.Error() + "\n")
+				os.Exit(1)
+			}
 			return
 		}
 	}
