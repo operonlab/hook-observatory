@@ -272,6 +272,13 @@ def main() -> None:
 
 如果一個 block 不屬於上述任何類別，signal_type 設為 null。
 
+## Voice 來源歸屬（voice 欄位 — Phase 2 provenance）
+記憶到底是誰「說」出來的？這影響長期是否會變成 AI 自己的 echo chamber。
+- **user_lead**: 使用者主動提出、明確主張、直接陳述偏好或事實（少爺打字主導）
+- **dialog**: 對話協作中浮現的結論，使用者與 AI 來回後雙方都同意
+- **assistant_lead**: AI 提議或主張、使用者沒有明確反駁但也沒明確確認（高 echo-chamber 風險）
+- **unknown**: transcript 不足以判斷
+
 ## 輸入說明
 - [THINKING] 標記的段落是 AI 的內部推理，包含最深層的技術分析和決策推理
 - [TOOL:*] 標記顯示實際執行的操作和檔案路徑
@@ -294,6 +301,7 @@ def main() -> None:
       "topic": "簡短主題（5-15字）",
       "block_type": "technical | decision | preference | insight | pattern | skill",
       "signal_type": "correction | preference_confirmed | repeated_pattern | architecture_decision | null",
+      "voice": "user_lead | dialog | assistant_lead | unknown",
       "content": "用完整的自然語句描述。包含因果關係和上下文（為什麼這樣做、遇到什麼問題、怎麼解決）。保留具體的檔案路徑、函數名、版本號、錯誤訊息。",
       "tags": ["具體標籤", "工具名", "模組名"],
       "search_keywords": ["關鍵搜尋詞", "中英文都要", "技術術語原文保留"],
@@ -633,11 +641,22 @@ Timestamp: {timestamp}
         if api_block_type not in {"knowledge", "skill", "attitude", "general"}:
             api_block_type = "knowledge"
 
+        # Phase 2 provenance — accept LLM's voice classification; fall back to
+        # "dialog" (the safest middle classification) so the column is never
+        # left NULL when extraction succeeded.
+        voice_raw = block.get("voice")
+        voice = (
+            voice_raw
+            if voice_raw in ("user_lead", "dialog", "assistant_lead", "unknown")
+            else "dialog"
+        )
+
         block_body = {
             "content": storage_content,
             "block_type": api_block_type,
             "tags": tags,
             "source_session": session_id,
+            "voice": voice,
         }
         if session_timestamp:
             block_body["created_at"] = session_timestamp
