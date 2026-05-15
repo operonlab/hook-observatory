@@ -68,10 +68,12 @@ class HybridRRFSearchOp:
             queries = [query]
 
         per_query_k = max(top_k // len(queries), 5)
+        tag_filter: list[str] | None = ctx.get("tag_filter")
         config = SearchConfig(
             service_ids=[SERVICE_ID],
             top_k=per_query_k,
             score_threshold=self._score_threshold,
+            tag_filter=tag_filter,
         )
 
         # Search all queries, deduplicate by entity_id

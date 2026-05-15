@@ -123,11 +123,11 @@ async def create_document(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("docvault.write"),
 ):
-    # Dedup by content_hash
-    existing = await document_service.get_by_content_hash(db, body.content_hash)
+    # Dedup by content_hash (scoped to space — same content allowed across spaces)
+    existing = await document_service.get_by_content_hash(db, body.content_hash, space_id)
     if existing:
         raise ConflictError(
-            f"Document with content_hash={body.content_hash} already exists",
+            f"Document with content_hash={body.content_hash} already exists in space {space_id}",
             code="docvault.content_hash_conflict",
         )
 
@@ -155,12 +155,12 @@ async def upload_document(
     if not raw_content.strip():
         raise BadRequestError("File is empty or unreadable", code="docvault.empty_file")
 
-    # 2. Compute content hash + dedup
+    # 2. Compute content hash + dedup (scoped to space — same content allowed across spaces)
     content_hash = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
-    existing = await document_service.get_by_content_hash(db, content_hash)
+    existing = await document_service.get_by_content_hash(db, content_hash, space_id)
     if existing:
         raise ConflictError(
-            f"Document with content_hash={content_hash} already exists",
+            f"Document with content_hash={content_hash} already exists in space {space_id}",
             code="docvault.content_hash_conflict",
         )
 
@@ -230,9 +230,13 @@ async def upload_document(
 
     # 10. Index chunks in Qdrant (best-effort, don't fail upload if Qdrant is down)
     # Attach DB chunk IDs so FlatIndexOp uses them as entity_id (for DB lookups)
+    # Propagate document-level tags to each chunk so Qdrant payload supports tag filtering
+    doc_tags = doc_instance.tags or []
     for i, chunk_data in enumerate(chunks):
         if i < len(chunk_db_ids):
             chunk_data["db_id"] = chunk_db_ids[i]
+        if doc_tags:
+            chunk_data.setdefault("tags", doc_tags)
 
     try:
         flat_index = FlatIndexOp()
@@ -551,7 +555,13 @@ async def qa_question(
         )
 
     # ── 0.5. Conversation context resolution ──
-    ctx: dict = {"query": body.question, "space_id": space_id, "top_k": body.top_k, "db": db}
+    ctx: dict = {
+        "query": body.question,
+        "space_id": space_id,
+        "top_k": body.top_k,
+        "db": db,
+        "tag_filter": body.tags or None,
+    }
     if body.session_id:
         ctx["session_id"] = body.session_id
         try:

@@ -104,11 +104,12 @@ class DocumentService(
         )
 
     async def get_by_content_hash(
-        self, db: AsyncSession, content_hash: str
+        self, db: AsyncSession, content_hash: str, space_id: str
     ) -> Document | None:
-        """Dedup check by content hash."""
+        """Dedup check by content hash, scoped to a single space."""
         q = select(Document).where(
             Document.content_hash == content_hash,
+            Document.space_id == space_id,
             Document.deleted_at == None,  # noqa: E711
         )
         return (await db.execute(q)).scalar_one_or_none()
