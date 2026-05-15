@@ -168,6 +168,7 @@ class GraphSearchOp:
             "expanded_queries": ctx.get("expanded_queries"),
             "space_id": space_id,
             "top_k": top_k,
+            "tag_filter": ctx.get("tag_filter"),
         }
         try:
             await vector_op(vector_ctx)

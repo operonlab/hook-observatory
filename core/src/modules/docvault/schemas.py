@@ -263,6 +263,10 @@ class QARequest(BaseModel):
     domain: str = Field(default="default")
     top_k: int = Field(default=20, ge=1, le=50)
     session_id: str | None = Field(default=None, max_length=64)
+    tags: list[str] | None = Field(
+        default=None,
+        description="Optional: filter chunks whose payload tags contain ALL of these values",
+    )
 
 
 class CitationRef(BaseModel):
