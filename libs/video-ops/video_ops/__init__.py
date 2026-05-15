@@ -133,6 +133,11 @@ def _register_builtins():
     )
 
 
+# ── New standalone operators (not registered as pipeline ops) ────────────
+
+from .final_compose import ComposeResult, SkippableError, compose_final  # noqa: E402, F401
+from .subtitle_builder import SubtitleResult, build_subtitles  # noqa: E402, F401
+
 _register_builtins()
 
 

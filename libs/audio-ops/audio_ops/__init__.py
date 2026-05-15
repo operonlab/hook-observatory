@@ -214,3 +214,4 @@ def run_preprocessing(file_path: str, ops: list[AudioOp]) -> str:
 # ── Convenience re-exports ───────────────────────────────────────────────
 
 from .merge import consolidate_segments, find_speaker, format_time, to_markdown  # noqa: E402, F401
+from .pipeline import AudioSegment, build_audio_track  # noqa: E402, F401
