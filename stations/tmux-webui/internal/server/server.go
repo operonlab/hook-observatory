@@ -42,7 +42,14 @@ func New(cfg *config.Config, tx *tmuxctl.Client) *Server {
 
 	hub := ws.NewHub(cfg, tx, pc, prov)
 
-	ac := autocomplete.New(autocomplete.Options{ClaudeDir: cfg.Autocomplete.ClaudeDir})
+	// Plugin marketplaces + Claude Code built-in slash commands are enabled by
+	// default to match the full Claude Code resource universe. ClaudeDir gates
+	// both, so a tmux-webui not pointed at ~/.claude still degrades cleanly.
+	ac := autocomplete.New(autocomplete.Options{
+		ClaudeDir:       cfg.Autocomplete.ClaudeDir,
+		IncludePlugins:  true,
+		IncludeBuiltins: true,
+	})
 
 	rly, _ := relay.New(cfg.Relay.PaneScript, cfg.Relay.RelayScript, cfg.Relay.SignalDir)
 	// New returns nil when both scripts are empty (disabled by default for OSS).
