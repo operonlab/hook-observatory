@@ -1,15 +1,14 @@
 """cross_vault_qa — dispatcher behaviour tests.
 
-Mock boundaries:
-- memvault.services.memory_block_service.qdrant_search (external module, allowed)
-- docvault.qa_service.QAService.ask (external module, allowed)
-- src.shared.embedding.get_embedding (external pipeline, allowed)
-- src.modules.assistant.cross_vault_service.classify_intent (we want to drive
-  routing decisions deterministically — strict mocking of the boundary inside
-  this module is still acceptable because classify_intent is an external
-  dependency from cross_vault_qa's perspective)
+Mock boundaries (六鐵律 #5: external I/O only):
+- memvault.services.memory_block_service.qdrant_search (cross-module entry)
+- src.shared.embedding.get_embedding (cross-module entry)
+- httpx.AsyncClient — cross_vault_service self-calls POST /api/docvault/qa
+  over loopback, so the HTTP client is the boundary (docvault has two QA
+  paths and the inline one in routes.py is the only one wired to the
+  synthesizer — we self-call to stay on the supported path).
 
-Internal wiring (citation construction, answer fallback, asyncio.gather)
+Internal wiring (citation construction, asyncio.gather, answer fallback)
 runs real.
 
 六鐵律 disclosure: main-thread author. See test_schemas.py header.
@@ -23,39 +22,40 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from src.modules.assistant import cross_vault_service as cv
 from src.modules.assistant.schemas import AssistantQARequest, AssistantQAResponse
-
 
 # ── Fakes ──────────────────────────────────────────────────────────────
 
 
 def _fake_block(block_id: str, content: str, score: float = 0.7) -> Any:
-    """A duck-typed memvault SemanticSearchResult-ish object."""
-    b = MagicMock()
-    b.id = block_id
-    b.content = content
-    b.block_type = "fact"
-    b.final_score = score
-    return b
+    """Mimic memvault SemanticSearchResult(block, score) shape."""
+    inner = MagicMock()
+    inner.id = block_id
+    inner.content = content
+    inner.block_type = "fact"
+    item = MagicMock()
+    item.block = inner
+    item.score = score
+    return item
 
 
-def _fake_dv_response(answer: str, citations: list[Any] | None = None, log_id: str | None = "log-1") -> Any:
+def _fake_dv_http_response(
+    answer: str,
+    citations: list[dict] | None = None,
+    log_id: str | None = "log-1",
+    status_code: int = 200,
+) -> Any:
+    """Mimic httpx.Response for the docvault /qa self-call."""
     r = MagicMock()
-    r.answer = answer
-    r.citations = citations or []
-    r.qa_log_id = log_id
+    r.status_code = status_code
+    r.text = answer if status_code >= 400 else ""
+    r.json.return_value = {
+        "answer": answer,
+        "citations": citations or [],
+        "qa_log_id": log_id,
+    }
     return r
-
-
-def _fake_dv_citation(document_id: str, section: str, chunk_id: str = "c1") -> Any:
-    c = MagicMock()
-    c.document_id = document_id
-    c.chunk_id = chunk_id
-    c.section = section
-    c.quote = None
-    return c
 
 
 @pytest.fixture
@@ -63,11 +63,32 @@ def fake_db():
     return MagicMock()
 
 
+class _StubAsyncClient:
+    """Stub for httpx.AsyncClient — drives the docvault HTTP self-call."""
+
+    def __init__(self, post_response: Any | None = None, raise_on_post: Exception | None = None):
+        self._post_response = post_response
+        self._raise_on_post = raise_on_post
+        self.post_calls: list[dict] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return None
+
+    async def post(self, url: str, **kw):
+        self.post_calls.append({"url": url, **kw})
+        if self._raise_on_post:
+            raise self._raise_on_post
+        return self._post_response
+
+
 @pytest.fixture(autouse=True)
 def _patch_external(monkeypatch):
-    """Default mocks: embedding works, both vaults return empty.
-
-    Individual tests override these by re-assigning attributes on the mocks.
+    """Default mocks: embedding works, memvault returns empty, docvault HTTP
+    returns a default answer. Individual tests override fields on the
+    returned dict to drive behaviour.
     """
     mock_embed = AsyncMock(return_value=[0.0] * 1024)
 
@@ -80,47 +101,51 @@ def _patch_external(monkeypatch):
     fake_embed_module = types.ModuleType("src.shared.embedding")
     fake_embed_module.get_embedding = mock_embed
 
-    class FakeQAService:
-        ask = AsyncMock(return_value=_fake_dv_response("default doc answer", []))
-
-    fake_dv_module = types.ModuleType("src.modules.docvault.qa_service")
-    fake_dv_module.QAService = FakeQAService
-    fake_dv_module._FakeQAService = FakeQAService
-
-    fake_dv_schemas = types.ModuleType("src.modules.docvault.schemas")
-
-    class FakeQARequest:
-        def __init__(self, **kw):
-            for k, v in kw.items():
-                setattr(self, k, v)
-
-    fake_dv_schemas.QARequest = FakeQARequest
-
-    monkeypatch.setitem(__import__("sys").modules, "src.modules.memvault.services", fake_memvault_module)
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "src.modules.memvault.services",
+        fake_memvault_module,
+    )
     monkeypatch.setitem(__import__("sys").modules, "src.shared.embedding", fake_embed_module)
-    monkeypatch.setitem(__import__("sys").modules, "src.modules.docvault.qa_service", fake_dv_module)
-    monkeypatch.setitem(__import__("sys").modules, "src.modules.docvault.schemas", fake_dv_schemas)
+
+    # Default httpx stub: 200 with empty answer + no citations.
+    stub = _StubAsyncClient(post_response=_fake_dv_http_response("", []))
+
+    def _factory(*a, **kw):
+        return stub
+
+    monkeypatch.setattr(cv.__name__ + ".httpx", types.SimpleNamespace(AsyncClient=_factory))
 
     yield {
         "memvault": fake_memvault_module,
-        "docvault_service": fake_dv_module,
         "embedding": fake_embed_module,
+        "docvault_stub": stub,
+        "set_docvault_response": lambda resp: setattr(stub, "_post_response", resp),
+        "set_docvault_raise": lambda exc: setattr(stub, "_raise_on_post", exc),
     }
+
+
+def _override_docvault_via_monkeypatch(monkeypatch, stub: _StubAsyncClient):
+    """Re-install the (mutated) stub. Needed when a test wants a fresh stub."""
+    monkeypatch.setattr(
+        cv.__name__ + ".httpx", types.SimpleNamespace(AsyncClient=lambda *a, **kw: stub)
+    )
 
 
 # ── Routing semantics ──────────────────────────────────────────────────
 
 
 def test_routing_memory_calls_only_memvault(fake_db, _patch_external):
-    """Killer: implementation that runs gather() regardless of intent fails here."""
+    """Killer: implementation that always gathers both vaults fails here."""
     _patch_external["memvault"].memory_block_service.qdrant_search = AsyncMock(
         return_value=(
-            [_fake_block("b1", "I prefer worktree isolation"), _fake_block("b2", "Avoid --no-verify")],
+            [
+                _fake_block("b1", "I prefer worktree isolation"),
+                _fake_block("b2", "Avoid --no-verify"),
+            ],
             MagicMock(),
         ),
     )
-    docvault_ask = _patch_external["docvault_service"]._FakeQAService.ask
-    docvault_ask.reset_mock()
 
     req = AssistantQARequest(question="我之前說過什麼？", routing="memory")
     result = asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
@@ -130,7 +155,9 @@ def test_routing_memory_calls_only_memvault(fake_db, _patch_external):
     assert result.routing_model == "user-specified"
     assert result.memvault_hits == 2
     assert result.docvault_hits == 0
-    assert docvault_ask.call_count == 0, "memory routing must not invoke docvault"
+    assert len(_patch_external["docvault_stub"].post_calls) == 0, (
+        "memory routing must not invoke docvault"
+    )
     assert len(result.citations) == 2
     assert all(c.source == "memvault" for c in result.citations)
 
@@ -139,10 +166,10 @@ def test_routing_doc_calls_only_docvault(fake_db, _patch_external):
     """Killer: same as above, opposite direction."""
     memvault_search = _patch_external["memvault"].memory_block_service.qdrant_search
     memvault_search.reset_mock()
-    _patch_external["docvault_service"]._FakeQAService.ask = AsyncMock(
-        return_value=_fake_dv_response(
+    _patch_external["set_docvault_response"](
+        _fake_dv_http_response(
             "memvault 有三條軌道",
-            citations=[_fake_dv_citation("doc1", "section A")],
+            citations=[{"document_id": "doc1", "section": "section A", "chunk_id": "c1"}],
         )
     )
 
@@ -160,15 +187,15 @@ def test_routing_doc_calls_only_docvault(fake_db, _patch_external):
 
 def test_routing_mixed_calls_both(fake_db, _patch_external):
     _patch_external["memvault"].memory_block_service.qdrant_search = AsyncMock(
-        return_value=(
-            [_fake_block("b1", "memory content")],
-            MagicMock(),
-        ),
+        return_value=([_fake_block("b1", "memory content")], MagicMock()),
     )
-    _patch_external["docvault_service"]._FakeQAService.ask = AsyncMock(
-        return_value=_fake_dv_response(
+    _patch_external["set_docvault_response"](
+        _fake_dv_http_response(
             "doc answer",
-            citations=[_fake_dv_citation("doc1", "section A"), _fake_dv_citation("doc2", "section B")],
+            citations=[
+                {"document_id": "doc1", "section": "section A", "chunk_id": "c1"},
+                {"document_id": "doc2", "section": "section B", "chunk_id": "c2"},
+            ],
         )
     )
 
@@ -190,10 +217,12 @@ def test_routing_auto_uses_classifier(fake_db, monkeypatch, _patch_external):
     monkeypatch.setattr(
         cv,
         "classify_intent",
-        AsyncMock(return_value={"intent": "doc", "model": "fake-mdl", "raw": "doc", "fallback": False}),
+        AsyncMock(
+            return_value={"intent": "doc", "model": "fake-mdl", "raw": "doc", "fallback": False}
+        ),
     )
-    docvault_ask = _patch_external["docvault_service"]._FakeQAService.ask = AsyncMock(
-        return_value=_fake_dv_response("doc answer", [_fake_dv_citation("doc1", "s")])
+    _patch_external["set_docvault_response"](
+        _fake_dv_http_response("doc answer", citations=[{"document_id": "doc1"}])
     )
     memvault_search = _patch_external["memvault"].memory_block_service.qdrant_search
     memvault_search.reset_mock()
@@ -205,11 +234,10 @@ def test_routing_auto_uses_classifier(fake_db, monkeypatch, _patch_external):
     assert result.routing_model == "fake-mdl"
     assert result.routing_fallback is False
     assert memvault_search.call_count == 0
-    assert docvault_ask.call_count == 1
+    assert len(_patch_external["docvault_stub"].post_calls) == 1
 
 
 def test_routing_auto_classifier_fallback_propagates(fake_db, monkeypatch, _patch_external):
-    """When classifier reports fallback=True, response must surface it."""
     monkeypatch.setattr(
         cv,
         "classify_intent",
@@ -227,24 +255,22 @@ def test_memvault_raises_does_not_crash(fake_db, _patch_external):
     _patch_external["memvault"].memory_block_service.qdrant_search = AsyncMock(
         side_effect=RuntimeError("qdrant down")
     )
-    _patch_external["docvault_service"]._FakeQAService.ask = AsyncMock(
-        return_value=_fake_dv_response("doc answer", [_fake_dv_citation("doc1", "s")])
+    _patch_external["set_docvault_response"](
+        _fake_dv_http_response("doc answer", citations=[{"document_id": "doc1"}])
     )
 
     req = AssistantQARequest(question="x", routing="mixed")
     result = asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
     assert result.memvault_hits == 0
     assert result.docvault_hits == 1
-    assert result.answer == "doc answer"  # docvault still produced the answer
+    assert result.answer == "doc answer"
 
 
 def test_docvault_raises_falls_back_to_memvault_synth(fake_db, _patch_external):
     _patch_external["memvault"].memory_block_service.qdrant_search = AsyncMock(
         return_value=([_fake_block("b1", "synthetic content here")], MagicMock()),
     )
-    _patch_external["docvault_service"]._FakeQAService.ask = AsyncMock(
-        side_effect=RuntimeError("docvault crashed")
-    )
+    _patch_external["set_docvault_raise"](RuntimeError("docvault crashed"))
     req = AssistantQARequest(question="x", routing="mixed")
     result = asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
     assert result.docvault_hits == 0
@@ -252,10 +278,21 @@ def test_docvault_raises_falls_back_to_memvault_synth(fake_db, _patch_external):
     assert "synthetic content here" in result.answer
 
 
+def test_docvault_http_error_falls_back_to_memvault_synth(fake_db, _patch_external):
+    """Killer: HTTP 5xx should be treated as failure, not propagated."""
+    _patch_external["memvault"].memory_block_service.qdrant_search = AsyncMock(
+        return_value=([_fake_block("b1", "memvault content xyz")], MagicMock()),
+    )
+    _patch_external["set_docvault_response"](
+        _fake_dv_http_response("server error", status_code=500)
+    )
+    req = AssistantQARequest(question="x", routing="mixed")
+    result = asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
+    assert result.docvault_hits == 0
+    assert "memvault content xyz" in result.answer
+
+
 def test_both_empty_returns_polite_no_memory_message(fake_db, _patch_external):
-    """Killer: if implementation silently returns "" on both-empty,
-    downstream UIs would show a blank chat bubble.
-    """
     req = AssistantQARequest(question="x", routing="memory")
     result = asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
     assert result.answer.strip() != ""
@@ -273,28 +310,31 @@ def test_memvault_citations_carry_block_content_preview(fake_db, _patch_external
     req = AssistantQARequest(question="x", routing="memory")
     result = asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
     cit = result.citations[0]
-    # Implementation should cap preview to keep response payload modest
     assert cit.block_content is not None
     assert len(cit.block_content) <= 600
+    assert cit.block_id == "b1"
 
 
 def test_docvault_space_override_passed_through(fake_db, _patch_external):
-    docvault_ask = _patch_external["docvault_service"]._FakeQAService.ask = AsyncMock(
-        return_value=_fake_dv_response("answer", [])
-    )
-    req = AssistantQARequest(
-        question="x", routing="doc", docvault_space="obsidian-blog"
-    )
+    _patch_external["set_docvault_response"](_fake_dv_http_response("answer", []))
+    req = AssistantQARequest(question="x", routing="doc", docvault_space="obsidian-blog")
     asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
-    call_kwargs = docvault_ask.call_args.kwargs
-    assert call_kwargs.get("space_id") == "obsidian-blog"
+    call = _patch_external["docvault_stub"].post_calls[0]
+    assert call["params"]["space_id"] == "obsidian-blog"
 
 
 def test_docvault_space_defaults_to_caller_space(fake_db, _patch_external):
-    docvault_ask = _patch_external["docvault_service"]._FakeQAService.ask = AsyncMock(
-        return_value=_fake_dv_response("answer", [])
-    )
-    req = AssistantQARequest(question="x", routing="doc")  # no override
+    _patch_external["set_docvault_response"](_fake_dv_http_response("answer", []))
+    req = AssistantQARequest(question="x", routing="doc")
     asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="user-42"))
-    call_kwargs = docvault_ask.call_args.kwargs
-    assert call_kwargs.get("space_id") == "user-42"
+    call = _patch_external["docvault_stub"].post_calls[0]
+    assert call["params"]["space_id"] == "user-42"
+
+
+def test_docvault_tags_passed_through(fake_db, _patch_external):
+    """Killer: tags filter must reach the docvault HTTP body."""
+    _patch_external["set_docvault_response"](_fake_dv_http_response("answer", []))
+    req = AssistantQARequest(question="x", routing="doc", docvault_tags=["posts", "tech"])
+    asyncio.run(cv.cross_vault_qa(fake_db, req, space_id="default"))
+    call = _patch_external["docvault_stub"].post_calls[0]
+    assert call["json"]["tags"] == ["posts", "tech"]

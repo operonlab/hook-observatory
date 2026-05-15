@@ -18,12 +18,17 @@ _LITELLM_BASE = "http://localhost:4000/v1"
 _LITELLM_KEY = "sk-litellm-local-dev"
 
 _MODEL_CANDIDATES = [
-    "gemini-3.1-flash-lite",
+    # Order = runtime preference. Gemini is last because its Studio
+    # monthly cap can run out mid-month and `resolve_model` only checks
+    # /v1/models (which still lists the model after the cap is hit),
+    # so the actual completion calls would 429 every time. Reorder lets
+    # us prefer providers that have headroom for synth pipeline work.
+    "deepseek-v3",
     "kimi-k2.5",
     "minimax-m2.7-hs",
-    "deepseek-v3",
     "qwen3.5-flash",
     "grok-4.1-fast",
+    "gemini-3.1-flash-lite",
     "gemini-3.1-flash",
 ]
 

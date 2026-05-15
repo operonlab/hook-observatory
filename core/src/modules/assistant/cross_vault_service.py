@@ -17,12 +17,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .ops.query_router import classify_intent
 from .schemas import AssistantQARequest, AssistantQAResponse, CrossVaultCitation
+
+# Module-level import so tests can monkeypatch `cv.httpx`.
+_DOCVAULT_QA_URL = "http://127.0.0.1:10000/api/docvault/qa"
+_DOCVAULT_HTTP_TIMEOUT = 180.0
 
 logger = logging.getLogger(__name__)
 
@@ -63,39 +69,86 @@ async def _ask_docvault(
     space_id: str,
     created_by: str | None,
 ) -> Any | None:
-    """Best-effort docvault QA. Returns None on any failure."""
-    try:
-        from src.modules.docvault.qa_service import QAService
-        from src.modules.docvault.schemas import QARequest
+    """Best-effort docvault QA via the live /qa endpoint.
 
-        dv_request = QARequest(
-            question=request.question,
-            mode=request.docvault_mode,
-            top_k=request.docvault_top_k,
-            session_id=request.session_id,
-            tags=request.docvault_tags,
-        )
-        dv_space = request.docvault_space or space_id
-        return await QAService().ask(
-            db=db,
-            request=dv_request,
-            space_id=dv_space,
-            created_by=created_by,
-        )
+    docvault has two QA paths: the inline pipeline in routes.py (Cache →
+    Conv → IntentRouter → Search → Rerank → Synth → Log) and
+    QAService.ask() in qa_service.py. Only the inline route currently
+    wires up the synthesizer (qa_service path returns "Synthesis operator
+    not available."), so we self-call the HTTP endpoint to stay on the
+    supported path. Adds one local loopback hop in exchange for parity.
+    """
+
+    body: dict[str, Any] = {
+        "question": request.question,
+        "mode": request.docvault_mode,
+        "top_k": request.docvault_top_k,
+    }
+    if request.docvault_tags is not None:
+        body["tags"] = request.docvault_tags
+    if request.session_id:
+        body["session_id"] = request.session_id
+
+    dv_space = request.docvault_space or space_id
+    headers = {"Content-Type": "application/json"}
+    internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
+    if internal_key:
+        headers["X-Internal-Key"] = internal_key
+
+    try:
+        async with httpx.AsyncClient(timeout=_DOCVAULT_HTTP_TIMEOUT) as client:
+            r = await client.post(
+                _DOCVAULT_QA_URL,
+                params={"space_id": dv_space},
+                json=body,
+                headers=headers,
+            )
+            if r.status_code >= 400:
+                logger.warning(
+                    "cross_vault: docvault /qa HTTP %s: %s",
+                    r.status_code,
+                    r.text[:200],
+                )
+                return None
+            data = r.json()
     except Exception:
-        logger.warning("cross_vault: docvault QA failed", exc_info=True)
+        logger.warning("cross_vault: docvault HTTP self-call failed", exc_info=True)
         return None
+
+    class _Cit:
+        def __init__(self, d: dict):
+            self.document_id = d.get("document_id")
+            self.chunk_id = d.get("chunk_id")
+            self.section = d.get("section")
+            self.quote = d.get("quote")
+
+    class _Resp:
+        def __init__(self, d: dict):
+            self.answer = d.get("answer", "")
+            self.citations = [_Cit(c) for c in (d.get("citations") or [])]
+            self.qa_log_id = d.get("qa_log_id")
+
+    return _Resp(data)
 
 
 def _memvault_to_citation(item: Any) -> CrossVaultCitation:
-    """Pull only public-shape fields off whatever memvault returns."""
-    content = getattr(item, "content", None) or ""
+    """Pull only public-shape fields off whatever memvault returns.
+
+    memvault.qdrant_search yields SemanticSearchResult(block, score) where
+    block is a MemoryBlockResponse. Older paths may yield the block
+    directly. Both shapes resolve here.
+    """
+    block = getattr(item, "block", None) or item
+    content = getattr(block, "content", None) or ""
+    score = getattr(item, "score", None)
+    if score is None:
+        score = getattr(block, "final_score", None) or getattr(block, "score", None)
     return CrossVaultCitation(
         source="memvault",
-        block_id=str(getattr(item, "id", "") or "") or None,
+        block_id=str(getattr(block, "id", "") or "") or None,
         block_content=content[:600] if content else None,
-        block_type=getattr(item, "block_type", None),
-        score=getattr(item, "final_score", None) or getattr(item, "score", None),
+        block_type=getattr(block, "block_type", None),
+        score=score,
     )
 
 
@@ -120,7 +173,8 @@ def _synthesize_from_memvault(items: list[Any], question: str) -> str:
         return "（memvault 沒有找到相關記憶）"
     bullets = []
     for i, it in enumerate(items[:5], start=1):
-        content = (getattr(it, "content", "") or "").strip()
+        block = getattr(it, "block", None) or it
+        content = (getattr(block, "content", "") or "").strip()
         if not content:
             continue
         snippet = content[:240].replace("\n", " ")
@@ -152,9 +206,7 @@ async def cross_vault_qa(
     mem_items: list[Any] = []
     dv_response: Any | None = None
     if intent == "memory":
-        mem_items = await _recall_memvault(
-            db, request.question, space_id, request.memvault_top_k
-        )
+        mem_items = await _recall_memvault(db, request.question, space_id, request.memvault_top_k)
     elif intent == "doc":
         dv_response = await _ask_docvault(db, request, space_id, created_by)
     else:  # mixed
