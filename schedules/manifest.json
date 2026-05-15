@@ -748,6 +748,21 @@
       "enabled": false
     },
     {
+      "name": "ws-cc-credentials-sync",
+      "label": "com.joneshong.scheduler.ws-cc-credentials-sync",
+      "command": "/bin/sh -c 'umask 077; security find-generic-password -s \"Claude Code-credentials\" -w > \"$HOME/.claude/.credentials.json.tmp\" && chmod 600 \"$HOME/.claude/.credentials.json.tmp\" && mv \"$HOME/.claude/.credentials.json.tmp\" \"$HOME/.claude/.credentials.json\"'",
+      "schedule": {
+        "calendar": {
+          "Hour": 4,
+          "Minute": 30
+        }
+      },
+      "description": "每日 04:30: Keychain 'Claude Code-credentials' → ~/.claude/.credentials.json sync。雙層防禦兜底（搭配 agent-metrics quota_writer.rs self-heal）：launchd 啟動的 agent-metrics 偶爾讀不到 Keychain ACL，導致 tmux 第二列 CC quota 顯示 ?。檔案存在則 quota_writer 走 fast path，永遠不需要 Keychain。原子 mv + chmod 600 防 race。詳見 memory: cc-credentials-launchd-keychain-2026-05-15.md",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "obsidian-workshop-autocommit",
       "label": "com.joneshong.scheduler.obsidian-workshop-autocommit",
       "command": "/bin/bash /Users/joneshong/.local/bin/obsidian-workshop-autocommit.sh",
