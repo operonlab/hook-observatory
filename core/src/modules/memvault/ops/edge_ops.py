@@ -283,7 +283,7 @@ class EdgeSemanticSimilarityOp(MemvaultOp):
         edge_map: EdgeMap = {}
 
         try:
-            from src.shared.embedding import get_embedding
+            from src.shared.embedding import get_embeddings_batch
 
             # Collect unique entity IDs that appear in co-occurrence pairs
             entity_ids_needed: set[str] = set()
@@ -291,14 +291,25 @@ class EdgeSemanticSimilarityOp(MemvaultOp):
                 entity_ids_needed.add(a_id)
                 entity_ids_needed.add(b_id)
 
-            # Batch embed entity names
+            # Batch embed entity names in chunks to avoid overloading the MLX
+            # GPU completion queue: per-entity get_embedding() previously enqueued
+            # one Metal command buffer per call, and a single check_error in the
+            # callback queue would SIGABRT the worker (no Python handler can catch
+            # a C++ exception thrown from com.Metal.CompletionQueueDispatch).
+            id_list = [eid for eid in entity_ids_needed if entities.get(eid)]
+            names = [entities[eid] for eid in id_list]
+
             embeddings: dict[str, list[float]] = {}
-            for eid in entity_ids_needed:
-                name = entities.get(eid)
-                if name:
-                    emb = await get_embedding(name, task_type="search_document")
-                    if emb:
-                        embeddings[eid] = emb
+            CHUNK = 128
+            for start in range(0, len(id_list), CHUNK):
+                chunk_ids = id_list[start : start + CHUNK]
+                chunk_names = names[start : start + CHUNK]
+                vecs = await get_embeddings_batch(
+                    chunk_names, task_type="search_document"
+                )
+                for eid, vec in zip(chunk_ids, vecs, strict=True):
+                    if vec:
+                        embeddings[eid] = vec
 
             # Compute pairwise cosine similarity
             for pair in cooc_map:
