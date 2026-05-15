@@ -62,6 +62,10 @@ class MemoryBlock(SpaceScopedModel):
     # Cross-session occurrence count — incremented by dream _gather_signal when detecting
     # repeated_pattern signals across multiple sessions for the same content cluster.
     session_count: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    # Phase 2 provenance metric — who articulated this memory in the source session.
+    # Values: user_lead | dialog | assistant_lead | unknown | NULL
+    # Recall scoring may downweight assistant_lead to mitigate echo-chamber drift.
+    voice: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
 
 
 class BlockArchive(Base):
