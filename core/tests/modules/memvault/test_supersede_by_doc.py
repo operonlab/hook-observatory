@@ -24,10 +24,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
-
 from src.modules.memvault.schemas import SupersedeByDocRequest
 from src.modules.memvault.services import memory_block_service
-
 
 # ── Fakes ──────────────────────────────────────────────────────────────
 
@@ -138,15 +136,24 @@ def test_below_threshold_blocks_excluded(monkeypatch):
     monkeypatch.setattr(
         memory_block_service,
         "get_in_space",
-        AsyncMock(side_effect=lambda db, bid, sid: MagicMock(
-            id=bid, voice="dialog", invalid_at=None, invalidation_reason=None, superseded_by=None
-        )),
+        AsyncMock(
+            side_effect=lambda db, bid, sid: MagicMock(
+                id=bid,
+                voice="dialog",
+                invalid_at=None,
+                invalidation_reason=None,
+                superseded_by=None,
+            )
+        ),
     )
 
     result = asyncio.run(
         memory_block_service.supersede_blocks_by_doc(
-            db=MagicMock(), space_id="default", doc_id="doc1",
-            query_text="x", threshold=0.85,
+            db=MagicMock(),
+            space_id="default",
+            doc_id="doc1",
+            query_text="x",
+            threshold=0.85,
         )
     )
     assert result["superseded"] == ["above"]
@@ -178,9 +185,15 @@ def test_user_lead_blocks_never_superseded(monkeypatch):
     monkeypatch.setattr(
         memory_block_service,
         "get_in_space",
-        AsyncMock(side_effect=lambda db, bid, sid: MagicMock(
-            id=bid, voice="ignored", invalid_at=None, invalidation_reason=None, superseded_by=None
-        )),
+        AsyncMock(
+            side_effect=lambda db, bid, sid: MagicMock(
+                id=bid,
+                voice="ignored",
+                invalid_at=None,
+                invalidation_reason=None,
+                superseded_by=None,
+            )
+        ),
     )
 
     result = asyncio.run(
@@ -206,7 +219,9 @@ def test_already_invalidated_blocks_skipped(monkeypatch):
         AsyncMock(
             return_value=(
                 [
-                    _fake_block(block_id="dead", invalid_at=datetime(2026, 1, 1, tzinfo=UTC), score=0.99),
+                    _fake_block(
+                        block_id="dead", invalid_at=datetime(2026, 1, 1, tzinfo=UTC), score=0.99
+                    ),
                     _fake_block(block_id="alive", invalid_at=None, score=0.99),
                 ],
                 MagicMock(),
@@ -216,9 +231,15 @@ def test_already_invalidated_blocks_skipped(monkeypatch):
     monkeypatch.setattr(
         memory_block_service,
         "get_in_space",
-        AsyncMock(side_effect=lambda db, bid, sid: MagicMock(
-            id=bid, voice="dialog", invalid_at=None, invalidation_reason=None, superseded_by=None
-        )),
+        AsyncMock(
+            side_effect=lambda db, bid, sid: MagicMock(
+                id=bid,
+                voice="dialog",
+                invalid_at=None,
+                invalidation_reason=None,
+                superseded_by=None,
+            )
+        ),
     )
 
     result = asyncio.run(
@@ -307,7 +328,9 @@ def test_invalidation_reason_includes_doc_id_and_title(monkeypatch):
     )
     assert len(captured) == 1
     block = captured[0]
-    assert block.superseded_by == "019e2bfa"
+    # superseded_by stays NULL — it's an FK to blocks.id (block→block path).
+    # Doc identity lives in invalidation_reason.
+    assert block.superseded_by is None
     assert "superseded_by_doc:019e2bfa" in (block.invalidation_reason or "")
     assert "memvault overview" in (block.invalidation_reason or "")
     assert block.invalid_at is not None

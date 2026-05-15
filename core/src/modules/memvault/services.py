@@ -337,6 +337,9 @@ class MemoryBlockService(
             }
 
         superseded_ids: list[str] = []
+        # NB: `superseded_by` is FK → blocks.id (block→block dream-pipeline
+        # supersedence). Doc references can't go there. The doc identity is
+        # encoded in invalidation_reason instead; superseded_by stays NULL.
         reason = f"superseded_by_doc:{doc_id}"
         if doc_title:
             reason = f"{reason}:{doc_title[:120]}"
@@ -345,7 +348,6 @@ class MemoryBlockService(
             if not block:
                 continue
             block.invalid_at = datetime.now(UTC)
-            block.superseded_by = doc_id
             block.invalidation_reason = reason[:200]
             superseded_ids.append(cand["block_id"])
 
