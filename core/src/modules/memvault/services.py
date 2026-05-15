@@ -217,6 +217,7 @@ class MemoryBlockService(
             invalid_at=instance.invalid_at,
             superseded_by=instance.superseded_by,
             invalidation_reason=instance.invalidation_reason,
+            voice=instance.voice,
         )
 
     async def invalidate_block(
