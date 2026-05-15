@@ -2,27 +2,32 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
+
+import yaml
+
+_FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)(.*)\Z", re.DOTALL)
 
 
 def parse_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
     """Return (frontmatter_dict, body) for a markdown file.
 
-    On parse failure: returns ({}, full_text). Bad YAML must not block sync.
+    On parse failure (no fence, bad YAML, non-dict YAML): returns ({}, full_text).
+    Bad YAML must not block sync.
     """
     text = Path(path).read_text(encoding="utf-8")
-    try:
-        import frontmatter as _fm
-    except ImportError:
+    match = _FRONTMATTER_RE.match(text)
+    if not match:
         return {}, text
-
     try:
-        post = _fm.loads(text)
-        meta = dict(post.metadata or {})
-        return meta, post.content
-    except Exception:
+        meta = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError:
         return {}, text
+    if not isinstance(meta, dict):
+        return {}, text
+    return meta, match.group(2)
 
 
 def build_metadata(
