@@ -247,6 +247,115 @@ class MemoryBlockService(
         block.invalidation_reason = reason
         return block
 
+    async def supersede_blocks_by_doc(
+        self,
+        db: AsyncSession,
+        space_id: str,
+        doc_id: str,
+        query_text: str,
+        threshold: float = 0.85,
+        top_k: int = 20,
+        dry_run: bool = False,
+        doc_title: str | None = None,
+    ) -> dict:
+        """Phase 3: mark memvault blocks superseded by a newly-uploaded docvault doc.
+
+        Pipeline:
+          1. Embed query_text (typically doc title + tags + first chunk)
+          2. qdrant_search the memvault space for top_k similar blocks
+          3. Filter by score >= threshold
+          4. For each hit (unless dry_run): invalidate + record doc_id as
+             superseded_by + invalidation_reason="superseded_by_doc:<doc_id>"
+          5. Return {superseded: [...], dry_run_matches: [...], threshold, doc_id}
+
+        Skips blocks that:
+          - Are already invalidated (block.invalid_at is not None)
+          - Have voice="user_lead" — user-articulated facts need manual review
+            before an external doc can supersede them.
+        """
+        from datetime import UTC, datetime
+
+        from src.shared.embedding import get_embedding
+
+        embedding = await get_embedding(query_text, task_type="search_query")
+        if not embedding:
+            return {
+                "superseded": [],
+                "dry_run_matches": [],
+                "threshold": threshold,
+                "doc_id": doc_id,
+                "error": "embedding unavailable",
+            }
+
+        result = await self.qdrant_search(
+            db=db,
+            space_id=space_id,
+            query=query_text,
+            query_embedding=embedding,
+            top_k=top_k,
+        )
+        if not result:
+            return {
+                "superseded": [],
+                "dry_run_matches": [],
+                "threshold": threshold,
+                "doc_id": doc_id,
+                "note": "qdrant unavailable or empty",
+            }
+        items, _meta = result
+
+        candidates: list[dict] = []
+        for item in items:
+            score = float(getattr(item, "score", 0.0) or 0.0)
+            if score < threshold:
+                continue
+            block = getattr(item, "block", None) or item
+            block_id = getattr(block, "id", None)
+            if not block_id:
+                continue
+            voice = getattr(block, "voice", None)
+            invalid_at = getattr(block, "invalid_at", None)
+            if invalid_at is not None:
+                continue
+            if voice == "user_lead":
+                continue
+            candidates.append(
+                {
+                    "block_id": block_id,
+                    "score": score,
+                    "voice": voice,
+                    "content_preview": (getattr(block, "content", "") or "")[:120],
+                }
+            )
+
+        if dry_run:
+            return {
+                "superseded": [],
+                "dry_run_matches": candidates,
+                "threshold": threshold,
+                "doc_id": doc_id,
+            }
+
+        superseded_ids: list[str] = []
+        reason = f"superseded_by_doc:{doc_id}"
+        if doc_title:
+            reason = f"{reason}:{doc_title[:120]}"
+        for cand in candidates:
+            block = await self.get_in_space(db, cand["block_id"], space_id)
+            if not block:
+                continue
+            block.invalid_at = datetime.now(UTC)
+            block.superseded_by = doc_id
+            block.invalidation_reason = reason[:200]
+            superseded_ids.append(cand["block_id"])
+
+        return {
+            "superseded": superseded_ids,
+            "dry_run_matches": [],
+            "threshold": threshold,
+            "doc_id": doc_id,
+        }
+
     async def restore_block(
         self, db: AsyncSession, block_id: str, space_id: str | None = None
     ) -> MemoryBlock | None:
