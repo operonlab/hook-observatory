@@ -27,9 +27,10 @@ async def _search_docvault(
     query: str,
     space_id: str,
     top_k: int,
+    tag_filter: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Search docvault chunks via hybrid search."""
-    config = SearchConfig(service_ids=[DOCVAULT_SERVICE_ID], top_k=top_k)
+    config = SearchConfig(service_ids=[DOCVAULT_SERVICE_ID], top_k=top_k, tag_filter=tag_filter)
     try:
         results, _meta = await hybrid_search(query, space_id, config)
         return [
@@ -103,8 +104,9 @@ class FanOutOp:
         mem_top_k = layer_plan.get("memvault_top_k", 4)
 
         sources = layer_plan.get("sources", ["docvault"])
+        tag_filter: list[str] | None = ctx.get("tag_filter")
 
-        doc_coro = _search_docvault(query, space_id, doc_top_k)
+        doc_coro = _search_docvault(query, space_id, doc_top_k, tag_filter=tag_filter)
 
         if "memvault" in sources:
             mem_coro = _search_memvault(query, space_id, mem_top_k)
