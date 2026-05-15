@@ -123,11 +123,11 @@ async def create_document(
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("docvault.write"),
 ):
-    # Dedup by content_hash
-    existing = await document_service.get_by_content_hash(db, body.content_hash)
+    # Dedup by content_hash (scoped to space — same content allowed across spaces)
+    existing = await document_service.get_by_content_hash(db, body.content_hash, space_id)
     if existing:
         raise ConflictError(
-            f"Document with content_hash={body.content_hash} already exists",
+            f"Document with content_hash={body.content_hash} already exists in space {space_id}",
             code="docvault.content_hash_conflict",
         )
 
@@ -155,12 +155,12 @@ async def upload_document(
     if not raw_content.strip():
         raise BadRequestError("File is empty or unreadable", code="docvault.empty_file")
 
-    # 2. Compute content hash + dedup
+    # 2. Compute content hash + dedup (scoped to space — same content allowed across spaces)
     content_hash = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
-    existing = await document_service.get_by_content_hash(db, content_hash)
+    existing = await document_service.get_by_content_hash(db, content_hash, space_id)
     if existing:
         raise ConflictError(
-            f"Document with content_hash={content_hash} already exists",
+            f"Document with content_hash={content_hash} already exists in space {space_id}",
             code="docvault.content_hash_conflict",
         )
 
