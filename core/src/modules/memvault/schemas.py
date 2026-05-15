@@ -51,6 +51,11 @@ class MemoryBlockCreate(BaseModel):
         default=None,
         description="When the fact started being true (extracted from content if omitted)",
     )
+    voice: str | None = Field(
+        default=None,
+        pattern=r"^(user_lead|dialog|assistant_lead|unknown)$",
+        description="Phase 2 provenance: who articulated this memory in the source session",
+    )
 
 
 class MemoryBlockUpdate(BaseModel):
@@ -70,6 +75,7 @@ class MemoryBlockResponse(SpaceScopedResponse):
     invalid_at: datetime | None = None
     superseded_by: str | None = None
     invalidation_reason: str | None = None
+    voice: str | None = None
 
 
 class MemoryBlockBrief(BaseModel):
