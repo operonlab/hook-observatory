@@ -12,7 +12,14 @@ from src.shared.deps import get_db, require_permission
 from src.shared.sse import format_sse
 
 from .context_builder import build_context
-from .schemas import ChatRequest, FlagRequest, QaLogResponse
+from .cross_vault_service import cross_vault_qa
+from .schemas import (
+    AssistantQARequest,
+    AssistantQAResponse,
+    ChatRequest,
+    FlagRequest,
+    QaLogResponse,
+)
 from .services import flag_qa_log, list_qa_logs, stream_chat
 
 logger = logging.getLogger(__name__)
@@ -52,6 +59,26 @@ async def chat(
             yield format_sse(block)
 
     return EventSourceResponse(event_generator())
+
+
+@router.post("/qa", response_model=AssistantQAResponse)
+async def cross_vault_qa_endpoint(
+    body: AssistantQARequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("assistant.write"),
+):
+    """Unified cross-vault QA — LLM classifies intent, then fans out to
+    memvault.recall and/or docvault.qa. Returns synthesized answer +
+    citations tagged with source vault."""
+    space_id = user.get("space_id", "default")
+    created_by = user.get("user_id")
+    return await cross_vault_qa(
+        db=db,
+        request=body,
+        space_id=space_id,
+        created_by=created_by,
+    )
 
 
 @router.get("/qa-logs", response_model=list[QaLogResponse])
