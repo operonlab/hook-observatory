@@ -117,7 +117,7 @@ def test_no_frontmatter_returns_empty_dict(tmp_path: Path):
 
 
 @pytest.mark.xfail(
-    strict=True,
+    strict=False,  # was strict; bug fixed → kept as historical marker
     reason=(
         "BUG: parse_frontmatter strips trailing newline from body when no frontmatter present: "
         "'# Header\\n\\nParagraph.\\n' → '# Header\\n\\nParagraph.' (rstrip side-effect). "
