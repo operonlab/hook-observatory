@@ -107,10 +107,18 @@ fn token_from_creds_json(raw: &str, source: &str) -> Option<String> {
 /// Claude Code v2 stores the OAuth credentials in `~/.claude/.credentials.json`.
 /// Older builds (and Claude Desktop) stash them in the macOS Keychain under
 /// `Claude Code-credentials`. Try the file first; fall back to the Keychain.
+///
+/// Self-heal: when the Keychain path succeeds but the file is missing, mirror
+/// the raw credentials JSON to disk (mode 0o600) so subsequent calls hit the
+/// fast path. This protects against launchd-spawned processes (PPID=1) whose
+/// Keychain ACL is unpredictable across reboots.
 async fn read_cc_token() -> Option<String> {
-    if let Ok(home) = std::env::var("HOME") {
-        let path = format!("{home}/.claude/.credentials.json");
-        match tokio::fs::read_to_string(&path).await {
+    let creds_path = std::env::var("HOME")
+        .ok()
+        .map(|h| format!("{h}/.claude/.credentials.json"));
+
+    if let Some(path) = creds_path.as_deref() {
+        match tokio::fs::read_to_string(path).await {
             Ok(body) => {
                 if let Some(t) = token_from_creds_json(&body, "credentials_json") {
                     return Some(t);
@@ -129,16 +137,44 @@ async fn read_cc_token() -> Option<String> {
     {
         Ok(o) => o,
         Err(e) => {
-            tracing::debug!(error = %e, "cc_security_spawn_failed");
+            tracing::warn!(error = %e, "cc_security_spawn_failed (no token source available)");
             return None;
         }
     };
     if !out.status.success() {
-        tracing::debug!(rc = ?out.status.code(), stderr = %String::from_utf8_lossy(&out.stderr), "cc_security_nonzero");
+        tracing::warn!(rc = ?out.status.code(), stderr = %String::from_utf8_lossy(&out.stderr), "cc_security_nonzero (no token source available)");
         return None;
     }
     let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    token_from_creds_json(&raw, "keychain")
+    let token = token_from_creds_json(&raw, "keychain");
+
+    if token.is_some() {
+        if let Some(path) = creds_path.as_deref() {
+            match persist_cc_creds_file(path, &raw).await {
+                Ok(()) => tracing::warn!(path, "cc_creds_self_healed_from_keychain"),
+                Err(e) => tracing::warn!(path, error = %e, "cc_creds_self_heal_write_failed"),
+            }
+        }
+    }
+
+    token
+}
+
+/// Write `body` to `path` atomically with mode 0o600 (parent dir created if missing).
+/// Tmp-file + rename keeps readers from seeing a partial write.
+async fn persist_cc_creds_file(path: &str, body: &str) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let p = std::path::Path::new(path);
+    if let Some(parent) = p.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let tmp = format!("{path}.tmp");
+    tokio::fs::write(&tmp, body).await?;
+    let mut perms = tokio::fs::metadata(&tmp).await?.permissions();
+    perms.set_mode(0o600);
+    tokio::fs::set_permissions(&tmp, perms).await?;
+    tokio::fs::rename(&tmp, path).await?;
+    Ok(())
 }
 
 async fn fetch_cc(client: &reqwest::Client) -> Value {
