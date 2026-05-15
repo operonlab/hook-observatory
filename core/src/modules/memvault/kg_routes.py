@@ -936,20 +936,47 @@ async def list_entity_edges(
 @router.post("/entity-edges/recompute", status_code=202)
 async def recompute_edge_weights(
     space_id: str = Query(default="default"),
+    since_hours: int | None = Query(
+        default=None,
+        ge=1,
+        le=720,
+        description=(
+            "Incremental mode: only recompute edges touched by triples updated "
+            "in the last N hours. Omit for full recompute."
+        ),
+    ),
     body: EdgeRecomputeRequest | None = None,
     db: AsyncSession = Depends(get_db),
     _user: dict = require_permission("memvault.write"),
 ):
-    """Trigger full edge weight recomputation via the Edge Pipeline."""
+    """Trigger edge weight recomputation via the Edge Pipeline.
+
+    Modes:
+      - Full (since_hours=None): recompute every entity pair from scratch.
+      - Incremental (since_hours=N): only recompute pairs whose endpoint
+        entities appear in triples with updated_at >= now() - N hours. Pairs
+        outside the affected set keep their previous DB values.
+    """
+
+    from datetime import UTC, datetime, timedelta
 
     from .pipeline_config import MemvaultPipelineConfig
     from .pipelines.edge_pipeline import build_edge_pipeline
 
-    logger.info("[entity_edges/recompute] start: space_id=%s", space_id)
+    since_dt = (
+        datetime.now(UTC) - timedelta(hours=since_hours)
+        if since_hours is not None
+        else None
+    )
+    logger.info(
+        "[entity_edges/recompute] start: space_id=%s since=%s",
+        space_id,
+        since_dt.isoformat() if since_dt else "full",
+    )
     config = MemvaultPipelineConfig.from_env()
     pipeline = build_edge_pipeline(config)
 
-    ctx = {"db": db, "space_id": space_id}
+    ctx = {"db": db, "space_id": space_id, "since_dt": since_dt}
     ctx = await pipeline.execute(ctx)
 
     upserted = ctx.get("edges_upserted", 0)
@@ -959,21 +986,24 @@ async def recompute_edge_weights(
 
     if upserted == 0:
         logger.warning(
-            "[entity_edges/recompute] 0 edges upserted (stages=%s). "
+            "[entity_edges/recompute] 0 edges upserted (stages=%s, since=%s). "
             "Diagnosis hint: 確認 (a) entity_canonicals 有 row、(b) triples 主張類 > 0、"
-            "(c) edge_ops.py:EdgePersistOp 有 await db.commit()（2026-05-08 修過 silent rollback bug）",
+            "(c) EdgePersistOp 有 await db.commit() (2026-05-08 silent rollback fix)",
             stages,
+            since_dt.isoformat() if since_dt else "full",
         )
     else:
         logger.info(
-            "[entity_edges/recompute] done: upserted=%d stages=%s timings=%s",
+            "[entity_edges/recompute] done: upserted=%d stages=%s timings=%s since=%s",
             upserted,
             stages,
             {k: round(v, 1) for k, v in timings.items()},
+            since_dt.isoformat() if since_dt else "full",
         )
 
     return {
         "edges_upserted": upserted,
+        "since": since_dt.isoformat() if since_dt else None,
         "meta": {"stages_applied": stages, "stage_timings": timings},
     }
 

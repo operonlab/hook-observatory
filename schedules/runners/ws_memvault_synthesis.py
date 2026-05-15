@@ -142,10 +142,13 @@ def main() -> None:
     # Step 0: Edge weight recomputation (multi-signal: co-occurrence, session overlap,
     # Adamic-Adar, type affinity, semantic similarity → composite_weight)
     # Must run BEFORE Leiden so communities use weighted edges.
-    log("Step 0/5: Edge weight recompute (multi-signal)")
+    # Incremental window: 48h covers 24h schedule + 24h safety buffer (missed
+    # runs, schedule drift, time-zone edge cases). Pairs outside the affected
+    # entity set keep their previous DB values, untouched.
+    log("Step 0/5: Edge weight recompute (incremental, since=48h)")
     try:
         req = urllib.request.Request(
-            f"{CORE_API}/kg/entity-edges/recompute?space_id=default",
+            f"{CORE_API}/kg/entity-edges/recompute?space_id=default&since_hours=48",
             data=b"",
             headers=_internal_headers(),
             method="POST",

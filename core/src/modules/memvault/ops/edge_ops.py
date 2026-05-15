@@ -61,26 +61,68 @@ class EdgeCooccurrenceOp(MemvaultOp):
 
         db: AsyncSession = ctx["db"]
         space_id: str = ctx["space_id"]
+        since_dt = ctx.get("since_dt")  # None = full recompute
         min_cooccurrence: int = self._config.edge_min_cooccurrence
 
-        # Count co-occurrences between canonical entity pairs
-        stmt = (
-            select(
-                Triple.canonical_subject_id,
-                Triple.canonical_object_id,
-                func.count().label("cnt"),
-            )
-            .where(
-                Triple.space_id == space_id,
-                Triple.deleted_at.is_(None),
-                Triple.invalid_at.is_(None),
-                Triple.canonical_subject_id.isnot(None),
-                Triple.canonical_object_id.isnot(None),
-                Triple.canonical_subject_id != Triple.canonical_object_id,
-            )
-            .group_by(Triple.canonical_subject_id, Triple.canonical_object_id)
-            .having(func.count() >= min_cooccurrence)
+        base_filters = (
+            Triple.space_id == space_id,
+            Triple.deleted_at.is_(None),
+            Triple.invalid_at.is_(None),
+            Triple.canonical_subject_id.isnot(None),
+            Triple.canonical_object_id.isnot(None),
+            Triple.canonical_subject_id != Triple.canonical_object_id,
         )
+
+        # Incremental mode: narrow the cooc group-by to pairs whose endpoint
+        # entities were touched by a triple updated in [since_dt, now]. Cooc
+        # counts are still computed against the FULL history of those pairs
+        # (only the pair-set is filtered, not the count window), so resulting
+        # weights are correct, not a delta. Pairs outside the affected set
+        # keep their previous DB values because EdgePersistOp upserts only
+        # what's in ctx — unaffected rows are not touched.
+        if since_dt is not None:
+            affected_subq = (
+                select(Triple.canonical_subject_id.label("eid"))
+                .where(*base_filters, Triple.updated_at >= since_dt)
+                .union(
+                    select(Triple.canonical_object_id.label("eid"))
+                    .where(*base_filters, Triple.updated_at >= since_dt)
+                )
+                .subquery()
+            )
+            affected_rows = await db.execute(select(affected_subq.c.eid).distinct())
+            affected_ids = {row[0] for row in affected_rows if row[0] is not None}
+            if not affected_ids:
+                ctx["edge_cooccurrence_map"] = {}
+                logger.info(
+                    "S1 cooccurrence (incremental since=%s): 0 affected entities",
+                    since_dt.isoformat(),
+                )
+                return ctx
+            pair_filter = Triple.canonical_subject_id.in_(
+                affected_ids
+            ) | Triple.canonical_object_id.in_(affected_ids)
+            stmt = (
+                select(
+                    Triple.canonical_subject_id,
+                    Triple.canonical_object_id,
+                    func.count().label("cnt"),
+                )
+                .where(*base_filters, pair_filter)
+                .group_by(Triple.canonical_subject_id, Triple.canonical_object_id)
+                .having(func.count() >= min_cooccurrence)
+            )
+        else:
+            stmt = (
+                select(
+                    Triple.canonical_subject_id,
+                    Triple.canonical_object_id,
+                    func.count().label("cnt"),
+                )
+                .where(*base_filters)
+                .group_by(Triple.canonical_subject_id, Triple.canonical_object_id)
+                .having(func.count() >= min_cooccurrence)
+            )
         result = await db.execute(stmt)
 
         edge_map: EdgeMap = {}
@@ -88,8 +130,9 @@ class EdgeCooccurrenceOp(MemvaultOp):
             pair = _normalize_pair(row[0], row[1])
             edge_map[pair] = edge_map.get(pair, 0) + row[2]
 
+        mode = "incremental" if since_dt is not None else "full"
+        logger.info("S1 cooccurrence (%s): %d entity pairs", mode, len(edge_map))
         ctx["edge_cooccurrence_map"] = edge_map
-        logger.info("S1 cooccurrence: %d entity pairs", len(edge_map))
         return ctx
 
 

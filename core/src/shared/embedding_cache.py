@@ -17,7 +17,10 @@ from .redis import get_redis_binary
 logger = logging.getLogger(__name__)
 
 _VERSION = "v1"
-_TTL = 86400  # 24 hours
+# 7-day TTL: entity canonical names rarely change, and a 24h TTL collided
+# with the daily 17:30 synthesis schedule (every run hit 0% cache hits as
+# the previous day's entries expired right before the next run started).
+_TTL = 7 * 86400  # 7 days
 _FMT_1024 = "1024f"  # struct format for 1024 floats
 _PACK_SIZE = struct.calcsize(_FMT_1024)  # 4096 bytes
 
