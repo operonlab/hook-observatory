@@ -192,6 +192,18 @@ SERVICES = [
         "health": get("sentinel").health_url,
         "workdir": "/Users/joneshong/workshop/stations/sentinel",
     },
+    {
+        "name": "browser-render",
+        "type": "binary",
+        "cmd": (
+            "/Users/joneshong/.cargo/shared-target/release/browser-render"
+            " --config /Users/joneshong/workshop/stations/browser-render/config.yaml"
+        ),
+        "port": get_port("browser-render"),
+        "health": get("browser-render").health_url,
+        "workdir": "/Users/joneshong/workshop/stations/browser-render",
+        "optional": True,
+    },
     # Python system-monitor retired 2026-05-01 — replaced by system-monitor-rs.
     # Rollback: revert this block (uvicorn entry) + keep stations/system-monitor/.
     # RSS 58 MB → 15 MB (省 73.8%), /status cached path 2 ms → 0.3 ms.

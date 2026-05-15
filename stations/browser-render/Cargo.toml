@@ -1,0 +1,45 @@
+[package]
+name = "browser-render"
+version = "0.1.0"
+edition = "2021"
+description = "Workshop browser-render — offline web → frames renderer (Rust + axum + chromiumoxide)"
+license = "MIT"
+
+[lib]
+name = "browser_render"
+path = "src/lib.rs"
+
+[[bin]]
+name = "browser-render"
+path = "src/main.rs"
+
+[[bin]]
+name = "spike"
+path = "src/bin/spike.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.7", features = ["macros"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+chromiumoxide = { version = "0.9" }
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+figment = { version = "0.10", features = ["yaml", "env"] }
+thiserror = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+base64 = "0.22"
+tokio-util = { version = "0.7", features = ["rt"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

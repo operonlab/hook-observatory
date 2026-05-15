@@ -166,6 +166,13 @@ services:
     env_var: REMOTE_NODE_URL
     nginx_path: ""
     optional: true
+  - name: browser-render
+    port: 10221
+    group: station-ai
+    health_path: /healthz
+    env_var: BROWSER_RENDER_URL
+    nginx_path: ""
+    optional: true
 
   # ── Stations: Business & Tools ──
   - name: auto-survey
