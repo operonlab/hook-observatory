@@ -1,0 +1,225 @@
+[
+  {
+    "name": "render_pipeline",
+    "description": "Run the full browser-render pipeline for a Remotion/web presentation project. Probes durations → builds subtitles → renders URL frames → composes final MP4. Long-running; use from background agent for true async.",
+    "inputSchema": {
+      "properties": {
+        "project_root": {
+          "title": "Project Root",
+          "type": "string"
+        },
+        "dev_url": {
+          "title": "Dev Url",
+          "type": "string"
+        },
+        "out_dir": {
+          "title": "Out Dir",
+          "type": "string"
+        },
+        "fps": {
+          "default": 30,
+          "title": "Fps",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "project_root",
+        "dev_url",
+        "out_dir"
+      ],
+      "title": "render_pipelineArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "render_pipelineOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "render_url_to_frames",
+    "description": "Render a web URL over time segments, producing a PNG frame sequence. Controls a headless browser and screenshots each frame at the given fps.",
+    "inputSchema": {
+      "properties": {
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "durations": {
+          "title": "Durations",
+          "description": "Comma-separated list of duration segments in milliseconds (e.g. '2000,3500,1800')",
+          "type": "string"
+        },
+        "out_dir": {
+          "title": "Out Dir",
+          "type": "string"
+        },
+        "fps": {
+          "default": 30,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "chapter": {
+          "default": "",
+          "title": "Chapter",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "durations",
+        "out_dir"
+      ],
+      "title": "render_url_to_framesArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "render_url_to_framesOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "probe_durations",
+    "description": "Extract chapter/slide duration data from a Remotion project manifest. Returns slide_count, total_ms, and per-chapter durations.",
+    "inputSchema": {
+      "properties": {
+        "project_root": {
+          "title": "Project Root",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_root"
+      ],
+      "title": "probe_durationsArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "probe_durationsOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "build_subtitles",
+    "description": "Generate SRT and VTT subtitle files from project transcript data. Returns srt_path, vtt_path, and cue_count.",
+    "inputSchema": {
+      "properties": {
+        "project_root": {
+          "title": "Project Root",
+          "type": "string"
+        },
+        "out_dir": {
+          "title": "Out Dir",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_root",
+        "out_dir"
+      ],
+      "title": "build_subtitlesArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "build_subtitlesOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "compose_final",
+    "description": "Combine a PNG frame sequence with audio tracks to produce the final MP4. Uses FFmpeg under the hood.",
+    "inputSchema": {
+      "properties": {
+        "frames_dir": {
+          "title": "Frames Dir",
+          "type": "string"
+        },
+        "audio_dir": {
+          "title": "Audio Dir",
+          "type": "string"
+        },
+        "out_dir": {
+          "title": "Out Dir",
+          "type": "string"
+        }
+      },
+      "required": [
+        "frames_dir",
+        "audio_dir",
+        "out_dir"
+      ],
+      "title": "compose_finalArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "compose_finalOutput",
+      "type": "object"
+    }
+  },
+  {
+    "name": "healthz",
+    "description": "Check browser-render station liveness and headless browser (Playwright/Chromium) status. Call before starting a long render job.",
+    "inputSchema": {
+      "properties": {},
+      "title": "healthzArguments",
+      "type": "object"
+    },
+    "outputSchema": {
+      "properties": {
+        "result": {
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "title": "healthzOutput",
+      "type": "object"
+    }
+  }
+]
