@@ -10,6 +10,7 @@ fails before the fix and passes after.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -30,15 +31,19 @@ def _routes_source() -> str:
 # ---------- Service-layer signature -----------------------------------------
 
 
+_SIGNATURE_RE = re.compile(
+    r"async def get_by_content_hash\(([^)]*)\)", re.DOTALL
+)
+
+
 def test_get_by_content_hash_signature_includes_space_id():
     """If space_id ever drops out of the signature, dedup goes global again."""
     src = _services_source()
-    assert "async def get_by_content_hash(" in src, "function renamed or removed"
-    # Either positional or keyword — both signatures contain 'space_id:'
-    fn_start = src.index("async def get_by_content_hash(")
-    fn_signature = src[fn_start : src.index(":", fn_start + 50) + 1]
-    assert "space_id" in fn_signature, (
-        f"regression: space_id parameter missing from get_by_content_hash signature: {fn_signature!r}"
+    match = _SIGNATURE_RE.search(src)
+    assert match, "function renamed or removed"
+    params = match.group(1)
+    assert "space_id" in params, (
+        f"regression: space_id parameter missing from get_by_content_hash signature: {params!r}"
     )
 
 
