@@ -74,6 +74,20 @@ def cmd_sync(args: argparse.Namespace) -> int:
             rel_path=rel,
             base_tags=base_tags,
         )
+        if result.status == "timeout":
+            # Server typically commits the Document row before the client hits its
+            # HTTP timeout (indexing happens after commit). A single retry usually
+            # hits the dedup gate and lets us record the doc_id this run instead of
+            # next run.
+            retry: UploadResult = adapter.upload_markdown(
+                file_path=md_path,
+                vault=args.vault_label,
+                rel_path=rel,
+                base_tags=base_tags,
+            )
+            if retry.status in ("duplicate", "uploaded"):
+                counts["timeout_recovered"] = counts.get("timeout_recovered", 0) + 1
+                result = retry
         counts[result.status] = counts.get(result.status, 0) + 1
         if result.status in ("uploaded", "duplicate"):
             doc_id = result.document_id or f"server-dedup:{h}"
