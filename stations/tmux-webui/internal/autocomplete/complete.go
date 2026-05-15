@@ -19,6 +19,26 @@ type Options struct {
 	// RefreshInterval controls how often the background scanner runs.
 	// Zero defaults to 5 minutes.
 	RefreshInterval time.Duration
+
+	// IncludePlugins enables scanning of
+	// ~/.claude/plugins/marketplaces/<m>/{external_plugins,plugins}/<p>/{skills,commands,agents}/.
+	// Requires ClaudeDir to be set; ignored otherwise.
+	IncludePlugins bool
+
+	// IncludeBuiltins enables the curated list of Claude Code built-in slash
+	// commands (/compact, /model, /clear, etc.).
+	IncludeBuiltins bool
+}
+
+// DefaultOptions returns Options with plugin + builtin scanning enabled — the
+// recommended baseline for matching the full Claude Code resource universe.
+// Callers wanting legacy user-only behavior construct Options literally.
+func DefaultOptions(claudeDir string) Options {
+	return Options{
+		ClaudeDir:       claudeDir,
+		IncludePlugins:  true,
+		IncludeBuiltins: true,
+	}
 }
 
 // ExpandClaudeDir returns ~/.claude expanded to an absolute path.
@@ -37,28 +57,34 @@ type Engine struct {
 }
 
 // New creates an Engine with the provided options. A background scanner goroutine
-// is started immediately if ClaudeDir is non-empty.
+// is started immediately when at least one source is enabled.
 func New(opts Options) *Engine {
-	var scanner *ClaudeDirScanner
+	var scanners []Scanner
 	if opts.ClaudeDir != "" {
-		scanner = NewClaudeDirScanner(opts.ClaudeDir)
+		scanners = append(scanners, NewClaudeDirScanner(opts.ClaudeDir))
+		if opts.IncludePlugins {
+			scanners = append(scanners, NewPluginScanner(opts.ClaudeDir))
+		}
+	}
+	if opts.IncludeBuiltins {
+		scanners = append(scanners, NewBuiltinScanner())
 	}
 	return &Engine{
-		cache: newResourceCache(scanner, opts.RefreshInterval),
+		cache: newResourceCache(scanners, opts.RefreshInterval),
 	}
 }
 
 // Complete routes the query and returns up to defaultMaxResults suggestions.
 //
-// Routing rules (mirrors Python complete()):
+// Routing rules:
 //
-//   - typeFilter == "path"              → path completion
-//   - query starts with "/"            → slash items (skills + commands)
-//   - typeFilter == "skill"/"command"  → slash items with type filter
-//   - query starts with "@"            → at items (agents + mcp)
-//   - query starts with "~" or "./"    → path completion
-//   - "/" found anywhere in query      → path completion
-//   - empty query                      → empty slice
+//   - typeFilter == "path"                      → path completion
+//   - query starts with "/"                     → slash items (builtin + skill + command)
+//   - typeFilter == "skill"/"command"/"builtin" → slash items with type filter
+//   - query starts with "@"                     → at items (agents + mcp)
+//   - query starts with "~" or "./"             → path completion
+//   - "/" found anywhere in query               → path completion
+//   - empty query                               → empty slice
 func (e *Engine) Complete(query, typeFilter string) []Item {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -70,15 +96,15 @@ func (e *Engine) Complete(query, typeFilter string) []Item {
 		return completePath(query, defaultMaxResults)
 	}
 
-	// "/" trigger → skill or command items.
-	if typeFilter == "skill" || typeFilter == "command" ||
+	// "/" trigger → builtin / skill / command items.
+	if typeFilter == "skill" || typeFilter == "command" || typeFilter == "builtin" ||
 		(typeFilter == "" && strings.HasPrefix(query, "/")) {
 
 		search := strings.TrimLeft(query, "/")
 		items := e.cache.slashItems()
 
 		// Narrow by typeFilter when explicitly set.
-		if typeFilter == "skill" || typeFilter == "command" {
+		if typeFilter == "skill" || typeFilter == "command" || typeFilter == "builtin" {
 			items = filterByType(items, typeFilter)
 		}
 

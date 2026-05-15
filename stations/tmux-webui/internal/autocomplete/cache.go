@@ -15,6 +15,7 @@ type Stats struct {
 	Commands   int `json:"commands"`
 	Agents     int `json:"agents"`
 	MCPServers int `json:"mcp_servers"`
+	Builtins   int `json:"builtins"`
 }
 
 // ResourceCache holds a snapshot of scanned Claude resources and refreshes
@@ -25,21 +26,22 @@ type ResourceCache struct {
 	commands []Item
 	agents   []Item
 	mcps     []Item
+	builtins []Item
 
-	scanner  *ClaudeDirScanner // nil when Claude scanning is disabled
+	scanners []Scanner // empty / nil disables background scanning
 	interval time.Duration
 	ticker   *time.Ticker
 	done     chan struct{}
 }
 
 // newResourceCache creates a cache and starts the background refresh ticker.
-// Pass nil scanner to disable Claude directory scanning.
-func newResourceCache(scanner *ClaudeDirScanner, interval time.Duration) *ResourceCache {
+// Pass nil or empty scanners to disable background scanning.
+func newResourceCache(scanners []Scanner, interval time.Duration) *ResourceCache {
 	if interval <= 0 {
 		interval = defaultRefreshInterval
 	}
 	c := &ResourceCache{
-		scanner:  scanner,
+		scanners: scanners,
 		interval: interval,
 		done:     make(chan struct{}),
 	}
@@ -66,25 +68,33 @@ func (c *ResourceCache) loop() {
 	}
 }
 
-// doScan calls the scanner (if configured) and updates the cache atomically.
+// doScan calls every configured scanner and updates the cache atomically.
+// Items from later scanners are appended after earlier ones, so caller
+// ordering controls precedence (e.g. builtin → user → plugin).
 func (c *ResourceCache) doScan() {
-	if c.scanner == nil {
+	if len(c.scanners) == 0 {
 		return
 	}
 
-	items := c.scanner.Scan(context.Background())
-
-	var skills, commands, agents, mcps []Item
-	for _, it := range items {
-		switch it.Type {
-		case "skill":
-			skills = append(skills, it)
-		case "command":
-			commands = append(commands, it)
-		case "agent":
-			agents = append(agents, it)
-		case "mcp":
-			mcps = append(mcps, it)
+	var skills, commands, agents, mcps, builtins []Item
+	ctx := context.Background()
+	for _, s := range c.scanners {
+		if s == nil {
+			continue
+		}
+		for _, it := range s.Scan(ctx) {
+			switch it.Type {
+			case "skill":
+				skills = append(skills, it)
+			case "command":
+				commands = append(commands, it)
+			case "agent":
+				agents = append(agents, it)
+			case "mcp":
+				mcps = append(mcps, it)
+			case "builtin":
+				builtins = append(builtins, it)
+			}
 		}
 	}
 
@@ -93,17 +103,20 @@ func (c *ResourceCache) doScan() {
 	c.commands = commands
 	c.agents = agents
 	c.mcps = mcps
+	c.builtins = builtins
 	c.mu.Unlock()
 
-	log.Printf("autocomplete: scan complete — %d skills, %d commands, %d agents, %d MCP servers",
-		len(skills), len(commands), len(agents), len(mcps))
+	log.Printf("autocomplete: scan complete — %d skills, %d commands, %d agents, %d MCP servers, %d builtins",
+		len(skills), len(commands), len(agents), len(mcps), len(builtins))
 }
 
-// slashItems returns a copy of skills + commands (for "/" prefix queries).
+// slashItems returns a copy of builtin + skills + commands (for "/" prefix queries).
+// Builtins come first so well-known Claude Code slash commands win ties.
 func (c *ResourceCache) slashItems() []Item {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]Item, 0, len(c.skills)+len(c.commands))
+	out := make([]Item, 0, len(c.builtins)+len(c.skills)+len(c.commands))
+	out = append(out, c.builtins...)
 	out = append(out, c.skills...)
 	out = append(out, c.commands...)
 	return out
@@ -128,6 +141,7 @@ func (c *ResourceCache) snapshot() Stats {
 		Commands:   len(c.commands),
 		Agents:     len(c.agents),
 		MCPServers: len(c.mcps),
+		Builtins:   len(c.builtins),
 	}
 }
 

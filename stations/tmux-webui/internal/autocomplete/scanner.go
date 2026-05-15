@@ -7,8 +7,12 @@ type Item struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name,omitempty"`
 	Description string `json:"description,omitempty"`
-	Type        string `json:"type"` // "skill" | "command" | "agent" | "mcp" | "path"
+	Type        string `json:"type"` // "skill" | "command" | "agent" | "mcp" | "builtin" | "path"
 	Icon        string `json:"icon,omitempty"`
+	// Source records origin: empty / "user" for ~/.claude scanner,
+	// "plugin:<marketplace>:<plugin>" for marketplace plugins,
+	// "builtin" for Claude Code built-in slash commands.
+	Source string `json:"source,omitempty"`
 }
 
 // Scanner is the interface implemented by resource scanners (Claude dir, etc.).
