@@ -1,0 +1,16 @@
+[project]
+name = "obsidian-sync"
+version = "0.1.0"
+description = "One-way sync from Obsidian vaults to Workshop docvault, with per-vault space_id isolation."
+requires-python = ">=3.12"
+dependencies = [
+    "python-frontmatter>=1.1.0",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["obsidian_sync"]
