@@ -91,6 +91,40 @@ class MemoryBlockBrief(BaseModel):
     created_at: datetime
 
 
+# ── Phase 3 supersede-by-doc schemas ──
+
+
+class SupersedeByDocRequest(BaseModel):
+    """Mark memvault blocks superseded by a docvault doc.
+
+    Pipeline: embed query_text → qdrant_search → filter by score >= threshold
+    → invalidate matched blocks + record doc_id as superseded_by.
+    """
+
+    doc_id: str = Field(..., min_length=1, max_length=64)
+    query_text: str = Field(..., min_length=1, max_length=4000)
+    threshold: float = Field(default=0.85, ge=0.5, le=1.0)
+    top_k: int = Field(default=20, ge=1, le=50)
+    dry_run: bool = Field(default=False)
+    doc_title: str | None = Field(default=None, max_length=200)
+
+
+class SupersedeMatch(BaseModel):
+    block_id: str
+    score: float
+    voice: str | None = None
+    content_preview: str | None = None
+
+
+class SupersedeByDocResponse(BaseModel):
+    superseded: list[str] = []
+    dry_run_matches: list[SupersedeMatch] = []
+    threshold: float
+    doc_id: str
+    error: str | None = None
+    note: str | None = None
+
+
 # ======================== Tag ========================
 
 

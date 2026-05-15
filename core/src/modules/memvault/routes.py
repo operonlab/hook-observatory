@@ -45,6 +45,7 @@ from .schemas import (
     SearchMetadata,
     SemanticSearchParams,  # noqa: F401 — available for future use
     SessionSummary,
+    SupersedeByDocRequest,
     TagResponse,
     _ensure_tz_aware,
 )
@@ -297,6 +298,41 @@ async def delete_block(
 class InvalidateBlockRequest(BaseModel):
     reason: str = "manual"
     superseded_by_id: str | None = None
+
+
+@router.post("/supersede-by-doc")
+async def supersede_blocks_by_doc_endpoint(
+    body: SupersedeByDocRequest,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    _user: dict = require_permission("memvault.write"),
+):
+    """Phase 3: mark memvault blocks superseded by a newly-uploaded docvault doc.
+
+    Caller (typically obsidian-sync after a successful docvault upload) supplies
+    the doc_id + a short query_text (doc title + first chunk recommended). We
+    embed the text, find similar memvault blocks above threshold, and mark
+    them invalidated with invalidation_reason="superseded_by_doc:<doc_id>".
+
+    Skips:
+      - blocks already invalidated (idempotent)
+      - blocks with voice="user_lead" (user-articulated facts need manual review)
+
+    Use dry_run=true first to preview the candidate set before committing.
+    """
+    result = await memory_block_service.supersede_blocks_by_doc(
+        db=db,
+        space_id=space_id,
+        doc_id=body.doc_id,
+        query_text=body.query_text,
+        threshold=body.threshold,
+        top_k=body.top_k,
+        dry_run=body.dry_run,
+        doc_title=body.doc_title,
+    )
+    if not body.dry_run and result.get("superseded"):
+        await db.commit()
+    return result
 
 
 @router.post("/blocks/{block_id}/invalidate", response_model=MemoryBlockResponse)
