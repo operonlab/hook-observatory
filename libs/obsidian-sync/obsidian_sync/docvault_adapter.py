@@ -72,7 +72,12 @@ class DocvaultAdapter:
                 tags=merged_tags,
                 metadata=metadata,
             )
-            return UploadResult(status="uploaded", document_id=str(doc.get("id")))
+            doc_id_raw = doc.get("id") or doc.get("document_id")
+            doc_id = str(doc_id_raw) if doc_id_raw else None
+            server_status = doc.get("status")
+            if server_status == "duplicate":
+                return UploadResult(status="duplicate", document_id=doc_id)
+            return UploadResult(status="uploaded", document_id=doc_id)
         except Exception as exc:
             msg = str(exc)
             if "content_hash_conflict" in msg or "already exists" in msg:
