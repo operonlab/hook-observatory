@@ -52,7 +52,7 @@
     {
       "name": "ws-memvault-promote-verified",
       "label": "com.joneshong.scheduler.ws-memvault-promote-verified",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_promote_verified.py",
+      "command": "~/workshop/.venv/bin/python3 ~/workshop/schedules/runners/ws_memvault_promote_verified.py",
       "schedule": {
         "calendar": {
           "DayOfWeek": 0,
@@ -68,7 +68,7 @@
     {
       "name": "ws-memvault-verification-review",
       "label": "com.joneshong.scheduler.ws-memvault-verification-review",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_verification_review.py",
+      "command": "~/workshop/.venv/bin/python3 ~/workshop/schedules/runners/ws_memvault_verification_review.py",
       "schedule": {
         "calendar": {
           "Month": 5,
@@ -582,7 +582,7 @@
     {
       "name": "ws-paper-digest",
       "label": "com.joneshong.scheduler.ws-paper-digest",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_paper_digest.py",
+      "command": "~/workshop/.venv/bin/python3 ~/workshop/schedules/runners/ws_paper_digest.py",
       "schedule": {
         "calendar": {
           "Hour": 6,
