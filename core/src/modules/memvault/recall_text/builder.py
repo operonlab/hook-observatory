@@ -123,18 +123,45 @@ _DOCVAULT_SPACES = tuple(
 )
 _DOCVAULT_TOP_K = int(os.environ.get("RECALL_DOCVAULT_TOP_K", "3"))
 
+# Default OFF — most prompts have nothing to do with docvault content, so
+# we don't pay the cost of two Qdrant searches per turn. Opt in by either:
+#   - including a trigger phrase in the prompt (`@doc`, `@文件`, `[查文件]`)
+#   - using the `/doc <query>` slash command (which prepends `@doc`)
+#   - setting RECALL_DOCVAULT_AUTO=1 to force always-on for the whole session
+_DOCVAULT_AUTO_ALWAYS = os.environ.get("RECALL_DOCVAULT_AUTO") == "1"
+
+_DOCVAULT_TRIGGER_PATTERN = re.compile(
+    r"(?:^|\s)@doc\b|(?:^|\s)@文件\b|\[查文件\]|\[查 文件\]",
+    re.IGNORECASE,
+)
+
+
+def _should_docvault_inject(prompt: str) -> bool:
+    """Decide whether to spend Qdrant retrieval calls for this prompt.
+
+    True when either RECALL_DOCVAULT_AUTO=1 (legacy always-on) or the
+    user explicitly asked for it via `@doc` / `@文件` / `[查文件]` /
+    the `/doc` slash command.
+    """
+    if _DOCVAULT_AUTO_ALWAYS:
+        return True
+    return bool(_DOCVAULT_TRIGGER_PATTERN.search(prompt))
+
 
 def _format_docvault_section(prompt: str) -> str:
     """Cross-vault inject — fetch top-k docvault chunks per space and format
     them as 「相關文件」 so the assistant sees doc citations alongside the
     memvault cascade.
 
-    Returns "" on any failure. Must never break the recall hook.
+    Returns "" on any failure or when the prompt didn't opt in (default).
+    Must never break the recall hook.
     Disable via RECALL_DOCVAULT_DISABLE=1 if needed.
     """
     if not _DOCVAULT_SPACES or _DOCVAULT_TOP_K <= 0:
         return ""
     if os.environ.get("RECALL_DOCVAULT_DISABLE") == "1":
+        return ""
+    if not _should_docvault_inject(prompt):
         return ""
     sections: list[str] = []
     for space in _DOCVAULT_SPACES:
