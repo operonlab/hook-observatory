@@ -43,8 +43,19 @@ func (s *ClaudeDirScanner) scanSkills() []Item {
 			continue
 		}
 		slug := e.Name()
+		// Skip hidden dirs (e.g. `.backups` written by skill-curator). They
+		// are not user-invocable skills.
+		if strings.HasPrefix(slug, ".") {
+			continue
+		}
 		md := filepath.Join(dir, slug, "SKILL.md")
 		fm := parseYAMLFrontmatter(md)
+		// PluginScanner already drops dirs without SKILL.md; mirror that
+		// here so plain holder dirs (e.g. one containing only `references/`)
+		// don't surface as empty skill entries.
+		if fm == nil {
+			continue
+		}
 
 		desc := truncate(fm["description"], 100)
 		displayName := fm["name"]
