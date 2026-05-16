@@ -131,7 +131,11 @@ _DOCVAULT_TOP_K = int(os.environ.get("RECALL_DOCVAULT_TOP_K", "3"))
 _DOCVAULT_AUTO_ALWAYS = os.environ.get("RECALL_DOCVAULT_AUTO") == "1"
 
 _DOCVAULT_TRIGGER_PATTERN = re.compile(
-    r"(?:^|\s)@doc\b|(?:^|\s)@文件\b|\[查文件\]|\[查 文件\]",
+    # `^/doc\b` for the slash command: hook sees raw user input ("/doc X"),
+    # before Claude Code expands `/doc` into the slash-command's prompt
+    # template that contains `@doc`. The @doc / @文件 / [查文件] forms cover
+    # in-prompt manual triggers when the user doesn't want to use slash.
+    r"^/doc\b|(?:^|\s)@doc\b|(?:^|\s)@文件\b|\[查文件\]|\[查 文件\]",
     re.IGNORECASE,
 )
 
