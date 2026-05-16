@@ -65,8 +65,18 @@ func TestBuiltinScanner_Deterministic(t *testing.T) {
 
 func TestBuiltinScanner_CoreCommandsPresent(t *testing.T) {
 	// Spot-check well-known commands users type most often. If any of these
-	// goes missing we want a loud test failure during refactors.
-	want := []string{"compact", "model", "clear", "help", "agents", "mcp", "hooks", "cost"}
+	// goes missing we want a loud test failure during refactors. The list
+	// includes both long-standing commands (compact/model/clear/help) and
+	// the post-2026-Q1 additions (goal/rename/skills/schedule/plan/context/
+	// rewind/ultraplan/ultrareview) plus the bundled-skill rows the docs
+	// table now lists alongside built-ins (loop/simplify/batch/debug/
+	// claude-api/fewer-permission-prompts).
+	want := []string{
+		"compact", "model", "clear", "help", "agents", "mcp", "hooks", "cost",
+		"goal", "rename", "skills", "schedule", "plan", "context",
+		"rewind", "ultraplan", "ultrareview", "usage", "effort",
+		"loop", "simplify", "batch", "debug", "claude-api", "fewer-permission-prompts",
+	}
 	have := make(map[string]bool)
 	for _, c := range builtinSlashCommands {
 		have[c.name] = true
