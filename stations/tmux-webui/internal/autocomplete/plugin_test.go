@@ -192,6 +192,164 @@ func TestPluginScanner_CommandNonMD_Ignored(t *testing.T) {
 	}
 }
 
+// ─── installed-manifest mode ──────────────────────────────────────────────────
+//
+// These tests cover the "installed-only" branch of PluginScanner.Scan: when
+// <claudeDir>/plugins/installed_plugins.json exists, the scanner must
+// honor the manifest and not fall back to the legacy whole-tree walk.
+
+// writeInstalledManifest writes a minimal v2 installed_plugins.json.
+// `entries` is keyed by "<plugin>@<marketplace>"; each value is the
+// installPath that the manifest records.
+func writeInstalledManifest(t *testing.T, claudeDir string, entries map[string]string) {
+	t.Helper()
+	plugins := make(map[string][]map[string]string, len(entries))
+	for key, installPath := range entries {
+		plugins[key] = []map[string]string{
+			{"scope": "user", "installPath": installPath, "version": "1.0.0"},
+		}
+	}
+	// Marshal manually so the test is robust against schema additions.
+	b := &strings.Builder{}
+	b.WriteString(`{"version":2,"plugins":{`)
+	first := true
+	for key, arr := range plugins {
+		if !first {
+			b.WriteString(",")
+		}
+		first = false
+		b.WriteString(`"`)
+		b.WriteString(key)
+		b.WriteString(`":[{"scope":"`)
+		b.WriteString(arr[0]["scope"])
+		b.WriteString(`","installPath":"`)
+		b.WriteString(arr[0]["installPath"])
+		b.WriteString(`","version":"`)
+		b.WriteString(arr[0]["version"])
+		b.WriteString(`"}]`)
+	}
+	b.WriteString(`}}`)
+	writeFile(t, filepath.Join(claudeDir, "plugins", "installed_plugins.json"), b.String())
+}
+
+func TestPluginScanner_Installed_OnlyManifestedPluginsListed(t *testing.T) {
+	claudeDir := claudeDirWith(t)
+
+	// Installed plugin lives in the cache layout that Claude Code 1.x uses.
+	installPath := filepath.Join(claudeDir, "plugins", "cache", "mkt-a", "alpha", "1.0.0")
+	writeFile(t,
+		filepath.Join(installPath, "skills", "draw", "SKILL.md"),
+		"---\nname: draw\ndescription: Draw something\n---\n")
+	writeFile(t,
+		filepath.Join(installPath, "commands", "ship.md"),
+		"---\nname: ship\ndescription: Ship a release\n---\n")
+
+	// Decoy: another plugin sits in the marketplace tree but is NOT in the
+	// installed manifest — must not appear.
+	writeFile(t,
+		filepath.Join(claudeDir, "plugins", "marketplaces", "mkt-a", "plugins", "beta", "skills", "lurk", "SKILL.md"),
+		"---\nname: lurk\ndescription: should not surface\n---\n")
+
+	writeInstalledManifest(t, claudeDir, map[string]string{
+		"alpha@mkt-a": installPath,
+	})
+
+	items := NewPluginScanner(claudeDir).Scan(context.Background())
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items from installed alpha plugin, got %d: %+v", len(items), items)
+	}
+	if findItem(items, "lurk", "skill") != nil {
+		t.Error("uninstalled marketplace plugin 'lurk' leaked through installed-manifest scan")
+	}
+	if findItem(items, "draw", "skill") == nil {
+		t.Error("installed plugin skill 'draw' missing")
+	}
+	if findItem(items, "ship", "command") == nil {
+		t.Error("installed plugin command 'ship' missing")
+	}
+
+	// Source must still namespace by marketplace + plugin, not by the
+	// install path's directory name.
+	if it := findItem(items, "draw", "skill"); it != nil && it.Source != "plugin:mkt-a:alpha" {
+		t.Errorf("Source = %q; want plugin:mkt-a:alpha", it.Source)
+	}
+}
+
+func TestPluginScanner_Installed_EmptyManifest_NoFallback(t *testing.T) {
+	claudeDir := claudeDirWith(t)
+
+	// Decoy plugin in marketplace tree — present but must NOT surface.
+	writeFile(t,
+		filepath.Join(claudeDir, "plugins", "marketplaces", "mkt-a", "plugins", "beta", "skills", "lurk", "SKILL.md"),
+		"---\nname: lurk\n---\n")
+
+	writeFile(t,
+		filepath.Join(claudeDir, "plugins", "installed_plugins.json"),
+		`{"version":2,"plugins":{}}`)
+
+	items := NewPluginScanner(claudeDir).Scan(context.Background())
+	if len(items) != 0 {
+		t.Errorf("empty manifest should yield 0 items; got %d: %+v", len(items), items)
+	}
+}
+
+func TestPluginScanner_Installed_MissingInstallPath_NoCrash(t *testing.T) {
+	claudeDir := claudeDirWith(t)
+
+	// Manifest references an installPath that doesn't exist on disk.
+	writeInstalledManifest(t, claudeDir, map[string]string{
+		"ghost@mkt-x": filepath.Join(claudeDir, "plugins", "cache", "mkt-x", "ghost", "9.9.9"),
+	})
+
+	items := NewPluginScanner(claudeDir).Scan(context.Background())
+	if len(items) != 0 {
+		t.Errorf("missing installPath should yield 0 items; got %d: %+v", len(items), items)
+	}
+}
+
+func TestPluginScanner_Installed_MalformedJSON_FallsBackToTree(t *testing.T) {
+	claudeDir := claudeDirWith(t)
+
+	// Marketplace decoy that SHOULD surface via the legacy fallback when
+	// the manifest is unparseable — proving the fallback path still works.
+	writeFile(t,
+		filepath.Join(claudeDir, "plugins", "marketplaces", "mkt-a", "plugins", "beta", "skills", "lurk", "SKILL.md"),
+		"---\nname: lurk\ndescription: visible via fallback\n---\n")
+
+	writeFile(t,
+		filepath.Join(claudeDir, "plugins", "installed_plugins.json"),
+		"this is not json {")
+
+	items := NewPluginScanner(claudeDir).Scan(context.Background())
+	if findItem(items, "lurk", "skill") == nil {
+		t.Error("malformed manifest should fall back to whole-tree scan; 'lurk' missing")
+	}
+}
+
+func TestPluginScanner_Installed_KeyWithMultipleAtSigns(t *testing.T) {
+	claudeDir := claudeDirWith(t)
+
+	// Plugin name contains "@" (scoped-package style). The split must use
+	// the rightmost "@" so the marketplace is parsed correctly.
+	installPath := filepath.Join(claudeDir, "plugins", "cache", "mkt-z", "@scope", "wrap", "1.0.0")
+	writeFile(t,
+		filepath.Join(installPath, "skills", "tool", "SKILL.md"),
+		"---\nname: tool\ndescription: scoped plugin tool\n---\n")
+
+	writeInstalledManifest(t, claudeDir, map[string]string{
+		"@scope/wrap@mkt-z": installPath,
+	})
+
+	items := NewPluginScanner(claudeDir).Scan(context.Background())
+	skill := findItem(items, "tool", "skill")
+	if skill == nil {
+		t.Fatalf("scoped plugin's skill missing; items=%+v", items)
+	}
+	if skill.Source != "plugin:mkt-z:@scope/wrap" {
+		t.Errorf("Source = %q; want plugin:mkt-z:@scope/wrap", skill.Source)
+	}
+}
+
 func TestPluginDesc_PrefixAndTruncate(t *testing.T) {
 	long := strings.Repeat("a", 200)
 	got := pluginDesc(long)
