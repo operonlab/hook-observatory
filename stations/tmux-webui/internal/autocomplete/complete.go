@@ -78,13 +78,15 @@ func New(opts Options) *Engine {
 //
 // Routing rules:
 //
-//   - typeFilter == "path"                      → path completion
-//   - query starts with "/"                     → slash items (builtin + skill + command)
-//   - typeFilter == "skill"/"command"/"builtin" → slash items with type filter
-//   - query starts with "@"                     → at items (agents + mcp)
-//   - query starts with "~" or "./"             → path completion
-//   - "/" found anywhere in query               → path completion
-//   - empty query                               → empty slice
+//   - typeFilter == "path"                              → path completion
+//   - typeFilter == "slash"                             → slash items (builtin + skill + command)
+//   - typeFilter == "skill" / "command" / "builtin"     → slash items, narrowed by type
+//   - typeFilter == "" && query starts with "/"         → slash items
+//   - typeFilter == "at" / "agent" / "mcp"              → at items (agents + mcp)
+//   - typeFilter == "" && query starts with "@"         → at items
+//   - typeFilter == "" && query starts with "~" / "./"  → path completion
+//   - typeFilter == "" && query contains "/"            → path completion
+//   - empty query                                       → empty slice
 func (e *Engine) Complete(query, typeFilter string) []Item {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -96,14 +98,16 @@ func (e *Engine) Complete(query, typeFilter string) []Item {
 		return completePath(query, defaultMaxResults)
 	}
 
-	// "/" trigger → builtin / skill / command items.
-	if typeFilter == "skill" || typeFilter == "command" || typeFilter == "builtin" ||
+	// Slash trigger → builtin / skill / command items.
+	// Accept the umbrella "slash" filter (sent by the web UI), the per-type
+	// narrowing filters, and the implicit "/"-prefix detection.
+	if typeFilter == "slash" || typeFilter == "skill" || typeFilter == "command" || typeFilter == "builtin" ||
 		(typeFilter == "" && strings.HasPrefix(query, "/")) {
 
 		search := strings.TrimLeft(query, "/")
 		items := e.cache.slashItems()
 
-		// Narrow by typeFilter when explicitly set.
+		// Narrow by typeFilter when a specific type was requested.
 		if typeFilter == "skill" || typeFilter == "command" || typeFilter == "builtin" {
 			items = filterByType(items, typeFilter)
 		}
@@ -112,9 +116,18 @@ func (e *Engine) Complete(query, typeFilter string) []Item {
 	}
 
 	// "@" trigger → agent or mcp items.
-	if typeFilter == "at" || (typeFilter == "" && strings.HasPrefix(query, "@")) {
+	// Accept the umbrella "at" filter, the per-type narrowing filters
+	// ("agent", "mcp"), and the implicit "@"-prefix detection.
+	if typeFilter == "at" || typeFilter == "agent" || typeFilter == "mcp" ||
+		(typeFilter == "" && strings.HasPrefix(query, "@")) {
+
 		search := strings.TrimLeft(query, "@")
 		items := e.cache.atItems()
+
+		if typeFilter == "agent" || typeFilter == "mcp" {
+			items = filterByType(items, typeFilter)
+		}
+
 		return rankAndFilter(items, search, defaultMaxResults)
 	}
 
