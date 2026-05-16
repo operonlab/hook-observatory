@@ -69,6 +69,18 @@ impl Remediator {
         tracing::warn!(service, "remediation dispatch");
         self.engine.mark_notified(service);
 
+        // Applicability gate: if no Layer 1/2 strategy fits, Layer 3 ai_repair
+        // would fabricate a service definition. Audit scripts (process-audit,
+        // port-security, workshop-crash-loop), unmapped services (nginx), and
+        // external deps belong here — escalate to human, don't dispatch.
+        let has_strategy = simple_restart::can_restart(service) || frontend::applicable(service);
+        if !has_strategy {
+            tracing::warn!(service, "no remediation strategy applicable — escalating without AI dispatch");
+            self.resolve_incident(incident_id.as_deref(), "no_strategy_applicable", false).await.ok();
+            self.send_notifications(service, "no_strategy_applicable", false).await;
+            return RepairOutcome::Escalated;
+        }
+
         // ── Layer 1 ─────────────────────────────────
         if simple_restart::can_restart(service) {
             self.update_incident_status(incident_id.as_deref(), "identified", None).await.ok();
