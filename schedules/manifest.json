@@ -50,9 +50,9 @@
       "enabled": true
     },
     {
-      "name": "ws-ios-simruntime-cleanup",
-      "label": "com.joneshong.scheduler.ws-ios-simruntime-cleanup",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_ios_simruntime_cleanup.py",
+      "name": "ws-version-cleanup",
+      "label": "com.joneshong.scheduler.ws-version-cleanup",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_version_cleanup.py",
       "schedule": {
         "calendar": {
           "DayOfWeek": 0,
@@ -60,7 +60,7 @@
           "Minute": 30
         }
       },
-      "description": "每週日 02:30: 刪除 Unusable + 非最新 iOS Simulator runtime（macOS/iOS 升級後省 ~8.5GB/份）",
+      "description": "每週日 02:30: keep-newest-only sweep（iOS Simulator runtime + Claude versions + brew kegs/cache）— 少爺 policy「安裝新版直接砍舊版」",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
