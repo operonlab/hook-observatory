@@ -50,6 +50,22 @@
       "enabled": true
     },
     {
+      "name": "ws-ios-simruntime-cleanup",
+      "label": "com.joneshong.scheduler.ws-ios-simruntime-cleanup",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_ios_simruntime_cleanup.py",
+      "schedule": {
+        "calendar": {
+          "DayOfWeek": 0,
+          "Hour": 2,
+          "Minute": 30
+        }
+      },
+      "description": "每週日 02:30: 刪除 Unusable + 非最新 iOS Simulator runtime（macOS/iOS 升級後省 ~8.5GB/份）",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
       "name": "ws-memvault-promote-verified",
       "label": "com.joneshong.scheduler.ws-memvault-promote-verified",
       "command": "~/workshop/.venv/bin/python3 ~/workshop/schedules/runners/ws_memvault_promote_verified.py",
