@@ -40,11 +40,11 @@
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_synthesis.py",
       "schedule": {
         "calendar": {
-          "Hour": 17,
-          "Minute": 30
+          "Hour": 4,
+          "Minute": 0
         }
       },
-      "description": "每日 17:30: Leiden communities → LLM summaries → Qdrant indexing → decay → attitude（晚餐時段執行）",
+      "description": "每日 17:30: Leiden communities → LLM summaries → Qdrant indexing → decay → attitude（晚餐時段執行） (moved 17:30→04:00 for MLX safety)",
       "category": "workshop",
       "type": "periodic",
       "enabled": true

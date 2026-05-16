@@ -94,3 +94,10 @@ memvault_*.html
 
 # Handoff archive — completed handoff scratch notes kept locally
 /handoff/_done/
+
+# Local-only working dirs (private notes, transient test artifacts)
+/private/
+/tmp/
+
+# Scheduler runner backups (timestamped .bak files from manual edits)
+schedules/runners/*.bak-*
