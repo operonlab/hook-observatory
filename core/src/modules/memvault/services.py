@@ -265,14 +265,24 @@ class MemoryBlockService(
           1. Embed query_text (typically doc title + tags + first chunk)
           2. qdrant_search the memvault space for top_k similar blocks
           3. Filter by score >= threshold
-          4. For each hit (unless dry_run): invalidate + record doc_id as
-             superseded_by + invalidation_reason="superseded_by_doc:<doc_id>"
+          4. For each hit (unless dry_run): invalidate + record doc_id in
+             superseded_by_doc_id + invalidation_reason="superseded_by_doc:<doc_id>"
           5. Return {superseded: [...], dry_run_matches: [...], threshold, doc_id}
 
         Skips blocks that:
           - Are already invalidated (block.invalid_at is not None)
           - Have voice="user_lead" — user-articulated facts need manual review
             before an external doc can supersede them.
+
+        Indexing-lag caveat (Issue #1):
+          qdrant_search relies on the asynchronous qdrant_indexer event handler
+          (events/handlers/qdrant_indexer.py) which subscribes to memvault.memory.*
+          events. New blocks become searchable in Qdrant 2-8 seconds after the
+          POST /blocks request returns. Production callers (obsidian-sync) only
+          supersede blocks much older than this window, so the race never bites
+          them; tests that seed and supersede in the same run must sleep ~15-18s
+          to clear the cold-start case. There is no synchronous "wait_for_index"
+          API today — add one only if a real use case demands read-after-write.
         """
         from datetime import UTC, datetime
 

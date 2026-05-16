@@ -20,6 +20,7 @@ def _ensure_tz_aware(value: datetime | None) -> datetime | None:
         return value.replace(tzinfo=UTC)
     return value
 
+
 # --- Enums as string literals (lightweight, no enum import needed) ---
 
 BLOCK_TYPES = {"knowledge", "skill", "attitude", "general"}
@@ -74,6 +75,7 @@ class MemoryBlockResponse(SpaceScopedResponse):
     valid_at: datetime | None = None
     invalid_at: datetime | None = None
     superseded_by: str | None = None
+    superseded_by_doc_id: str | None = None
     invalidation_reason: str | None = None
     voice: str | None = None
 
