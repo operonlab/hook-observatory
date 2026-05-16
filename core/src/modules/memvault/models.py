@@ -66,6 +66,15 @@ class MemoryBlock(SpaceScopedModel):
     # Values: user_lead | dialog | assistant_lead | unknown | NULL
     # Recall scoring may downweight assistant_lead to mitigate echo-chamber drift.
     voice: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    # Phase 3 cross-vault supersedence — when a docvault doc replaces this block.
+    # No FK because docvault.documents lives in a different module schema
+    # (architecture.md forbids cross-schema FKs); treated as a soft reference,
+    # caller resolves via docvault.list_documents if needed. Distinct from
+    # `superseded_by` which is FK-constrained to blocks.id and used only for
+    # memvault's intra-module dream-pipeline supersedence.
+    superseded_by_doc_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
 
 
 class BlockArchive(Base):
