@@ -102,5 +102,18 @@ mod tests {
         assert!(!can_restart("unknown"));
         assert!(!can_restart("frontend"));
     }
+
+    /// Audit shell checks (group="system" in registry.rs) are scripts, not services.
+    /// They must NOT be in WORKSHOP_SERVICES — otherwise `restart` would try to
+    /// stop/start a non-existent service via workshop_services.py.
+    /// Combined with frontend::applicable() being false for them, the
+    /// applicability gate in Remediator::dispatch escalates without dispatching
+    /// the catch-all AI repair agent.
+    #[test]
+    fn audit_checks_not_restartable() {
+        assert!(!can_restart("process-audit"));
+        assert!(!can_restart("port-security"));
+        assert!(!can_restart("workshop-crash-loop"));
+    }
 }
 
