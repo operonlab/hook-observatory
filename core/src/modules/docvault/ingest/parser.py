@@ -18,10 +18,23 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_pdf(file_path: str) -> tuple[str, dict[str, Any]]:
-    """Extract text and metadata from PDF using pdfplumber."""
+    """Extract text and metadata from PDF.
+
+    Pre-flight decision (蠶食自 ConardLi kb-retriever pdf_reading.md decision table):
+      1. Try pdfplumber (preserves layout, handles tables) — primary path.
+      2. If extracted text is sparse (< 50 chars/page average) → scanned PDF
+         signal → flag metadata with extraction_route="vision-needed" so caller
+         can route to vision_route.vision_route_pdf().
+
+    Vision routing is not auto-invoked here because vision_extract_text() is
+    a pending integration. Surfacing the signal in metadata lets enrichers
+    decide downstream.
+    """
     import pdfplumber
 
-    metadata: dict[str, Any] = {"source_type": "pdf", "pages": 0}
+    from . import vision_route
+
+    metadata: dict[str, Any] = {"source_type": "pdf", "pages": 0, "extraction_route": "pdfplumber"}
     pages_text: list[str] = []
 
     with pdfplumber.open(file_path) as pdf:
@@ -37,6 +50,16 @@ def _parse_pdf(file_path: str) -> tuple[str, dict[str, Any]]:
                 pages_text.append(f"<!-- page {i + 1} -->\n{text}")
 
     content = "\n\n".join(pages_text)
+
+    # Pre-flight signal: if pdfplumber yielded too little, mark for vision route
+    if metadata["pages"] > 0 and vision_route.is_likely_scanned_pdf(content, metadata["pages"]):
+        metadata["extraction_route"] = "vision-needed"
+        metadata["pdfplumber_chars_per_page"] = len(content) / metadata["pages"]
+        logger.info(
+            "_parse_pdf: %s appears scanned (%.1f chars/page) → tag for vision route",
+            file_path, metadata["pdfplumber_chars_per_page"],
+        )
+
     return content, metadata
 
 
@@ -85,6 +108,12 @@ def _parse_markdown(file_path: str) -> tuple[str, dict[str, Any]]:
     return content, metadata
 
 
+def _parse_excel(file_path: str) -> tuple[str, dict[str, Any]]:
+    """Thin wrapper delegating to excel_parser.parse_excel with defaults."""
+    from .excel_parser import parse_excel
+    return parse_excel(file_path)
+
+
 def parse_document(
     file_path: str,
     source_type: str | None = None,
@@ -112,6 +141,8 @@ def parse_document(
             ".md": "markdown",
             ".markdown": "markdown",
             ".txt": "markdown",
+            ".xlsx": "excel",
+            ".xls": "excel",
             # Audio
             ".mp3": "audio",
             ".wav": "audio",
@@ -138,6 +169,7 @@ def parse_document(
         "pdf": _parse_pdf,
         "docx": _parse_docx,
         "markdown": _parse_markdown,
+        "excel": _parse_excel,
     }
 
     if source_type in sync_parsers:
@@ -186,6 +218,8 @@ async def parse_document_async(
             ".md": "markdown",
             ".markdown": "markdown",
             ".txt": "markdown",
+            ".xlsx": "excel",
+            ".xls": "excel",
             ".mp3": "audio",
             ".wav": "audio",
             ".m4a": "audio",
@@ -205,7 +239,7 @@ async def parse_document_async(
         }
         source_type = type_map.get(ext, "markdown")
 
-    if source_type in ("pdf", "docx", "markdown"):
+    if source_type in ("pdf", "docx", "markdown", "excel"):
         content, metadata = parse_document(file_path, source_type)
         return content, metadata
 
