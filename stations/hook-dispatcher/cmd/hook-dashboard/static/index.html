@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hook Dashboard</title>
+<style>
+:root{--bg:#0b0d10;--card:#15181d;--ink:#e6e7eb;--mute:#8a8f99;--accent:#6ea8fe;--border:#22262d}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:18px;font-weight:600}
+.refresh{background:transparent;color:var(--mute);border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:12px}
+.refresh:hover{color:var(--ink);border-color:var(--accent)}
+main{max-width:1200px;margin:0 auto;padding:24px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px}
+.card .label{font-size:12px;color:var(--mute);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
+.card .value{font-size:28px;font-weight:600}
+.section{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px;margin-bottom:24px}
+.section h2{margin:0 0 12px;font-size:14px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--mute);border-bottom:1px solid var(--border);padding:8px 6px}
+td{padding:8px 6px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+.ts{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mute);font-size:12px}
+.tag{display:inline-block;padding:2px 6px;border-radius:4px;background:#1a1f26;color:var(--accent);font-size:11px;font-family:ui-monospace,monospace}
+.filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.filters input,.filters select{background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font:inherit;font-size:13px}
+.muted{color:var(--mute);font-size:12px}
+.beta{font-size:10px;background:var(--accent);color:#000;padding:2px 6px;border-radius:3px;margin-left:6px;font-weight:600;vertical-align:1px}
+.empty{text-align:center;padding:32px;color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Hook Dashboard<span class="beta">MVP</span></h1>
+  <button class="refresh" onclick="loadAll()">Refresh</button>
+</header>
+<main>
+  <div class="cards">
+    <div class="card"><div class="label">Total Events</div><div class="value" id="total">—</div></div>
+    <div class="card"><div class="label">Last 24h</div><div class="value" id="today">—</div></div>
+    <div class="card"><div class="label">Unique Sessions</div><div class="value" id="sessions">—</div></div>
+  </div>
+  <div class="section">
+    <h2>By Event Type</h2>
+    <table id="by-event-table"><thead><tr><th>Event</th><th>Total</th><th>24h</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="section">
+    <h2>By Tool (Top 20)</h2>
+    <table id="by-tool-table"><thead><tr><th>Tool</th><th>Count</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="section">
+    <h2>Recent Sessions (Top 20)</h2>
+    <table id="sessions-table"><thead><tr><th>Session</th><th>Events</th><th>First Seen</th><th>Last Seen</th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="section">
+    <h2>Events</h2>
+    <div class="filters">
+      <input id="f-type" placeholder="event_type" />
+      <input id="f-session" placeholder="session_id" />
+      <input id="f-tool" placeholder="tool_name" />
+      <button class="refresh" onclick="loadEvents()">Apply</button>
+      <span class="muted" id="events-total"></span>
+    </div>
+    <table id="events-table"><thead><tr><th style="width:160px">When</th><th style="width:140px">Type</th><th style="width:120px">Tool</th><th>Session</th></tr></thead><tbody></tbody></table>
+  </div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s)
+const fmtTs = (ts) => { try { return new Date(ts).toLocaleString('zh-TW', {hour12:false}) } catch { return ts } }
+const shortSid = (s) => s ? s.slice(0,8) : '—'
+
+async function fetchJSON(url){
+  const r = await fetch(url)
+  if(!r.ok) throw new Error(r.status+' '+r.statusText)
+  return await r.json()
+}
+
+async function loadAll(){
+  try {
+    const a = await fetchJSON('/api/stats/all')
+    $('#total').textContent = a.summary.total.toLocaleString()
+    $('#today').textContent = a.summary.today.toLocaleString()
+    $('#sessions').textContent = a.summary.unique_sessions.toLocaleString()
+    fillTable('#by-event-table tbody', a.by_event, ['event_type','count','today'], {event_type: x => `<span class="tag">${x}</span>`})
+    fillTable('#by-tool-table tbody', a.by_tool, ['tool_name','count'], {tool_name: x => `<span class="tag">${x}</span>`})
+    fillTable('#sessions-table tbody', a.sessions, ['session_id','event_count','first_seen','last_seen'], {
+      session_id: x => `<span class="tag">${shortSid(x)}</span>`,
+      first_seen: fmtTs,
+      last_seen: fmtTs,
+    })
+    await loadEvents()
+  } catch(e) {
+    document.querySelectorAll('.value').forEach(el => el.textContent = 'ERR')
+    console.error(e)
+  }
+}
+
+async function loadEvents(){
+  const params = new URLSearchParams()
+  const t = $('#f-type').value.trim()
+  const s = $('#f-session').value.trim()
+  const tool = $('#f-tool').value.trim()
+  if(t) params.set('event_type', t)
+  if(s) params.set('session_id', s)
+  if(tool) params.set('tool_name', tool)
+  params.set('limit', '100')
+  const r = await fetchJSON('/api/events?' + params.toString())
+  $('#events-total').textContent = `${r.items.length} of ${r.total} events`
+  const tbody = $('#events-table tbody')
+  tbody.innerHTML = ''
+  if(r.items.length === 0){
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No events</td></tr>'
+    return
+  }
+  for(const ev of r.items){
+    const tr = document.createElement('tr')
+    tr.innerHTML = `
+      <td class="ts">${fmtTs(ev.ts)}</td>
+      <td><span class="tag">${ev.event_type}</span></td>
+      <td>${ev.data.tool_name ? `<span class="tag">${ev.data.tool_name}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="ts">${shortSid(ev.data.session_id)}</td>
+    `
+    tbody.appendChild(tr)
+  }
+}
+
+function fillTable(sel, rows, cols, formatters){
+  const tbody = document.querySelector(sel)
+  tbody.innerHTML = ''
+  if(!rows || rows.length === 0){
+    tbody.innerHTML = `<tr><td colspan="${cols.length}" class="empty">No data</td></tr>`
+    return
+  }
+  for(const row of rows){
+    const tr = document.createElement('tr')
+    tr.innerHTML = cols.map(c => {
+      const v = row[c]
+      const f = formatters && formatters[c]
+      return `<td>${f ? f(v) : (v ?? '—')}</td>`
+    }).join('')
+    tbody.appendChild(tr)
+  }
+}
+
+loadAll()
+setInterval(loadAll, 30000)
+</script>
+</body>
+</html>

@@ -184,9 +184,18 @@ export const APP_LIST: AppInfo[] = [
     status: 'external',
     externalUrl: '/apps/files/',
   },
-  // hook-observatory (Hook 監控台) removed 2026-05-13 — Python FastAPI
-  // dashboard archived to stations/_archive/hook-observatory-py/. Session
-  // Channel dashboard below takes over the observability role.
+  // hook-observatory rebuilt 2026-05-16 as Go MVP (hook-dispatcher/cmd/hook-dashboard).
+  // Reads spool jsonl in-memory; full PostgreSQL drainer + React port deferred.
+  {
+    id: 'hook-dashboard',
+    name: 'Hook 監控台',
+    description: 'Hook 事件統計、Session 分佈、Tool 用量（MVP）',
+    icon: '🪝',
+    path: '/hook',
+    color: '#fab387',
+    status: 'external',
+    externalUrl: '/apps/hook/',
+  },
   {
     id: 'session-channel',
     name: 'Session 頻道',
