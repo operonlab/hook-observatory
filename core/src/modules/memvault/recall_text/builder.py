@@ -94,6 +94,75 @@ def _http_get(url: str, timeout: int = 10) -> tuple[int, str]:
         return 0, ""
 
 
+def _http_post_internal(url: str, body: dict, timeout: int = 10) -> tuple[int, str]:
+    """POST url with X-Internal-Key header. (0, '') on error.
+
+    For server-side hops that need docvault.read / memvault.write when
+    called outside an authenticated user session (recall_text runs from
+    the hook dispatcher, no cookie).
+    """
+    internal_key = os.environ.get("CORE_INTERNAL_API_KEY", "")
+    headers = {"Content-Type": "application/json"}
+    if internal_key:
+        headers["X-Internal-Key"] = internal_key
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        return e.code, ""
+    except Exception:
+        return 0, ""
+
+
+_DOCVAULT_SPACES = tuple(
+    s.strip()
+    for s in os.environ.get("RECALL_DOCVAULT_SPACES", "obsidian-blog,obsidian-core").split(",")
+    if s.strip()
+)
+_DOCVAULT_TOP_K = int(os.environ.get("RECALL_DOCVAULT_TOP_K", "3"))
+
+
+def _format_docvault_section(prompt: str) -> str:
+    """Cross-vault inject — fetch top-k docvault chunks per space and format
+    them as 「相關文件」 so the assistant sees doc citations alongside the
+    memvault cascade.
+
+    Returns "" on any failure. Must never break the recall hook.
+    Disable via RECALL_DOCVAULT_DISABLE=1 if needed.
+    """
+    if not _DOCVAULT_SPACES or _DOCVAULT_TOP_K <= 0:
+        return ""
+    if os.environ.get("RECALL_DOCVAULT_DISABLE") == "1":
+        return ""
+    sections: list[str] = []
+    for space in _DOCVAULT_SPACES:
+        url = f"{CORE_API_URL}/api/docvault/search?space_id=" + urllib.parse.quote(space)
+        status, body = _http_post_internal(url, {"q": prompt, "top_k": _DOCVAULT_TOP_K}, timeout=8)
+        if status != 200 or not body:
+            continue
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            continue
+        results = data.get("results", []) or data.get("chunks", []) or []
+        if not results:
+            continue
+        lines = [f"### 文件 ({space})"]
+        for r in results[:_DOCVAULT_TOP_K]:
+            section_path = r.get("section_path") or r.get("section") or ""
+            content = (r.get("content") or "")[:240].replace("\n", " ")
+            score = r.get("score")
+            score_str = f" [{score:.2f}]" if isinstance(score, (int, float)) else ""
+            heading = section_path or "(no section)"
+            lines.append(f"- **{heading}**{score_str}: {content}")
+        sections.append("\n".join(lines))
+    if not sections:
+        return ""
+    return "## 相關文件（docvault）\n\n" + "\n\n".join(sections)
+
+
 def _should_inject_attitudes(prompt: str) -> bool:
     if len(prompt) < 10:
         return False
@@ -203,8 +272,7 @@ def _build(prompt: str, session_id: str, cwd: str, as_of: datetime | None = None
 
     # ── Primary: Cascade Recall ──────────────────────────────────────────
     cascade_url = (
-        f"{CORE_API_URL}/api/memvault/kg/recall?q={encoded_q}"
-        f"&top_k=5&space_id={SPACE_ID}{as_of_qs}"
+        f"{CORE_API_URL}/api/memvault/kg/recall?q={encoded_q}&top_k=5&space_id={SPACE_ID}{as_of_qs}"
     )
     _, cascade_body = _http_get(cascade_url, timeout=CURL_TIMEOUT)
 
@@ -467,12 +535,21 @@ def _build(prompt: str, session_id: str, cwd: str, as_of: datetime | None = None
         _log("No results from API")
         return ""
 
+    # ── docvault inject — auto-RAG over Obsidian-synced documents ────────
+    docvault_section = ""
+    try:
+        docvault_section = _format_docvault_section(prompt)
+    except Exception:
+        docvault_section = ""
+
     # ── Assemble output ──────────────────────────────────────────────────
     output_parts: list[str] = []
     if session_context:
         output_parts.append(session_context)
     if formatted:
         output_parts.append(formatted)
+    if docvault_section:
+        output_parts.append(docvault_section)
     if cache_stale:
         output_parts.append("\n> ⚠️ 此記憶來自快取（可能已過時），Core API 暫時無法連線")
 
