@@ -216,6 +216,7 @@ class MemoryBlockService(
             valid_at=instance.valid_at,
             invalid_at=instance.invalid_at,
             superseded_by=instance.superseded_by,
+            superseded_by_doc_id=instance.superseded_by_doc_id,
             invalidation_reason=instance.invalidation_reason,
             voice=instance.voice,
         )
@@ -337,9 +338,10 @@ class MemoryBlockService(
             }
 
         superseded_ids: list[str] = []
-        # NB: `superseded_by` is FK → blocks.id (block→block dream-pipeline
-        # supersedence). Doc references can't go there. The doc identity is
-        # encoded in invalidation_reason instead; superseded_by stays NULL.
+        # NB: `superseded_by` stays NULL — it's FK → blocks.id (block→block
+        # dream-pipeline path). Doc references go in `superseded_by_doc_id`
+        # (no FK, soft reference to docvault.documents). `invalidation_reason`
+        # mirrors the doc identity for human-readable audit.
         reason = f"superseded_by_doc:{doc_id}"
         if doc_title:
             reason = f"{reason}:{doc_title[:120]}"
@@ -348,6 +350,7 @@ class MemoryBlockService(
             if not block:
                 continue
             block.invalid_at = datetime.now(UTC)
+            block.superseded_by_doc_id = doc_id[:64]
             block.invalidation_reason = reason[:200]
             superseded_ids.append(cand["block_id"])
 

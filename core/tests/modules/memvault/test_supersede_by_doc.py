@@ -298,6 +298,7 @@ def test_invalidation_reason_includes_doc_id_and_title(monkeypatch):
         b.invalid_at = None
         b.invalidation_reason = None
         b.superseded_by = None
+        b.superseded_by_doc_id = None
         captured.append(b)
         return b
 
@@ -329,8 +330,9 @@ def test_invalidation_reason_includes_doc_id_and_title(monkeypatch):
     assert len(captured) == 1
     block = captured[0]
     # superseded_by stays NULL — it's an FK to blocks.id (block→block path).
-    # Doc identity lives in invalidation_reason.
+    # Doc identity now goes into superseded_by_doc_id (no FK, soft ref).
     assert block.superseded_by is None
+    assert block.superseded_by_doc_id == "019e2bfa"
     assert "superseded_by_doc:019e2bfa" in (block.invalidation_reason or "")
     assert "memvault overview" in (block.invalidation_reason or "")
     assert block.invalid_at is not None
