@@ -19,3 +19,8 @@ require (
 	golang.org/x/term v0.43.0 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
+
+
+require github.com/joneshong/workshop/libs/workshop-log v0.0.0
+
+replace github.com/joneshong/workshop/libs/workshop-log => ../../libs/workshop-log-go

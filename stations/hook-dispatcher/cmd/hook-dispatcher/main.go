@@ -16,6 +16,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	workshoplog "github.com/joneshong/workshop/libs/workshop-log"
+
 	"github.com/joneshong/hook-dispatcher/internal/core"
 
 	// Handler packages self-register via init().
@@ -32,6 +34,8 @@ var gitSHA = "dev"
 const pythonFallbackDisableEnv = "HOOK_DISPATCHER_NO_FALLBACK"
 
 func main() {
+	_ = workshoplog.Init("hook-dispatcher")
+
 	// Sub-modes: self-exec for detached background workers.
 	if len(os.Args) > 1 {
 		switch os.Args[1] {

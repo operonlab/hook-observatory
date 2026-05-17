@@ -58,7 +58,9 @@ func Init(service string) *slog.Logger {
 	}
 
 	contextual := &contextHandler{Handler: baseHandler}
-	return slog.New(contextual).With(slog.String("service", service))
+	logger := slog.New(contextual).With(slog.String("service", service))
+	slog.SetDefault(logger)
+	return logger
 }
 
 type multiHandler struct {
