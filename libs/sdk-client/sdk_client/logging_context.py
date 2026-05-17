@@ -45,6 +45,11 @@ class JsonFormatterWithContext(jsonlogger.JsonFormatter):
 
     def add_fields(self, log_record, record, message_dict):
         super().add_fields(log_record, record, message_dict)
+
+        # Explicit required fields — v3 rename_fields does not auto-include these
+        log_record["level"] = record.levelname
+        log_record["logger"] = record.name
+        log_record["msg"] = record.getMessage()
         log_record["service"] = self.service
 
         rid = request_id_var.get()
