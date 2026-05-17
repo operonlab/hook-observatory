@@ -104,7 +104,7 @@
         "calendar": {
           "DayOfWeek": 0,
           "Hour": 4,
-          "Minute": 0
+          "Minute": 10
         }
       },
       "description": "每週日 4AM: 清除 trivial sessions (age 大於 7d, size 小於 3KB or quality_score 小於 0.15)",
@@ -250,102 +250,6 @@
       "enabled": true
     },
     {
-      "name": "ws-auto-survey-wed",
-      "label": "com.joneshong.scheduler.ws-auto-survey-wed",
-      "command": "/bin/bash ~/workshop/schedules/runners/ws_auto_survey.sh",
-      "schedule": {
-        "calendar": {
-          "Weekday": 3,
-          "Hour": 13,
-          "Minute": 0
-        }
-      },
-      "description": "每週三 13:00: LINE OCR 自動抓連結 → auto-survey pipeline → Bark fallback",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-auto-survey-fri",
-      "label": "com.joneshong.scheduler.ws-auto-survey-fri",
-      "command": "/bin/bash ~/workshop/schedules/runners/ws_auto_survey.sh",
-      "schedule": {
-        "calendar": {
-          "Weekday": 5,
-          "Hour": 13,
-          "Minute": 0
-        }
-      },
-      "description": "每週五 13:00: LINE OCR 自動抓連結 → auto-survey pipeline → Bark fallback",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-auto-survey-start-wed",
-      "label": "com.joneshong.scheduler.ws-auto-survey-start-wed",
-      "command": "/bin/launchctl kickstart -k gui/$(id -u)/com.workshop.auto-survey",
-      "schedule": {
-        "calendar": {
-          "Weekday": 3,
-          "Hour": 10,
-          "Minute": 0
-        }
-      },
-      "description": "週三 10:00 啟動 auto-survey（按需服務）",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-auto-survey-start-fri",
-      "label": "com.joneshong.scheduler.ws-auto-survey-start-fri",
-      "command": "/bin/launchctl kickstart -k gui/$(id -u)/com.workshop.auto-survey",
-      "schedule": {
-        "calendar": {
-          "Weekday": 5,
-          "Hour": 10,
-          "Minute": 0
-        }
-      },
-      "description": "週五 10:00 啟動 auto-survey（按需服務）",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-auto-survey-stop-wed",
-      "label": "com.joneshong.scheduler.ws-auto-survey-stop-wed",
-      "command": "/bin/launchctl kill TERM gui/$(id -u)/com.workshop.auto-survey",
-      "schedule": {
-        "calendar": {
-          "Weekday": 3,
-          "Hour": 18,
-          "Minute": 0
-        }
-      },
-      "description": "週三 18:00 關閉 auto-survey",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-auto-survey-stop-fri",
-      "label": "com.joneshong.scheduler.ws-auto-survey-stop-fri",
-      "command": "/bin/launchctl kill TERM gui/$(id -u)/com.workshop.auto-survey",
-      "schedule": {
-        "calendar": {
-          "Weekday": 5,
-          "Hour": 18,
-          "Minute": 0
-        }
-      },
-      "description": "週五 18:00 關閉 auto-survey",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
       "name": "ws-finance-billing",
       "label": "com.joneshong.scheduler.ws-finance-billing",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_finance_billing.py",
@@ -367,7 +271,7 @@
       "schedule": {
         "calendar": {
           "Hour": 3,
-          "Minute": 0
+          "Minute": 10
         }
       },
       "description": "每日 3AM: 過期 stale captures（超過 expires_at 的待處理項目）",
@@ -405,36 +309,6 @@
         }
       },
       "description": "每週一 6:30AM: 蠶食來源上游漂移偵測（GitHub API diff → Bark 通知）",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-dashscope-quota-sync",
-      "label": "com.joneshong.scheduler.ws-dashscope-quota-sync",
-      "command": "/Users/joneshong/.cargo/shared-target/release/agent-metrics dashscope-quota-sync",
-      "schedule": {
-        "calendar": {
-          "Hour": 18,
-          "Minute": 30
-        }
-      },
-      "description": "每日 18:30: DashScope (Qwen) 免費額度爬取同步 → Redis. 2026-04-20 cutover: Python ws_dashscope_quota_sync.py → agent-metrics-rs dashscope-quota-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_dashscope_quota_sync.py",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-provider-balance-sync",
-      "label": "com.joneshong.scheduler.ws-provider-balance-sync",
-      "command": "/Users/joneshong/.cargo/shared-target/release/agent-metrics provider-balance-sync",
-      "schedule": {
-        "calendar": {
-          "Hour": 18,
-          "Minute": 15
-        }
-      },
-      "description": "每日 18:15: LLM 供應商餘額爬取同步 → Redis。2026-04-20 cutover: Python ws_provider_balance_sync.py → agent-metrics-rs provider-balance-sync subcommand. Rollback: ~/.local/bin/python3 ~/workshop/schedules/runners/ws_provider_balance_sync.py",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
@@ -554,7 +428,7 @@
       "schedule": {
         "calendar": {
           "Hour": 4,
-          "Minute": 0
+          "Minute": 5
         }
       },
       "description": "每日 4AM: Dream Loop — 矛盾解決 + batch dedup + 日期正規化 + prune（雙閘門自動跳過）",
@@ -599,7 +473,7 @@
       "schedule": {
         "calendar": {
           "Hour": 3,
-          "Minute": 0
+          "Minute": 20
         }
       },
       "description": "每日 3AM: Memvault batch extraction + re-embedding",
@@ -680,18 +554,6 @@
       "description": "每週日 6:30AM: Export skill routing training data (Memento-Skills Phase 4)"
     },
     {
-      "name": "ws-nginx-autoban",
-      "label": "com.joneshong.scheduler.ws-nginx-autoban",
-      "command": "~/.local/bin/python3 ~/workshop/scripts/nginx_autoban.py",
-      "schedule": {
-        "interval": 300
-      },
-      "description": "每 5 分鐘: Nginx 429 auto-ban — 超過閾值 IP 加入 blocklist + reload",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
       "name": "ws-db-backup-gdrive",
       "label": "com.joneshong.scheduler.ws-db-backup-gdrive",
       "command": "/Users/joneshong/workshop/scripts/ws-db-backup-gdrive.sh",
@@ -717,18 +579,6 @@
         }
       },
       "description": "每日 18:00: 檢查穩定 2 天以上的 zh 文章，自動翻譯成 en",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-cronicle-fail-alert",
-      "label": "com.joneshong.scheduler.ws-cronicle-fail-alert",
-      "command": "~/.local/bin/python3 ~/workshop/scripts/cronicle_fail_alert.py",
-      "schedule": {
-        "interval": 300
-      },
-      "description": "每 5 分鐘 scan Cronicle Transaction.log 偵測 last_exit_code != 0 的 silent failure → Bark",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
@@ -783,6 +633,47 @@
         }
       },
       "description": "每日 08:15: 比對 LiteLLM /v1/models 與 codebase 引用，偵測 model drift (取代被改名的 model)，drift 時 exit 1 讓 Cronicle 標紅",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-auto-survey-scheduler",
+      "label": "com.joneshong.scheduler.ws-auto-survey-scheduler",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_auto_survey_scheduler.py",
+      "schedule": {
+        "calendar": {
+          "Minute": 0
+        }
+      },
+      "description": "每小時 tick: auto-survey 統一 state machine (Wed/Fri 10:00 start, 13:00 run, 18:00 stop) — 取代原 6 個 split jobs",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-account-sync",
+      "label": "com.joneshong.scheduler.ws-account-sync",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_account_sync.py",
+      "schedule": {
+        "calendar": {
+          "Hour": 18,
+          "Minute": 15
+        }
+      },
+      "description": "每日 18:15: 整合 LLM provider account 同步 (balance + dashscope quota) — 取代原 ws-provider-balance-sync + ws-dashscope-quota-sync 兩個 daily jobs",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-log-guardian",
+      "label": "com.joneshong.scheduler.ws-log-guardian",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_log_guardian.py",
+      "schedule": {
+        "interval": 300
+      },
+      "description": "每 5 分鐘並行掃 nginx access.log 找惡意 IP + 掃 Cronicle 找 failed jobs — 取代 ws-nginx-autoban + ws-cronicle-fail-alert",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
