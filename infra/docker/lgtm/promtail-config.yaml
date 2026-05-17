@@ -1,0 +1,96 @@
+# Promtail config — tail workshop JSON logs and ship to Loki.
+#
+# All workshop services (Py/Rust/Go) write JSON Lines aligned to
+# schemas/log-event.schema.json (required: ts/level/logger/msg/service).
+# Promtail extracts those fields as labels/indexes so Grafana LogQL can:
+#   {service="mcp-finance"} |= "level\":\"ERROR\""
+#   {job="workshop"} | json | request_id="01abc..."
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  # lgtm (otel-lgtm) bundles Loki at :3100 inside the container.
+  # Within docker network, service name is `lgtm`.
+  - url: http://lgtm:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: workshop
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: workshop
+          __path__: /var/log/workshop/*/*.log
+
+    pipeline_stages:
+      # 1. Extract service name from the directory path
+      #    /var/log/workshop/mcp-finance/server.log -> service=mcp-finance
+      - regex:
+          source: filename
+          expression: '/var/log/workshop/(?P<dir_service>[^/]+)/[^/]+\.log$'
+      - labels:
+          dir_service:
+
+      # 2. Try parsing as JSON (most logs are; fallback gracefully)
+      - json:
+          expressions:
+            ts: ts
+            level: level
+            logger: logger
+            msg: msg
+            service: service
+            request_id: request_id
+            user_id: user_id
+            status_code: status_code
+            duration_ms: duration_ms
+
+      # 3. Use the in-body `service` field if present, otherwise fall back
+      #    to the directory name (handles non-JSON logs and edge cases).
+      - template:
+          source: effective_service
+          template: '{{ or .service .dir_service }}'
+
+      - labels:
+          service: effective_service
+          level:
+
+      # 4. Use the log's `ts` as the entry timestamp (so out-of-order ingestion
+      #    doesn't smear the timeline).
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          fallback_formats:
+            - RFC3339
+            - "2006-01-02T15:04:05Z07:00"
+          action_on_failure: skip
+
+  # Frontend client-error log gets its own job (separate from general log
+  # so dashboard panels can filter cleanly).
+  - job_name: workshop-client-errors
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: workshop-client-errors
+          service: workbench-client
+          __path__: /var/log/workshop/core/client-errors.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            ts: ts
+            level: level
+            client_message: client_message
+            client_url: client_url
+            client_request_id: client_request_id
+      - labels:
+          level:
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          action_on_failure: skip

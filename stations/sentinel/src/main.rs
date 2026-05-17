@@ -43,15 +43,7 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Route logs to stderr so stdout stays clean for any future CLI output
-    // or pipe consumers — matches auto-survey-rs / agent-metrics-rs policy.
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "sentinel=info,tower_http=info".into()),
-        )
-        .init();
+    let _log_guard = workshop_log::init("sentinel");
 
     let cli = Cli::parse();
     let cfg = Arc::new(Config::load(&cli.config)?);

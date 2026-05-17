@@ -3,6 +3,20 @@ import { withRetry } from '@/shared/utils/retry'
 
 const API_BASE = `${__BASE_PATH__}/api`
 
+/** Generate a 12-hex-char request ID matching the backend schema. */
+function generateRequestId(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+}
+
+/** Return an existing window-scoped request ID or generate a new one. */
+function ensureRequestId(): string {
+  const existing = (window as { __workshopRequestId?: string }).__workshopRequestId
+  if (typeof existing === 'string' && /^[a-f0-9]{8,64}$/i.test(existing)) {
+    return existing
+  }
+  return generateRequestId()
+}
+
 class ApiError extends Error {
   code: string
   status: number
@@ -20,11 +34,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const isIdempotent = method === 'GET' || method === 'HEAD'
 
   const doFetch = async (): Promise<T> => {
+    const rid = ensureRequestId()
+    // X-Request-ID takes priority; caller may override Content-Type but not the trace header
+    const mergedHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options?.headers as Record<string, string> | undefined),
+      'X-Request-ID': rid,
+    }
     const res = await fetch(`${API_BASE}${path}`, {
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
       ...options,
+      headers: mergedHeaders,
     })
+
+    // Capture server-echoed request ID for subsequent calls in the same action chain
+    const respRid = res.headers.get('X-Request-ID')
+    if (respRid) {
+      ;(window as { __workshopRequestId?: string }).__workshopRequestId = respRid
+    }
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({

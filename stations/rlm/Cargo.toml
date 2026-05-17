@@ -9,6 +9,7 @@ name = "rlm"
 path = "src/main.rs"
 
 [dependencies]
+workshop-log = { path = "../../libs/workshop-log-rs" }
 tokio = { version = "1", features = ["full"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }

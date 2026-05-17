@@ -20,6 +20,7 @@ from typing import Any
 
 import httpx
 
+from sdk_client.logging_context import request_id_var
 from sdk_client.port_registry import get_url
 
 logger = logging.getLogger(__name__)
@@ -92,10 +93,13 @@ class BaseClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         """Send an HTTP request with standard error handling."""
+        headers = kwargs.pop("headers", {})
         if self._internal_key:
-            headers = kwargs.pop("headers", {})
             headers["X-Internal-Key"] = self._internal_key
-            kwargs["headers"] = headers
+        rid = request_id_var.get()
+        if rid:
+            headers.setdefault("X-Request-ID", rid)
+        kwargs["headers"] = headers
         try:
             resp = self.client.request(method, f"{self.prefix}{path}", **kwargs)
             resp.raise_for_status()

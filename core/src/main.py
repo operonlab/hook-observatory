@@ -2,17 +2,34 @@
 
 import logging
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from fastapi import FastAPI, Request
+
+from sdk_client.logging_context import JsonFormatterWithContext
+from src.middleware.request_id import RequestInfoLoggingMiddleware
+from src.modules.admin.middleware import AdminAuditMiddleware
 
 # 2026-05-08: 確保 module-level logger（譬如 memvault.kg_routes）的 INFO/WARNING
 # 會輸出到 stderr → /opt/homebrew/var/log/workshop/core/YYYY-MM-DD.error.log
 # 否則 logger.info('[decay] ...') 等診斷訊息會被吞掉，少爺日後找不到 root cause
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    force=True,
+# 2026-05-17: 升級為 JSON file handler + text stderr (replaces basicConfig)
+LOG_DIR = Path("/opt/homebrew/var/log/workshop/core")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+_root = logging.getLogger()
+_root.handlers.clear()
+_file_handler = RotatingFileHandler(
+    LOG_DIR / "general.log", maxBytes=10 * 1024 * 1024, backupCount=5
 )
+_file_handler.setFormatter(JsonFormatterWithContext(service="core"))
+_root.addHandler(_file_handler)
+# Keep stderr too for launchd capture (text format ok)
+_stderr_handler = logging.StreamHandler()
+_stderr_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s — %(message)s"))
+_root.addHandler(_stderr_handler)
+_root.setLevel(logging.INFO)
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
@@ -165,6 +182,16 @@ app.add_middleware(
 )
 
 
+# --- Request ID + Structured HTTP Logging Middleware ---
+# Innermost middleware (defined first → LIFO means event_accumulator wraps it).
+# Generates/validates request_id, sets ContextVar, logs request_start/end,
+# and injects X-Request-ID response header.
+app.add_middleware(RequestInfoLoggingMiddleware)
+
+# Admin audit middleware — isolate /api/admin/* mutations into admin-audit.log
+# (compliance / GDPR-friendly). Reads user_id from ContextVar set by middleware above.
+app.add_middleware(AdminAuditMiddleware)
+
 # --- Event Accumulator Middleware ---
 # Activates per-request event accumulation so that events published by
 # BaseCRUDService hooks are held until after db.commit() succeeds.
@@ -259,3 +286,7 @@ register_capture_sse_events()
 app.include_router(dailyos_router, prefix="/api/dailyos", tags=["dailyos"])
 app.include_router(paper_router, prefix="/api/paper", tags=["paper"])
 app.include_router(docvault_router, prefix="/api/docvault", tags=["docvault"])
+
+from src.modules._diagnostics import router as _diagnostics_router  # noqa: E402
+
+app.include_router(_diagnostics_router, prefix="/api", tags=["diagnostics"])

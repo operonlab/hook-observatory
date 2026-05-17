@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from db import Base, engine
 from fastapi import FastAPI
@@ -12,7 +13,7 @@ from sdk_client.station_bootstrap import setup_cors, setup_logging
 from config import config
 from routes import router
 
-logger = setup_logging("anvil")
+logger = setup_logging("anvil", log_dir=Path("/opt/homebrew/var/log/workshop") / "anvil", json=True)
 
 
 @asynccontextmanager

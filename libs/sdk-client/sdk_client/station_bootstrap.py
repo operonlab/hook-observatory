@@ -18,10 +18,13 @@ from __future__ import annotations
 
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import yaml
 from starlette.middleware.cors import CORSMiddleware
+
+from sdk_client.logging_context import JsonFormatterWithContext
 
 __all__ = [
     "STANDARD_LOG_FORMAT",
@@ -40,22 +43,63 @@ STANDARD_LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s — %(message)s"
 STANDARD_DATE_FORMAT = "%H:%M:%S"
 
 
-def setup_logging(name: str, level: str = "INFO") -> logging.Logger:
+def setup_logging(
+    name: str,
+    level: str = "INFO",
+    log_dir: Path | str | None = None,
+    json: bool = False,
+) -> logging.Logger:
     """Initialize standard Workshop station logging.
 
     Args:
-        name:  Logger name, typically ``__name__`` of the calling module.
-        level: Log level string (default ``"INFO"``).
+        name:    Logger name, typically ``__name__`` of the calling module.
+        level:   Log level string (default ``"INFO"``).
+        log_dir: If given, adds a RotatingFileHandler writing to
+                 ``{log_dir}/general.log`` (10 MB rotate, 5 backups).
+        json:    If True, use :class:`JsonFormatterWithContext` instead of
+                 the standard text format. Applies to the file handler when
+                 *log_dir* is given, and the stream handler otherwise.
 
     Returns:
         A configured :class:`logging.Logger` instance.
+
+    Backwards-compatible: calling with only *name* (and optionally *level*)
+    behaves exactly as before.
     """
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format=STANDARD_LOG_FORMAT,
-        datefmt=STANDARD_DATE_FORMAT,
+    log_level = getattr(logging, level.upper(), logging.INFO)
+
+    if log_dir is None:
+        # Original behaviour — delegate to basicConfig
+        logging.basicConfig(
+            level=log_level,
+            format=STANDARD_LOG_FORMAT,
+            datefmt=STANDARD_DATE_FORMAT,
+        )
+        return logging.getLogger(name)
+
+    # When log_dir is provided, build logger explicitly so handlers are
+    # exactly what we configure (avoids duplication on re-import).
+    logger = logging.getLogger(name)
+    logger.handlers.clear()
+    logger.setLevel(log_level)
+
+    log_path = Path(log_dir)
+    log_path.mkdir(parents=True, exist_ok=True)
+
+    file_handler = RotatingFileHandler(
+        log_path / "general.log",
+        maxBytes=10 * 1024 * 1024,  # 10 MB
+        backupCount=5,
     )
-    return logging.getLogger(name)
+    if json:
+        file_handler.setFormatter(JsonFormatterWithContext(service=name))
+    else:
+        file_handler.setFormatter(
+            logging.Formatter(fmt=STANDARD_LOG_FORMAT, datefmt=STANDARD_DATE_FORMAT)
+        )
+    logger.addHandler(file_handler)
+
+    return logger
 
 
 # ---------------------------------------------------------------------------

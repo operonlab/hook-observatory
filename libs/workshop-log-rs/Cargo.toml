@@ -1,0 +1,25 @@
+[package]
+name = "workshop-log"
+version = "0.1.0"
+edition = "2021"
+description = "Workshop unified logger — JSON output aligned to schemas/log-event.schema.json"
+
+[dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "time", "fmt"] }
+tracing-appender = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+
+# Optional axum middleware
+axum = { version = "0.7", optional = true }
+tower = { version = "0.5", optional = true }
+http = { version = "1", optional = true }
+pin-project-lite = { version = "0.2", optional = true }
+futures-util = { version = "0.3", optional = true }
+
+[features]
+default = []
+axum-middleware = ["dep:axum", "dep:tower", "dep:http", "dep:pin-project-lite", "dep:futures-util"]

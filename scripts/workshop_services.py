@@ -1284,8 +1284,15 @@ def cmd_logs(args_rest: list[str]) -> int:
 
     log_dir = LOG_BASE / service
     if not log_dir.is_dir():
-        err(f"No log directory for service: {service}")
-        return 1
+        # Auto-detect: try mcp-{service} if bare name not found
+        mcp_dir = LOG_BASE / f"mcp-{service}"
+        if mcp_dir.is_dir():
+            log_dir = mcp_dir
+            service = f"mcp-{service}"
+        else:
+            err(f"No log directory for service: {service}")
+            err(f"  Tried: {LOG_BASE / service}  and  {mcp_dir}")
+            return 1
 
     error_flag = "--error" in remaining
     suffix = "error.log" if error_flag else "log"

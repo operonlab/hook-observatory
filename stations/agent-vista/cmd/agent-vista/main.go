@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	workshoplog "github.com/joneshong/workshop/libs/workshop-log"
 
 	"github.com/joneshong/agent-vista/internal/broker"
 	"github.com/joneshong/agent-vista/internal/discovery"
@@ -48,6 +50,8 @@ func main() {
 		os.Exit(0)
 	}
 
+	logger := workshoplog.Init("agent-vista")
+
 	// Resolve config path
 	if *configPath == "" {
 		home, _ := os.UserHomeDir()
@@ -57,7 +61,8 @@ func main() {
 	// Load TOML config (falls back to defaults if file missing)
 	cfg, err := server.LoadConfig(*configPath)
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		logger.Error("failed to load config", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	// CLI flags override config values (only when explicitly set)
@@ -90,7 +95,7 @@ func main() {
 		// Check if the embedded dist has an index.html (i.e., production build)
 		if _, err := fs.Stat(sub, "index.html"); err == nil {
 			frontendFS = sub
-			log.Println("[server] embedded frontend detected")
+			logger.Info("embedded frontend detected")
 		}
 	}
 
@@ -103,12 +108,12 @@ func main() {
 	if cfg.DatabaseURL != "" {
 		ldb, err := server.NewLayoutDB(cfg.DatabaseURL)
 		if err != nil {
-			log.Printf("[layoutdb] warning: failed to connect (%v) — running without DB", err)
+			logger.Warn("layoutdb: failed to connect, running without DB", slog.String("error", err.Error()))
 		} else {
 			srv.SetLayoutDB(ldb)
 			defer ldb.Close()
 			if cfg.Verbose {
-				log.Printf("[layoutdb] layout persistence enabled")
+				logger.Info("layoutdb: layout persistence enabled")
 			}
 		}
 	}
@@ -117,11 +122,11 @@ func main() {
 	if cfg.RedisURL != "" {
 		rs, err := server.NewRedisStore(cfg.RedisURL, cfg.Verbose)
 		if err != nil {
-			log.Printf("[redis] warning: failed to connect (%v) — running without Redis", err)
+			logger.Warn("redis: failed to connect, running without Redis", slog.String("error", err.Error()))
 		} else {
 			tracker.SetRedis(rs)
 			defer rs.Close()
-			log.Printf("[redis] agent state persistence enabled")
+			logger.Info("redis: agent state persistence enabled")
 		}
 	}
 

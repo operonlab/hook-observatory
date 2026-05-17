@@ -14,7 +14,9 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from sdk_client.station_bootstrap import setup_logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,7 +29,7 @@ from tmux_lib.primitives import (
     tmux_run_async,
 )
 
-logging.basicConfig(level=logging.INFO)
+setup_logging("capture-console", log_dir=Path("/opt/homebrew/var/log/workshop") / "capture-console", json=True)
 log = logging.getLogger("capture-console")
 
 # Shared Redis key with capture_watchdog.py / llm_haiku.py

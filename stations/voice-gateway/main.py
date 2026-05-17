@@ -20,7 +20,7 @@ from events import VoiceEventBus
 from routes import router, sse_broadcast
 from sdk_client.station_bootstrap import setup_logging
 
-logger = setup_logging("voice-gateway")
+logger = setup_logging("voice-gateway", log_dir=Path("/opt/homebrew/var/log/workshop") / "voice-gateway", json=True)
 
 _TEMPLATE_PATH = Path(__file__).parent / "templates" / "index.html"
 _MODELS_DIR = Path(__file__).parent / "models"

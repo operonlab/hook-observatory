@@ -14,7 +14,6 @@ use clap::{Parser, Subcommand};
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
 use std::net::SocketAddr;
-use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 mod analyzer;
@@ -121,12 +120,7 @@ enum PeopleCmd {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Route logs to stderr so CLI subcommands (today-status, history, etc.)
-    // can emit parseable key:value lines on stdout without tracing noise.
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    let _log_guard = workshop_log::init("auto-survey");
 
     let cli = Cli::parse();
     let cmd = cli.command.unwrap_or(Command::Serve {

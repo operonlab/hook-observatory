@@ -9,7 +9,6 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(name = "agent-metrics", version)]
@@ -60,13 +59,7 @@ enum Cmd {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Route logs to stderr so CLI subcommands that `println!` JSON/formatted
-    // output (UsageToday, LitellmStatus, QuotaCurrent, etc.) keep stdout
-    // clean for downstream pipes / jq consumers.
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    let _log_guard = workshop_log::init("agent-metrics");
 
     let cli = Cli::parse();
     let cfg = agent_metrics::config::Settings::from_env();

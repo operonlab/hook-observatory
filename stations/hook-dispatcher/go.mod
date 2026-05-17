@@ -12,3 +12,8 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 )
+
+
+require github.com/joneshong/workshop/libs/workshop-log v0.0.0
+
+replace github.com/joneshong/workshop/libs/workshop-log => ../../libs/workshop-log-go

@@ -2,6 +2,8 @@ module github.com/joneshong/agent-vista
 
 go 1.25.7
 
+require github.com/joneshong/workshop/libs/workshop-log v0.0.0
+
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -21,3 +23,5 @@ require (
 	golang.org/x/sys v0.20.0 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
 )
+
+replace github.com/joneshong/workshop/libs/workshop-log => ../../libs/workshop-log-go

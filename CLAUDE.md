@@ -17,7 +17,6 @@ Modular Monolith + Event-Driven workspace.
 - `workbench/` — Single React app
 - `mcp/` — 23 MCP servers (SDK-based protocol access)
 - `stations/` — 19 standalone local tools (each with `cli/`)
-- `bridges/` — External connectors (LINE, Telegram, Discord)
 - `libs/` — Shared libraries: `sdk-client/` (38 API clients + utils), `audio-ops/` (6 ops), `image-ops/` (8 ops), `video-ops/` (7 ops), `tmux-lib/`, `ai-assistant/` (TS), `live2d-core/` (TS)
 - `core/cli/` — Core module CLI wrappers
 - `docs/` — Architecture + Vision (Traditional Chinese, source of truth)

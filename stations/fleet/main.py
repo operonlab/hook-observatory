@@ -12,9 +12,11 @@ from dispatcher import Dispatcher
 from fastapi import FastAPI, HTTPException, Query, Request
 from node_registry import NodeRegistry
 from pydantic import BaseModel
+from sdk_client.station_bootstrap import setup_logging
 from store import NodeRegistered, fleet_store
 from task_store import TaskStore
 
+setup_logging("fleet", log_dir=Path("/opt/homebrew/var/log/workshop") / "fleet", json=True)
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"

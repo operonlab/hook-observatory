@@ -32,6 +32,7 @@ figment = { version = "0.10", features = ["yaml", "env"] }
 thiserror = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+workshop-log = { path = "../../libs/workshop-log-rs", features = ["axum-middleware"] }
 base64 = "0.22"
 tokio-util = { version = "0.7", features = ["rt"] }
 
