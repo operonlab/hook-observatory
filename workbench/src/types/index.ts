@@ -49,8 +49,15 @@ export interface AppLayoutV2 {
   external: string[]
   /** folder.id -> child app ids (ordered). Folders cannot nest. */
   folders: Record<string, string[]>
-  /** metadata for user-created folders (built-in folders use apps.ts) */
-  userFolders: Record<string, { name: string; icon: string; color: string }>
+  /**
+   * Metadata overrides for folders. User-created folders need a full record
+   * (name/icon/color), built-in folders may have *partial* overrides (e.g.
+   * user renamed the toolbox) — defaults come from apps.ts.
+   */
+  userFolders: Record<
+    string,
+    { name?: string; icon?: string; color?: string; description?: string }
+  >
   /** ids the user has stashed via long-press */
   hidden: string[]
 }

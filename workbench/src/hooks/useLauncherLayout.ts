@@ -205,23 +205,38 @@ export function useLauncherLayout() {
     void syncFromBackend()
   }, [])
 
-  // Resolve user folders into LauncherItem on the fly so the rest of the UI
-  // can treat them uniformly with built-in ones.
+  // Resolve user folders + apply per-user overrides to built-in folders.
+  // userFolders is partial — fields the user hasn't touched fall back to
+  // the apps.ts defaults (for built-ins) or sensible defaults (for new
+  // user folders).
   const itemMap = useMemo(() => {
     const map = new Map<string, LauncherItem>()
     for (const item of LAUNCHER_ITEMS) map.set(item.id, item)
     for (const [id, meta] of Object.entries(layout.userFolders)) {
-      map.set(id, {
-        id,
-        kind: 'folder',
-        name: meta.name,
-        description: '使用者建立的資料夾',
-        icon: meta.icon,
-        color: meta.color,
-        // user folders default to external section bucket (where toolbox lives)
-        status: 'external',
-        builtIn: false,
-      })
+      const existing = map.get(id)
+      if (existing && existing.kind === 'folder') {
+        // Override a built-in folder's fields with user edits
+        map.set(id, {
+          ...existing,
+          name: meta.name ?? existing.name,
+          description: meta.description ?? existing.description,
+          icon: meta.icon ?? existing.icon,
+          color: meta.color ?? existing.color,
+        })
+      } else {
+        // Brand-new user folder
+        map.set(id, {
+          id,
+          kind: 'folder',
+          name: meta.name ?? '新資料夾',
+          description: meta.description ?? '使用者建立的資料夾',
+          icon: meta.icon ?? '📁',
+          color: meta.color ?? '#89dceb',
+          // user folders default to external section bucket
+          status: 'external',
+          builtIn: false,
+        })
+      }
     }
     return map
   }, [layout.userFolders])
@@ -427,24 +442,41 @@ export function useLauncherLayout() {
     [layout, itemMap],
   )
 
-  /** Rename a folder (built-in folders ignore this). */
-  const renameFolder = useCallback(
-    (folderId: string, name: string) => {
+  /**
+   * Patch folder metadata (name / description / icon / color). Works for
+   * both user folders and built-in ones — built-in defaults stay in apps.ts,
+   * the patch lives in `userFolders` and overrides on read.
+   */
+  const updateFolder = useCallback(
+    (
+      folderId: string,
+      patch: { name?: string; description?: string; icon?: string; color?: string },
+    ) => {
       const folder = itemMap.get(folderId)
-      if (!folder || folder.kind !== 'folder' || folder.builtIn) return
-      const trimmed = name.trim() || '未命名資料夾'
+      if (!folder || folder.kind !== 'folder') return
+      const cleaned: typeof patch = {}
+      if (patch.name !== undefined) cleaned.name = patch.name.trim() || '未命名資料夾'
+      if (patch.description !== undefined) cleaned.description = patch.description.trim()
+      if (patch.icon !== undefined) cleaned.icon = patch.icon
+      if (patch.color !== undefined) cleaned.color = patch.color
       commit({
         ...layout,
         userFolders: {
           ...layout.userFolders,
           [folderId]: {
-            ...(layout.userFolders[folderId] ?? { icon: '📁', color: '#89dceb' }),
-            name: trimmed,
+            ...(layout.userFolders[folderId] ?? {}),
+            ...cleaned,
           },
         },
       })
     },
     [layout, itemMap],
+  )
+
+  /** Back-compat alias — old call sites use renameFolder(id, name). */
+  const renameFolder = useCallback(
+    (folderId: string, name: string) => updateFolder(folderId, { name }),
+    [updateFolder],
   )
 
   const hide = useCallback(
@@ -477,6 +509,7 @@ export function useLauncherLayout() {
     popFromFolder,
     createFolderFromStack,
     renameFolder,
+    updateFolder,
     hide,
     unhide,
   }

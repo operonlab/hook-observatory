@@ -10,7 +10,10 @@ export interface FolderPopoverProps {
   onOpenChild: (child: LauncherItem) => void
   onReorderChild: (folderId: string, fromId: string, toId: string) => void
   onPopChild: (childId: string) => void
-  onRename: (folderId: string, name: string) => void
+  onUpdate: (
+    folderId: string,
+    patch: { name?: string; description?: string; icon?: string; color?: string },
+  ) => void
 }
 
 const POP_OUT_THRESHOLD_PX = 80
@@ -30,7 +33,7 @@ export default function FolderPopover({
   onOpenChild,
   onReorderChild,
   onPopChild,
-  onRename,
+  onUpdate,
 }: FolderPopoverProps) {
   const [mounted, setMounted] = useState(false)
   const [entered, setEntered] = useState(false)
@@ -39,9 +42,11 @@ export default function FolderPopover({
 
   const isOpen = folder != null
 
-  // Editing folder name
-  const [editing, setEditing] = useState(false)
+  // Editing folder name + description (both fields are double-click editable;
+  // works for built-in folders too — overrides land in userFolders).
+  const [editingField, setEditingField] = useState<'name' | 'description' | null>(null)
   const [draftName, setDraftName] = useState('')
+  const [draftDesc, setDraftDesc] = useState('')
 
   // Drag state (scoped to inside the popover)
   const draggedRef = useRef<string | null>(null)
@@ -52,10 +57,11 @@ export default function FolderPopover({
     if (isOpen) {
       setMounted(true)
       setDraftName(folder?.name ?? '')
+      setDraftDesc(folder?.description ?? '')
       return
     }
     setEntered(false)
-    setEditing(false)
+    setEditingField(null)
     const t = setTimeout(() => setMounted(false), 260)
     return () => clearTimeout(t)
   }, [isOpen, folder])
@@ -82,22 +88,28 @@ export default function FolderPopover({
     if (!isOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (editing) setEditing(false)
+        if (editingField) setEditingField(null)
         else onClose()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [isOpen, editing, onClose])
+  }, [isOpen, editingField, onClose])
 
   if (!mounted || !folder) return null
 
   const originX = anchorRect ? anchorRect.left + anchorRect.width / 2 : window.innerWidth / 2
   const originY = anchorRect ? anchorRect.top + anchorRect.height / 2 : window.innerHeight / 2
 
-  const commitRename = () => {
-    onRename(folder.id, draftName)
-    setEditing(false)
+  const commitName = () => {
+    if (draftName !== folder.name) onUpdate(folder.id, { name: draftName })
+    setEditingField(null)
+  }
+  const commitDesc = () => {
+    if (draftDesc !== (folder.description ?? '')) {
+      onUpdate(folder.id, { description: draftDesc })
+    }
+    setEditingField(null)
   }
 
   return createPortal(
@@ -209,18 +221,19 @@ export default function FolderPopover({
           <div className="flex items-center gap-3">
             <span className="text-2xl">{folder.icon}</span>
             <div>
-              {editing && !folder.builtIn ? (
+              {editingField === 'name' ? (
                 <input
+                  // biome-ignore lint/a11y/noAutofocus: explicit user action (double-click) triggered edit mode
                   autoFocus
                   type="text"
                   value={draftName}
                   onChange={(e) => setDraftName(e.target.value)}
-                  onBlur={commitRename}
+                  onBlur={commitName}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitRename()
+                    if (e.key === 'Enter') commitName()
                     if (e.key === 'Escape') {
                       setDraftName(folder.name)
-                      setEditing(false)
+                      setEditingField(null)
                     }
                   }}
                   className="text-base font-medium"
@@ -239,19 +252,62 @@ export default function FolderPopover({
                   className="text-base font-medium"
                   style={{
                     color: 'rgba(255, 255, 255, 0.9)',
-                    cursor: folder.builtIn ? 'default' : 'text',
+                    cursor: 'text',
                   }}
                   onDoubleClick={() => {
-                    if (!folder.builtIn) setEditing(true)
+                    setDraftName(folder.name)
+                    setEditingField('name')
                   }}
-                  title={folder.builtIn ? undefined : '雙擊重新命名'}
+                  title="雙擊重新命名"
                 >
                   {folder.name}
                 </h2>
               )}
-              <p className="text-[11px]" style={{ color: 'rgba(255, 255, 255, 0.4)' }}>
-                {folder.description ?? '使用者建立的資料夾'}
-              </p>
+              {editingField === 'description' ? (
+                <input
+                  // biome-ignore lint/a11y/noAutofocus: explicit user action (double-click) triggered edit mode
+                  autoFocus
+                  type="text"
+                  value={draftDesc}
+                  onChange={(e) => setDraftDesc(e.target.value)}
+                  onBlur={commitDesc}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitDesc()
+                    if (e.key === 'Escape') {
+                      setDraftDesc(folder.description ?? '')
+                      setEditingField(null)
+                    }
+                  }}
+                  className="text-[11px]"
+                  placeholder="加上描述（可選）"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: `1px solid ${folder.color}80`,
+                    outline: 'none',
+                    color: 'rgba(255, 255, 255, 0.75)',
+                    padding: '2px 0 0 0',
+                    minWidth: 220,
+                    width: '100%',
+                  }}
+                />
+              ) : (
+                <p
+                  className="text-[11px]"
+                  style={{
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    cursor: 'text',
+                    minHeight: '14px',
+                  }}
+                  onDoubleClick={() => {
+                    setDraftDesc(folder.description ?? '')
+                    setEditingField('description')
+                  }}
+                  title="雙擊編輯描述"
+                >
+                  {folder.description || '雙擊加入描述'}
+                </p>
+              )}
             </div>
           </div>
           <button

@@ -24,7 +24,7 @@ export default function Home() {
     dropIntoFolder,
     popFromFolder,
     createFolderFromStack,
-    renameFolder,
+    updateFolder,
     hide,
     unhide,
   } = useLauncherLayout()
@@ -177,7 +177,7 @@ export default function Home() {
         }}
         onReorderChild={reorderInFolder}
         onPopChild={popFromFolder}
-        onRename={renameFolder}
+        onUpdate={updateFolder}
       />
 
       {/* Coming soon section */}
