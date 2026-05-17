@@ -20,7 +20,7 @@ from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────
 WINDOW_MINUTES = 5
-BAN_THRESHOLD = 10          # 429 count within window
+BAN_THRESHOLD = 10  # 429 count within window
 BAN_DURATION_HOURS = 24
 LOG_PATH = Path("/opt/homebrew/var/log/nginx/workshop.access.log")
 BLOCKLIST_PATH = Path("/opt/homebrew/etc/nginx/conf.d/blocklist.conf")
@@ -30,16 +30,17 @@ REDIS_PUSH_CHANNEL = "workshop:push"
 # IPs / networks that must never be banned
 WHITELIST_NETS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
     ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("100.64.0.0/10"),   # Tailscale
+    ipaddress.ip_network("100.64.0.0/10"),  # Tailscale
     ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("2001:b011:e607:1ad6::/64"),  # 少爺家 IPv6 /64 (HiNet)
 ]
 
 # Nginx log format: IP [timestamp] "request" status ...
 _LOG_RE = re.compile(
-    r'^(?P<ip>\S+)\s+'
-    r'\[(?P<time>[^\]]+)\]\s+'
+    r"^(?P<ip>\S+)\s+"
+    r"\[(?P<time>[^\]]+)\]\s+"
     r'"[^"]*"\s+'
-    r'(?P<status>\d+)\s+'
+    r"(?P<status>\d+)\s+"
 )
 _TIME_FMT = "%d/%b/%Y:%H:%M:%S %z"
 
@@ -119,13 +120,15 @@ def _notify(message: str) -> None:
         import json
         import socket
 
-        payload = json.dumps({
-            "category": "system",
-            "title": "Nginx Auto-Ban",
-            "body": message,
-            "tag": "nginx-autoban",
-            "severity": "warning",
-        })
+        payload = json.dumps(
+            {
+                "category": "system",
+                "title": "Nginx Auto-Ban",
+                "body": message,
+                "tag": "nginx-autoban",
+                "severity": "warning",
+            }
+        )
         # Inline RESP PUBLISH (no redis-py dependency)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(3)
