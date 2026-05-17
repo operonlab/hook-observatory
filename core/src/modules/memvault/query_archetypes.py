@@ -321,8 +321,13 @@ _intent_agent = Agent(
         "- unknown: Cannot determine intent\n\n"
         "Respond with the most appropriate intent and your confidence."
     ),
-    retries=2,
+    retries=0,
 )
+
+# Hard ceiling on Tier 3 latency. LiteLLM quota errors (429) used to
+# trigger pydantic-ai's internal retry loop, eating 15-17s and blocking
+# the whole recall path. wait_for + retries=0 guarantee fast-fail.
+_LLM_CLASSIFY_HARD_TIMEOUT = 2.5
 
 
 async def llm_classify(query: str) -> tuple[str, float] | None:
@@ -330,17 +335,27 @@ async def llm_classify(query: str) -> tuple[str, float] | None:
 
     Returns (intent_str, confidence) or None on failure.
     """
+    import asyncio
+
     try:
         from .llm_config import get_litellm_model
 
-        result = await _intent_agent.run(
-            query,
-            model=await get_litellm_model(),
-            model_settings={"temperature": 0.0, "max_tokens": 64, "timeout": 5},
+        result = await asyncio.wait_for(
+            _intent_agent.run(
+                query,
+                model=await get_litellm_model(),
+                model_settings={"temperature": 0.0, "max_tokens": 64, "timeout": 2},
+            ),
+            timeout=_LLM_CLASSIFY_HARD_TIMEOUT,
         )
         output = result.output
         return (output.intent, output.confidence)
+    except TimeoutError:
+        logger.warning(
+            "Tier 3 LLM classify hard-timeout (%.1fs) — falling back",
+            _LLM_CLASSIFY_HARD_TIMEOUT,
+        )
+        return None
     except Exception as exc:
         logger.warning("Tier 3 LLM classify failed (%s) — falling back", exc)
         return None
-    return None

@@ -302,8 +302,12 @@ def _build(prompt: str, session_id: str, cwd: str, as_of: datetime | None = None
     as_of_qs = f"&as_of={urllib.parse.quote(as_of.isoformat())}" if as_of else ""
 
     # ── Primary: Cascade Recall ──────────────────────────────────────────
+    # skip_routing=true bypasses Tier 3 LLM intent classifier — hot path
+    # only needs retrieval, not precise intent. Avoids 15-17s LiteLLM
+    # gemini quota 429 retry storm on multi-concept "hot keyword" prompts.
     cascade_url = (
-        f"{CORE_API_URL}/api/memvault/kg/recall?q={encoded_q}&top_k=5&space_id={SPACE_ID}{as_of_qs}"
+        f"{CORE_API_URL}/api/memvault/kg/recall?q={encoded_q}&top_k=5"
+        f"&space_id={SPACE_ID}&skip_routing=true{as_of_qs}"
     )
     _, cascade_body = _http_get(cascade_url, timeout=CURL_TIMEOUT)
 
