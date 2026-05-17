@@ -50,6 +50,17 @@ CODEBASE_ROOTS = [
 # Directories to skip even when nested under the roots.
 SKIP_DIRS = {"__pycache__", ".venv", "node_modules", ".git", "_archive", ".worktrees"}
 
+# Files whose `model="..."` references are NOT LiteLLM calls (CLI tool
+# default models, codex/copilot/gemini local CLI config writers, audit's
+# own docstring examples). The audit would flag these as drift otherwise.
+SKIP_FILES = {
+    "core/src/shared/llm_policy.py",  # docstring contains historical model names as examples
+    "libs/cli-rosetta/cli_rosetta/copilot_cli.py",  # Copilot CLI default_model — local binary, not LiteLLM
+    "libs/cli-rosetta/cli_rosetta/gemini_cli.py",  # Gemini CLI default_model — same
+    "libs/cli-dic/cli_dic/gemini_cli.py",  # ditto
+    "core/src/modules/dailyos/services.py",  # writes codex CLI config file, not an LLM call
+}
+
 # Pattern matches model="<name>" or model='<name>' or sub_model="<name>".
 # Restricted to provider-prefixed names so we don't sweep up unrelated strings.
 PROVIDER_PREFIXES = (
@@ -66,9 +77,9 @@ PROVIDER_PREFIXES = (
     "nemotron",
 )
 MODEL_RE = re.compile(
-    r'(?:sub_model|model)\s*=\s*[\"\']('
+    r"(?:sub_model|model)\s*=\s*[\"\']("
     + "|".join(re.escape(p) for p in PROVIDER_PREFIXES)
-    + r')[\w.\-/]*[\"\']'
+    + r")[\w.\-/]*[\"\']"
 )
 
 
@@ -79,7 +90,7 @@ def _log(msg: str) -> None:
     try:
         with open(LOG_FILE, "a") as f:
             f.write(line + "\n")
-    except Exception:  # noqa: BLE001,S110 — log file write is best-effort
+    except Exception:  # noqa: S110 — log file write is best-effort
         pass
 
 
@@ -92,21 +103,22 @@ def scan_codebase_hardcoded() -> dict[str, list[str]]:
         for path in root.rglob("*.py"):
             if any(part in SKIP_DIRS for part in path.parts):
                 continue
+            rel = str(path.relative_to(WORKSHOP))
+            if rel in SKIP_FILES:
+                continue
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
-            except Exception as exc:  # noqa: BLE001 — skip files we can't read
+            except Exception as exc:
                 print(f"[audit] skip unreadable {path}: {exc}", flush=True)
                 continue
             for lineno, line in enumerate(text.splitlines(), start=1):
                 for match in MODEL_RE.finditer(line):
                     # Extract the quoted model name.
-                    quoted = re.search(r'[\"\']([^\"\']+)[\"\']', match.group(0))
+                    quoted = re.search(r"[\"\']([^\"\']+)[\"\']", match.group(0))
                     if not quoted:
                         continue
                     name = quoted.group(1)
-                    findings.setdefault(name, []).append(
-                        f"{path.relative_to(WORKSHOP)}:{lineno}"
-                    )
+                    findings.setdefault(name, []).append(f"{path.relative_to(WORKSHOP)}:{lineno}")
     return findings
 
 
