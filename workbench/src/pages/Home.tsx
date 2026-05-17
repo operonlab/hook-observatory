@@ -10,7 +10,10 @@ export default function Home() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [openFolder, setOpenFolder] = useState<LauncherItem | null>(null)
+  // Store *id* not the LauncherItem — itemMap re-creates the item on every
+  // metadata edit, so a stored snapshot would render stale name/description
+  // until the popover is reopened.
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [folderAnchor, setFolderAnchor] = useState<DOMRect | null>(null)
 
   const {
@@ -19,6 +22,7 @@ export default function Home() {
     comingSoon,
     hiddenApps,
     getFolderChildren,
+    getItem,
     reorderTopLevel,
     reorderInFolder,
     dropIntoFolder,
@@ -29,6 +33,8 @@ export default function Home() {
     unhide,
   } = useLauncherLayout()
 
+  const openFolder = getItem(openFolderId)
+
   const openApp = (app: LauncherItem) => {
     if (app.externalUrl) {
       window.location.href = app.externalUrl
@@ -38,15 +44,15 @@ export default function Home() {
   }
 
   const openFolderCard = (folder: LauncherItem, rect: DOMRect) => {
-    setOpenFolder(folder)
+    setOpenFolderId(folder.id)
     setFolderAnchor(rect)
   }
 
   const closeFolder = () => {
-    setOpenFolder(null)
+    setOpenFolderId(null)
   }
 
-  const folderChildren = openFolder ? getFolderChildren(openFolder.id) : []
+  const folderChildren = openFolderId ? getFolderChildren(openFolderId) : []
 
   return (
     <div className="min-h-full flex flex-col" style={{ backgroundColor: '#1a1b2e' }}>

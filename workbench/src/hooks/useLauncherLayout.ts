@@ -325,6 +325,19 @@ export function useLauncherLayout() {
     [layout.folders, resolve],
   )
 
+  /**
+   * Resolve a single id to its current LauncherItem (or undefined). Use this
+   * over storing a LauncherItem in component state — items change as the
+   * user edits folder metadata, and stored snapshots go stale.
+   */
+  const getItem = useCallback(
+    (id: string | null): LauncherItem | null => {
+      if (!id) return null
+      return itemMap.get(id) ?? null
+    },
+    [itemMap],
+  )
+
   // ── Mutations ──────────────────────────────────────────────────
 
   /** Reorder within a section (top-level swap). No-op across sections. */
@@ -526,6 +539,7 @@ export function useLauncherLayout() {
     hiddenApps,
     flatApps,
     getFolderChildren,
+    getItem,
     reorderTopLevel,
     reorderInFolder,
     dropIntoFolder,
