@@ -94,6 +94,21 @@ async def update_account(
     return account_service.to_response(instance)
 
 
+@router.delete("/accounts/{account_id}", status_code=204)
+async def delete_account(
+    account_id: str,
+    space_id: str = Query("default"),
+    db: AsyncSession = Depends(get_db),
+    user: dict = require_permission("invest.write"),
+):
+    deleted = await account_service.delete(
+        db, account_id, user_id=user.get("id"), space_id=space_id
+    )
+    if not deleted:
+        raise NotFoundError("Account not found", code="invest.account_not_found")
+    await db.commit()
+
+
 @router.get("/accounts/{account_id}/summary", response_model=AccountSummaryResponse)
 async def get_account_summary(
     account_id: str,

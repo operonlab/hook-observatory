@@ -25,27 +25,9 @@ services:
     env_var: CORE_API_URL
     nginx_path: ""
     optional: false
-  - name: paper
-    port: 10010
-    group: core
-    health_path: /health
-    env_var: PAPER_SVC_URL
-    nginx_path: /api/paper/
-    optional: false
-  - name: intelflow
-    port: 10011
-    group: core
-    health_path: /health
-    env_var: INTELFLOW_SVC_URL
-    nginx_path: /api/intelflow/
-    optional: false
-  - name: invest
-    port: 10012
-    group: core
-    health_path: /health
-    env_var: INVEST_SVC_URL
-    nginx_path: /api/invest/
-    optional: false
+  # paper / intelflow / invest microservice POCs (ports 10010-10012) removed
+  # 2026-05-17 — modules collapsed back into core monolith (port 10000).
+  # services/{paper,intelflow,invest} archived to _archive/microservice-poc-2026-Q1/.
 
   # ── Stations: Infra & Ops ──
   # hook-observatory (port 10100) removed 2026-05-13 — Python FastAPI
