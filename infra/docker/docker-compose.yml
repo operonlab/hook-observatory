@@ -60,6 +60,22 @@ services:
       timeout: 5s
       retries: 5
 
+  promtail:
+    # Tails /opt/homebrew/var/log/workshop/*/*.log (JSON Lines per
+    # schemas/log-event.schema.json) and ships them to lgtm/Loki on :3100.
+    # Started by `scripts/lgtm_up.sh` (or `docker compose --profile observability up -d`).
+    image: grafana/promtail:3.3.0
+    profiles: ["observability"]
+    restart: always
+    mem_limit: 256m
+    volumes:
+      - /opt/homebrew/var/log/workshop:/var/log/workshop:ro
+      - ./lgtm/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - promtail-positions:/tmp
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - lgtm
+
   rustfs:
     image: rustfs/rustfs:latest
     restart: always
@@ -140,6 +156,7 @@ services:
 volumes:
   pg-data:
   redis-data:
+  promtail-positions:
   lgtm-data:
   rustfs-data:
   rustfs-logs:
