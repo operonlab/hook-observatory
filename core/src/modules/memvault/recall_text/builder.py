@@ -57,7 +57,7 @@ LOG_DIR = Path.home() / "Claude" / "memvault" / "logs"
 LOG_FILE = LOG_DIR / "recall.log"
 MAX_PROMPT_LEN = 2000
 MAX_OUTPUT_CHARS = 4000
-CURL_TIMEOUT = 10
+CURL_TIMEOUT = 14  # hook total 20s − dispatcher overhead − dedup/format/cache-write headroom
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
