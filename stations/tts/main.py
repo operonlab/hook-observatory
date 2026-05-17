@@ -15,9 +15,13 @@ import base64
 import json
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from engines import get_engine
+from sdk_client.station_bootstrap import setup_logging
+
+setup_logging("tts", log_dir=Path("/opt/homebrew/var/log/workshop") / "tts", json=True)
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 

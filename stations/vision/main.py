@@ -13,11 +13,15 @@ import asyncio
 import os
 import os.path
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from engines import get_engine
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
+from sdk_client.station_bootstrap import setup_logging
+
+setup_logging("vision", log_dir=Path("/opt/homebrew/var/log/workshop") / "vision", json=True)
 
 _unloader_task: asyncio.Task | None = None
 

@@ -18,6 +18,10 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from sdk_client.station_bootstrap import setup_logging
+
+setup_logging("stt", log_dir=Path("/opt/homebrew/var/log/workshop") / "stt", json=True)
+
 import uvicorn
 from engines import get_engine
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
