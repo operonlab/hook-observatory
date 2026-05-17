@@ -11,8 +11,10 @@ from pathlib import Path
 
 import structlog
 
+from sdk_client.station_bootstrap import setup_logging
 from session_archiver.config import load_config
 
+setup_logging("session-archiver", log_dir=Path("/opt/homebrew/var/log/workshop") / "session-archiver", json=True)
 logger = structlog.get_logger(__name__)
 
 

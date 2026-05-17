@@ -12,11 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from sdk_client.station_bootstrap import setup_logging
 from video_edit import __version__
 from video_edit.config import settings
 from video_edit.mlt_engine import MLTEngine
 from video_edit.routes import router
 
+setup_logging("video-edit", log_dir=Path("/opt/homebrew/var/log/workshop") / "video-edit", json=True)
 log = structlog.get_logger()
 
 # Shared engine instance
