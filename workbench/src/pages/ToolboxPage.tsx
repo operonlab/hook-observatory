@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TOOL_LIST, type ToolEntry } from '@/shared/constants/tools'
+import { useLauncherLayout } from '@/hooks/useLauncherLayout'
+import type { LauncherItem } from '@/types'
 
 function ToolCard({
   tool,
@@ -8,7 +9,7 @@ function ToolCard({
   onHover,
   onClick,
 }: {
-  tool: ToolEntry
+  tool: LauncherItem
   isHovered: boolean
   onHover: (id: string | null) => void
   onClick: () => void
@@ -48,14 +49,16 @@ function ToolCard({
         >
           {tool.name}
         </h3>
-        <p
-          className="mt-1 text-xs leading-relaxed"
-          style={{
-            color: isHovered ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.3)',
-          }}
-        >
-          {tool.description}
-        </p>
+        {tool.description ? (
+          <p
+            className="mt-1 text-xs leading-relaxed"
+            style={{
+              color: isHovered ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.3)',
+            }}
+          >
+            {tool.description}
+          </p>
+        ) : null}
       </div>
       <span
         className="mt-1 text-xs opacity-0 transition-opacity group-hover:opacity-100"
@@ -67,9 +70,16 @@ function ToolCard({
   )
 }
 
+/**
+ * Standalone /toolbox page — kept as a direct URL fallback (e.g. PWA shortcut,
+ * external link, search engine). Reads the same toolbox folder content the
+ * launcher does, so user reorderings inside the folder propagate here.
+ */
 export default function ToolboxPage() {
   const navigate = useNavigate()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const { getFolderChildren } = useLauncherLayout()
+  const tools = getFolderChildren('toolbox')
 
   return (
     <div className="min-h-full flex flex-col" style={{ backgroundColor: '#1a1b2e' }}>
@@ -113,20 +123,21 @@ export default function ToolboxPage() {
 
       {/* Tools grid */}
       <div className="mx-auto w-full max-w-6xl px-6 pb-16">
-        {TOOL_LIST.length === 0 ? (
+        {tools.length === 0 ? (
           <p className="text-center text-sm" style={{ color: 'rgba(255, 255, 255, 0.3)' }}>
             目前尚無工具
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-px sm:grid-cols-2 lg:grid-cols-3">
-            {TOOL_LIST.map((tool) => (
+            {tools.map((tool) => (
               <ToolCard
                 key={tool.id}
                 tool={tool}
                 isHovered={hoveredId === tool.id}
                 onHover={setHoveredId}
                 onClick={() => {
-                  window.location.href = tool.url
+                  if (tool.externalUrl) window.location.href = tool.externalUrl
+                  else if (tool.path) navigate(tool.path)
                 }}
               />
             ))}

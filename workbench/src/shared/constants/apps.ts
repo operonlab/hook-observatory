@@ -1,98 +1,118 @@
-import type { AppInfo } from '@/types'
+import type { AppLayoutV2, LauncherItem } from '@/types'
 
-export const APP_LIST: AppInfo[] = [
+/**
+ * Built-in launcher items — apps and folders that ship with the product.
+ * User-created folders live in `AppLayoutV2.userFolders` instead.
+ *
+ * The order here defines the *defaults*. Once a user has reordered items the
+ * `AppLayoutV2.internal` / `.external` arrays take precedence (see
+ * `useLauncherLayout`).
+ */
+export const LAUNCHER_ITEMS: LauncherItem[] = [
+  // ── internal (in-app routes) ─────────────────────────────────────
   {
     id: 'finance',
+    kind: 'app',
     name: '記帳理財',
     description: '支出追蹤、預算管理、訂閱分析',
-    icon: '\uD83D\uDCB0',
+    icon: '💰',
     path: '/finance',
     color: '#a6e3a1',
     status: 'available',
   },
   {
     id: 'taskflow',
+    kind: 'app',
     name: '任務排程',
     description: '任務管理、派工系統、獎勵機制',
-    icon: '\uD83D\uDCCB',
+    icon: '📋',
     path: '/taskflow',
     color: '#cba6f7',
     status: 'available',
   },
   {
     id: 'ideagraph',
+    kind: 'app',
     name: '靈感圖譜',
     description: '靈感捕捉、知識圖譜、連結探索',
-    icon: '\uD83D\uDCA1',
+    icon: '💡',
     path: '/ideagraph',
     color: '#f9e2af',
     status: 'coming-soon',
   },
   {
     id: 'admin',
+    kind: 'app',
     name: '管理後台',
     description: '使用者管理、系統設定、審計紀錄',
-    icon: '\u2699\uFE0F',
+    icon: '⚙️',
     path: '/admin',
     color: '#a6adc8',
     status: 'available',
   },
   {
     id: 'intelflow',
+    kind: 'app',
     name: '情報研究',
     description: '研究報告、語意搜尋、智能問答',
-    icon: '\uD83D\uDD2C',
+    icon: '🔬',
     path: '/intelflow',
     color: '#94e2d5',
     status: 'available',
   },
   {
     id: 'memvault',
+    kind: 'app',
     name: '記憶金庫',
     description: 'AI 記憶管理、語意搜尋、KAS 圖譜',
-    icon: '\uD83E\uDDE0',
+    icon: '🧠',
     path: '/memvault',
     color: '#bdd4fa',
     status: 'available',
   },
   {
     id: 'nodeflow',
+    kind: 'app',
     name: '事件流程',
     description: '視覺化事件流引擎、跨模組自動化',
-    icon: '\u26A1',
+    icon: '⚡',
     path: '/nodeflow',
     color: '#fab387',
     status: 'available',
   },
   {
     id: 'invest',
+    kind: 'app',
     name: '投資追蹤',
     description: '持倉管理、交易紀錄、損益分析',
-    icon: '\uD83D\uDCC8',
+    icon: '📈',
     path: '/invest',
     color: '#f38ba8',
     status: 'available',
   },
   {
     id: 'notification',
+    kind: 'app',
     name: '通知管理',
     description: '推播發送、通知歷史、頻道管理',
-    icon: '\uD83D\uDD14',
+    icon: '🔔',
     path: '/notification',
     color: '#cba6f7',
     status: 'available',
   },
   {
     id: 'capture',
+    kind: 'app',
     name: 'Capture Console',
     description: 'Quick capture + AI enrichment console',
-    icon: '\u26A1',
+    icon: '⚡',
     path: '/capture',
     color: '#f9e2af',
     status: 'available',
   },
   {
     id: 'dailyos',
+    kind: 'app',
     name: '每日規劃',
     description: '每日計劃、方法論管理、儀式循環引擎',
     icon: '📅',
@@ -102,6 +122,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'skillpath',
+    kind: 'app',
     name: '技能路徑',
     description: '技能樹、學習路徑、成長規劃',
     icon: '🌳',
@@ -111,6 +132,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'workpool',
+    kind: 'app',
     name: '資源管理',
     description: '資源排程、人力配置、容量管理',
     icon: '📦',
@@ -120,6 +142,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'matchcore',
+    kind: 'app',
     name: '匹配引擎',
     description: '人才匹配、專案配對、智慧推薦',
     icon: '🔗',
@@ -129,15 +152,17 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'briefing',
+    kind: 'app',
     name: '每日簡報',
     description: '多 AI 交叉辯論、每日情報摘要、領域追蹤',
-    icon: '\uD83D\uDCF0',
+    icon: '📰',
     path: '/briefing',
     color: '#c9a962',
     status: 'available',
   },
   {
     id: 'paper',
+    kind: 'app',
     name: '論文研究',
     description: '學術論文管理、自動摘要、研究管線',
     icon: '📄',
@@ -147,6 +172,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'docvault',
+    kind: 'app',
     name: '文件知識庫',
     description: '文件問答、語意搜尋、引用追蹤、領域 Profile',
     icon: '📚',
@@ -155,7 +181,20 @@ export const APP_LIST: AppInfo[] = [
     status: 'available',
   },
   {
+    id: 'anvil',
+    kind: 'app',
+    name: '技能鍛造',
+    description: 'Skill 生命週期管理、結構檢查、評估平台',
+    icon: '🔨',
+    path: '/anvil',
+    color: '#fab387',
+    status: 'available',
+  },
+
+  // ── external (standalone stations / static apps) ─────────────────
+  {
     id: 'agent-metrics',
+    kind: 'app',
     name: 'Agent 儀表板',
     description: 'LLM 用量追蹤、配額監控、模型成本分析',
     icon: '📈',
@@ -166,6 +205,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'agent-vista',
+    kind: 'app',
     name: 'Agent Vista',
     description: '像素風虛擬辦公室 — CLI Agent 即時視覺化',
     icon: '🎮',
@@ -176,6 +216,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'filebrowser',
+    kind: 'app',
     name: '檔案管理',
     description: '遠端檔案瀏覽、上傳下載、線上編輯',
     icon: '📁',
@@ -184,10 +225,9 @@ export const APP_LIST: AppInfo[] = [
     status: 'external',
     externalUrl: '/apps/files/',
   },
-  // hook-observatory rebuilt 2026-05-16 as Go MVP (hook-dispatcher/cmd/hook-dashboard).
-  // Reads spool jsonl in-memory; full PostgreSQL drainer + React port deferred.
   {
     id: 'hook-dashboard',
+    kind: 'app',
     name: 'Hook 監控台',
     description: 'Hook 事件統計、Session 分佈、Tool 用量（MVP）',
     icon: '🪝',
@@ -198,6 +238,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'session-channel',
+    kind: 'app',
     name: 'Session 頻道',
     description: '跨 Session 即時通訊、Redis Streams 訊息監控',
     icon: '📢',
@@ -208,6 +249,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'tmux-webui',
+    kind: 'app',
     name: '終端遙控',
     description: 'tmux 遠端操控、多窗格管理、觸控優化',
     icon: '🖥️',
@@ -218,6 +260,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'system-monitor',
+    kind: 'app',
     name: '系統監控',
     description: '硬體狀態、壓力警報、歷史報告',
     icon: '📊',
@@ -228,6 +271,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'sentinel',
+    kind: 'app',
     name: '服務哨兵',
     description: '健康監測、自動修復、狀態總覽',
     icon: '🛡️',
@@ -238,6 +282,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'auto-survey',
+    kind: 'app',
     name: '自動填表',
     description: 'SurveyCake 自動填表、人員管理、排程通知',
     icon: '📋',
@@ -247,19 +292,11 @@ export const APP_LIST: AppInfo[] = [
     externalUrl: '/apps/survey/',
   },
   {
-    id: 'anvil',
-    name: '技能鍛造',
-    description: 'Skill 生命週期管理、結構檢查、評估平台',
-    icon: '🔨',
-    path: '/anvil',
-    color: '#fab387',
-    status: 'available',
-  },
-  {
     id: 'scheduler',
+    kind: 'app',
     name: '排程管理',
     description: '定時任務排程、執行紀錄、Web UI 管理',
-    icon: '\u23F0',
+    icon: '⏰',
     path: '/scheduler',
     color: '#89dceb',
     status: 'external',
@@ -267,6 +304,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'voice-center',
+    kind: 'app',
     name: '語音中心',
     description: '語音喚醒、STT 轉錄、Client/Server 雙路徑切換',
     icon: '🎙️',
@@ -277,6 +315,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'ocr',
+    kind: 'app',
     name: '文字辨識',
     description: 'Apple Vision OCR、圖片 PDF 文字擷取、多引擎策略',
     icon: '👁️',
@@ -287,6 +326,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'mlt-editor',
+    kind: 'app',
     name: '剪輯時間軸',
     description: 'MLT 專案時間軸編輯器',
     icon: '🎬',
@@ -297,6 +337,7 @@ export const APP_LIST: AppInfo[] = [
   },
   {
     id: 'tmux-as-bridge',
+    kind: 'app',
     name: 'tmux as bridge',
     description: 'tmux 三個月堆疊紀錄影片 · 從狀態列到多 agent 編排',
     icon: '📼',
@@ -305,14 +346,126 @@ export const APP_LIST: AppInfo[] = [
     status: 'external',
     externalUrl: '/apps/tmux-as-bridge/',
   },
+
+  // ── built-in folder + its default contents (formerly tools.ts) ───
   {
     id: 'toolbox',
+    kind: 'folder',
     name: '工具箱',
-    description: '獨立靜態網頁小工具集合 — SRT 修正、FSM 儀表板、PWA Debug…',
+    description: '獨立靜態網頁小工具集合',
     icon: '🧰',
-    path: '/toolbox',
     color: '#89dceb',
     status: 'external',
-    externalUrl: '/toolbox',
+    builtIn: true,
+  },
+  {
+    id: 'srt-fixer',
+    kind: 'app',
+    name: 'SRT 字幕修正',
+    description: 'SRT 批次修正 — 時間重疊、異常偵測、格式修復',
+    icon: '✂️',
+    color: '#6c8aff',
+    status: 'external',
+    externalUrl: '/tools/srt-fixer/',
+  },
+  {
+    id: 'memvault-techstack',
+    kind: 'app',
+    name: 'Memvault 技術全景',
+    description: 'Memvault 記憶引擎架構視覺化、pipeline operators 全景圖',
+    icon: '🗺️',
+    color: '#cba6f7',
+    status: 'external',
+    externalUrl: '/tools/memvault-techstack/',
+  },
+  {
+    id: 'fsm-dashboard',
+    kind: 'app',
+    name: '狀態機儀表板',
+    description: 'FSM 狀態圖視覺化、轉換模擬器、全域狀態機總覽',
+    icon: '🔄',
+    color: '#a29bfe',
+    status: 'external',
+    externalUrl: '/fsm-dashboard.html',
+  },
+  {
+    id: 'sean-analysis',
+    kind: 'app',
+    name: '人物情報分析',
+    description: '機密人物情報分析報告',
+    icon: '🕵️',
+    color: '#f38ba8',
+    status: 'external',
+    externalUrl: '/static/sean-analysis/',
+  },
+  {
+    id: 'pwa-debug',
+    kind: 'app',
+    name: 'PWA Debug',
+    description: 'Service Worker、manifest、PWA 安裝狀態診斷',
+    icon: '🔧',
+    color: '#f9e2af',
+    status: 'external',
+    externalUrl: '/pwa-debug.html',
+  },
+  {
+    id: 'tools-index',
+    kind: 'app',
+    name: '靜態工具索引',
+    description: 'Workshop 靜態工具集合總覽頁',
+    icon: '📇',
+    color: '#94e2d5',
+    status: 'external',
+    externalUrl: '/tools/',
   },
 ]
+
+/**
+ * Default folder membership for built-in folders. User can rearrange via
+ * drag-into; the resulting `AppLayoutV2.folders` overrides this on read.
+ */
+export const DEFAULT_FOLDER_CHILDREN: Record<string, string[]> = {
+  toolbox: [
+    'srt-fixer',
+    'memvault-techstack',
+    'fsm-dashboard',
+    'sean-analysis',
+    'pwa-debug',
+    'tools-index',
+  ],
+}
+
+/** True if the given id is referenced as a child of any built-in folder. */
+function isDefaultChild(id: string): boolean {
+  for (const children of Object.values(DEFAULT_FOLDER_CHILDREN)) {
+    if (children.includes(id)) return true
+  }
+  return false
+}
+
+/**
+ * Build the default launcher arrangement. Used when the user has no saved
+ * preferences yet (or migrates from v1).
+ */
+export function buildDefaultLayout(): AppLayoutV2 {
+  const internal: string[] = []
+  const external: string[] = []
+
+  for (const item of LAUNCHER_ITEMS) {
+    // skip items that belong to a built-in folder by default — they live
+    // inside the folder, not at top level
+    if (isDefaultChild(item.id)) continue
+    if (item.status === 'available') internal.push(item.id)
+    else if (item.status === 'external') external.push(item.id)
+    // coming-soon items render in their own section, no ordering needed
+  }
+
+  return {
+    version: 2,
+    internal,
+    external,
+    folders: { ...DEFAULT_FOLDER_CHILDREN },
+    userFolders: {},
+    hidden: [],
+  }
+}

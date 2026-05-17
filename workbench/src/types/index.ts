@@ -12,15 +12,47 @@ export interface User {
 
 // --- App shell types ---
 
-export interface AppInfo {
+export type LauncherKind = 'app' | 'folder'
+export type LauncherStatus = 'available' | 'coming-soon' | 'external'
+
+/**
+ * Unified entity for the App Launcher (`/apps`).
+ * Replaces the old `AppInfo` + `ToolEntry` split — both apps and folders
+ * live in the same list, distinguished by `kind`.
+ * Folder membership is *not* stored on the item itself; it lives in the
+ * user-mutable `AppLayout.folders` map so the same defaults can be
+ * rearranged per-user without rewriting source.
+ */
+export interface LauncherItem {
   id: string
+  kind: LauncherKind
   name: string
   description: string
   icon: string
-  path: string
   color: string
-  status: 'available' | 'coming-soon' | 'external'
+  status: LauncherStatus
+
+  // app-only
+  path?: string
   externalUrl?: string
+
+  // folder-only — `true` means defined in apps.ts (cannot be deleted, name fixed)
+  builtIn?: boolean
+}
+
+/** Persisted launcher arrangement. Versioned for forward compatibility. */
+export interface AppLayoutV2 {
+  version: 2
+  /** top-level item ids for the internal section (apps + folders) */
+  internal: string[]
+  /** top-level item ids for the external section (apps + folders) */
+  external: string[]
+  /** folder.id -> child app ids (ordered). Folders cannot nest. */
+  folders: Record<string, string[]>
+  /** metadata for user-created folders (built-in folders use apps.ts) */
+  userFolders: Record<string, { name: string; icon: string; color: string }>
+  /** ids the user has stashed via long-press */
+  hidden: string[]
 }
 
 // --- Shared base types (mirrors core/src/shared/schemas.py) ---

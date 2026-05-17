@@ -4,7 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import CaptureBadge from '@/modules/capture/CaptureBadge'
 import { VoiceFab } from '@/modules/voice'
-import { APP_LIST } from '@/shared/constants/apps'
+import { LAUNCHER_ITEMS } from '@/shared/constants/apps'
 import AppLauncher from '@/shell/AppLauncher'
 
 export default function AppHeader() {
@@ -17,7 +17,9 @@ export default function AppHeader() {
   // Derive current module from route
   const currentApp = useMemo(() => {
     // Sort by path length desc to match most specific path first
-    return APP_LIST.find((app) => location.pathname.startsWith(app.path))
+    return LAUNCHER_ITEMS.find(
+      (app) => app.kind === 'app' && app.path && location.pathname.startsWith(app.path),
+    )
   }, [location.pathname])
 
   const accentColor = currentApp?.color
