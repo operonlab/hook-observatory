@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://workshop.joneshong.com/schemas/log-event.schema.json",
+  "title": "WorkshopLogEvent",
+  "description": "Cross-language log event contract for all Workshop services (Python/Rust/Go). Ensures consistent field names so request_id can be traced end-to-end across service boundaries.",
+  "type": "object",
+  "required": ["ts", "level", "logger", "msg", "service"],
+  "additionalProperties": true,
+  "properties": {
+    "ts": {
+      "type": "string",
+      "description": "ISO 8601 datetime with timezone offset (UTC+8 preferred). Example: '2026-05-17T14:30:00.123+08:00'",
+      "examples": ["2026-05-17T14:30:00.123+08:00", "2026-05-17T06:30:00.123Z"]
+    },
+    "level": {
+      "type": "string",
+      "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+      "description": "Log severity level. Python logging names used as canonical form."
+    },
+    "logger": {
+      "type": "string",
+      "description": "Dotted logger hierarchy name. Convention: {service}.{module}.{component}",
+      "examples": ["core.finance.services", "hook-dispatcher.router", "sentinel.checker"]
+    },
+    "msg": {
+      "type": "string",
+      "description": "Human-readable log message. Should be static; dynamic values go in separate fields.",
+      "examples": ["Transaction created successfully", "Request timed out", "Health check failed"]
+    },
+    "service": {
+      "type": "string",
+      "description": "Top-level service name. Identifies which process emitted this log.",
+      "examples": ["core", "mcp-finance", "sentinel", "hook-dispatcher", "session-channel"]
+    },
+    "request_id": {
+      "type": "string",
+      "description": "12 lowercase hex chars from X-Request-ID header. Traces a single HTTP request across services.",
+      "pattern": "^[0-9a-f]{12}$",
+      "examples": ["01abcdef1234", "a3b5c7d9e1f2"]
+    },
+    "user_id": {
+      "type": ["string", "null"],
+      "description": "UUID v7 of the authenticated user. Null for unauthenticated or system requests.",
+      "examples": ["018e1f2a-3b4c-7d5e-8f90-a1b2c3d4e5f6", null]
+    },
+    "space_id": {
+      "type": ["string", "null"],
+      "description": "UUID v7 of the active space/tenant. Null for cross-space or system-level logs.",
+      "examples": ["018e1f2a-0000-7000-8000-000000000001", null]
+    },
+    "module": {
+      "type": "string",
+      "description": "Workshop domain module name if applicable.",
+      "examples": ["finance", "memvault", "intelflow", "taskflow"]
+    },
+    "duration_ms": {
+      "type": "number",
+      "description": "Elapsed time in milliseconds for the operation being logged.",
+      "minimum": 0,
+      "examples": [12.5, 340.0, 2100.8]
+    },
+    "status_code": {
+      "type": "integer",
+      "description": "HTTP response status code for request-scoped logs.",
+      "examples": [200, 201, 400, 404, 500]
+    },
+    "method": {
+      "type": "string",
+      "description": "HTTP method for request-scoped logs.",
+      "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+      "examples": ["GET", "POST"]
+    },
+    "path": {
+      "type": "string",
+      "description": "HTTP request path (without query string) for request-scoped logs.",
+      "examples": ["/api/finance/transactions", "/api/memvault/memories"]
+    },
+    "traceback": {
+      "type": "string",
+      "description": "Full stack trace string from Python/Rust/Go. Include when level is ERROR or CRITICAL.",
+      "examples": ["Traceback (most recent call last):\n  File ...\nValueError: ..."]
+    },
+    "error_type": {
+      "type": "string",
+      "description": "Exception or error class name for programmatic error classification.",
+      "examples": ["ValueError", "NotFoundError", "sqlalchemy.exc.IntegrityError", "context deadline exceeded"]
+    },
+    "extra": {
+      "type": "object",
+      "description": "Free-form object for service-specific fields not covered by the standard schema.",
+      "examples": [{"feed_id": "abc123", "item_count": 42}]
+    }
+  },
+  "examples": [
+    {
+      "ts": "2026-05-17T14:30:00.123+08:00",
+      "level": "INFO",
+      "logger": "core.finance.services",
+      "msg": "Transaction created",
+      "service": "core",
+      "request_id": "01abcdef1234",
+      "user_id": "018e1f2a-3b4c-7d5e-8f90-a1b2c3d4e5f6",
+      "space_id": "018e1f2a-0000-7000-8000-000000000001",
+      "module": "finance",
+      "duration_ms": 45.2,
+      "status_code": 201,
+      "method": "POST",
+      "path": "/api/finance/transactions"
+    },
+    {
+      "ts": "2026-05-17T14:31:05.000+08:00",
+      "level": "ERROR",
+      "logger": "sentinel.checker",
+      "msg": "Health check failed",
+      "service": "sentinel",
+      "error_type": "ConnectionRefusedError",
+      "traceback": "Traceback (most recent call last):\n  ...\nConnectionRefusedError: [Errno 111]",
+      "extra": {"check_name": "core-http", "port": 10000}
+    }
+  ]
+}
