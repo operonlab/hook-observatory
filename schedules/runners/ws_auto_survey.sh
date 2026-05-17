@@ -13,7 +13,7 @@
 set -u
 trap 'echo "[ws_auto_survey] exiting ($?)"' EXIT
 
-BIN="/Users/joneshong/.cargo/shared-target/release/auto-survey"
+BIN="/Users/joneshong/.cargo/shared-target/release/auto-survey-rs"
 DB="/Users/joneshong/workshop/stations/auto-survey/data/auto_survey.db"
 export AUTO_SURVEY_SQLITE_PATH="$DB"
 export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
