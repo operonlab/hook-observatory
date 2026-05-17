@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useAppOrder } from '@/hooks/useAppOrder'
+import { useLauncherLayout } from '@/hooks/useLauncherLayout'
 
 interface AppLauncherProps {
   onClose: () => void
@@ -21,7 +21,11 @@ export default function AppLauncher({ onClose }: AppLauncherProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [onClose])
 
-  const { allOrdered } = useAppOrder()
+  const { flatApps } = useLauncherLayout()
+  // The launcher drop-down doesn't render folders — it's a flat quick-jump
+  // list. We hand `flatApps` (folders expanded) and treat each entry as a
+  // plain navigation target.
+  const allOrdered = flatApps
 
   return (
     <div
@@ -52,16 +56,19 @@ export default function AppLauncher({ onClose }: AppLauncherProps) {
       {/* App list */}
       <div className="py-1">
         {allOrdered.map((app) => {
-          const isActive = location.pathname.startsWith(app.path)
+          const isActive = app.path ? location.pathname.startsWith(app.path) : false
           return (
             <button
               key={app.id}
               onClick={() => {
                 if (app.externalUrl) {
                   window.location.href = app.externalUrl
-                } else {
+                } else if (app.path) {
                   // Full page load to ensure correct manifest for PWA install on mobile
                   window.location.href = app.path + '/'
+                } else {
+                  // Defensive: navigate via router for non-path apps (shouldn't happen)
+                  navigate('/apps')
                 }
                 onClose()
               }}

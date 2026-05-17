@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { APP_LIST } from '@/shared/constants/apps'
+import { LAUNCHER_ITEMS } from '@/shared/constants/apps'
 import AppHeader from '@/shell/AppHeader'
 
 // Import the Web Component (side-effect: registers <ai-assistant>)
@@ -16,7 +16,9 @@ export default function AppShell({ children }: AppShellProps) {
 
   // Sync current module to ai-assistant Web Component
   const currentAppId = useMemo(
-    () => APP_LIST.find((a) => location.pathname.startsWith(a.path))?.id ?? null,
+    () =>
+      LAUNCHER_ITEMS.find((a) => a.kind === 'app' && a.path && location.pathname.startsWith(a.path))
+        ?.id ?? null,
     [location.pathname],
   )
 

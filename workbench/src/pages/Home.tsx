@@ -1,241 +1,52 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAppOrder } from '@/hooks/useAppOrder'
 import { useAuth } from '@/hooks/useAuth'
-import ToolboxPopover from '@/shell/ToolboxPopover'
-import type { AppInfo } from '@/types'
-
-const LONG_PRESS_MS = 500
-
-function AppCard({
-  app,
-  isHovered,
-  onHover,
-  onClick,
-  onHide,
-  isDragOver,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-  onDrop,
-}: {
-  app: AppInfo
-  isHovered: boolean
-  onHover: (id: string | null) => void
-  onClick: (rect: DOMRect) => void
-  onHide: () => void
-  isDragOver: boolean
-  onDragStart: () => void
-  onDragOver: (e: React.DragEvent) => void
-  onDragEnd: () => void
-  onDrop: (e: React.DragEvent) => void
-}) {
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const longPressed = useRef(false)
-
-  const clearPress = () => {
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current)
-      pressTimer.current = null
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      draggable
-      onDragStart={(e) => {
-        clearPress()
-        e.dataTransfer.effectAllowed = 'move'
-        e.currentTarget.style.opacity = '0.4'
-        onDragStart()
-      }}
-      onDragOver={onDragOver}
-      onDragEnd={(e) => {
-        e.currentTarget.style.opacity = '1'
-        onDragEnd()
-      }}
-      onDrop={onDrop}
-      onPointerDown={() => {
-        longPressed.current = false
-        clearPress()
-        pressTimer.current = setTimeout(() => {
-          longPressed.current = true
-          onHide()
-        }, LONG_PRESS_MS)
-      }}
-      onPointerUp={clearPress}
-      onPointerLeave={clearPress}
-      onPointerCancel={clearPress}
-      onContextMenu={(e) => {
-        e.preventDefault()
-        onHide()
-      }}
-      onClick={(e) => {
-        if (longPressed.current) {
-          e.preventDefault()
-          longPressed.current = false
-          return
-        }
-        onClick(e.currentTarget.getBoundingClientRect())
-      }}
-      onMouseEnter={() => onHover(app.id)}
-      onMouseLeave={() => {
-        clearPress()
-        onHover(null)
-      }}
-      className="group relative flex items-start gap-4 p-6 text-left transition-all"
-      style={{
-        backgroundColor: isHovered ? `${app.color}14` : 'transparent',
-        cursor: 'grab',
-        border: '1px solid rgba(255, 255, 255, 0.04)',
-        borderLeft: isDragOver
-          ? `2px solid ${app.color}`
-          : `2px solid ${isHovered ? app.color : `${app.color}40`}`,
-        boxShadow: isDragOver ? `inset 0 0 0 1px ${app.color}40` : 'none',
-        transition: 'border 0.15s, box-shadow 0.15s, background-color 0.2s',
-      }}
-    >
-      <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center text-xl"
-        style={{
-          backgroundColor: isHovered ? `${app.color}30` : `${app.color}20`,
-          border: `1px solid ${app.color}${isHovered ? '50' : '35'}`,
-          borderRadius: '8px',
-          transition: 'all 0.2s ease',
-        }}
-      >
-        {app.icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <h3
-          className="text-sm font-medium transition-colors"
-          style={{
-            color: isHovered ? app.color : 'rgba(255, 255, 255, 0.85)',
-          }}
-        >
-          {app.name}
-        </h3>
-        <p
-          className="mt-1 text-xs leading-relaxed"
-          style={{
-            color: isHovered ? 'rgba(255, 255, 255, 0.45)' : 'rgba(255, 255, 255, 0.3)',
-          }}
-        >
-          {app.description}
-        </p>
-      </div>
-      <span
-        className="mt-1 text-xs opacity-0 transition-opacity group-hover:opacity-100"
-        style={{ color: app.color }}
-      >
-        {app.externalUrl ? '↗' : '→'}
-      </span>
-    </button>
-  )
-}
-
-function DraggableGrid({
-  apps,
-  section,
-  onReorder,
-  renderCard,
-}: {
-  apps: AppInfo[]
-  section: 'internal' | 'external'
-  onReorder: (section: 'internal' | 'external', fromId: string, toId: string) => void
-  renderCard: (
-    app: AppInfo,
-    isDragOver: boolean,
-    handlers: DragHandlers,
-    section: 'internal' | 'external',
-  ) => React.ReactNode
-}) {
-  const dragId = useRef<string | null>(null)
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
-
-  return (
-    <div className="grid grid-cols-1 gap-px sm:grid-cols-2 lg:grid-cols-3">
-      {apps.map((app) => {
-        const handlers: DragHandlers = {
-          onDragStart: () => {
-            dragId.current = app.id
-          },
-          onDragOver: (e: React.DragEvent) => {
-            e.preventDefault()
-            e.dataTransfer.dropEffect = 'move'
-            if (dragId.current && dragId.current !== app.id) {
-              setDragOverId(app.id)
-            }
-          },
-          onDragEnd: () => {
-            dragId.current = null
-            setDragOverId(null)
-          },
-          onDrop: (e: React.DragEvent) => {
-            e.preventDefault()
-            if (dragId.current && dragId.current !== app.id) {
-              onReorder(section, dragId.current, app.id)
-            }
-            dragId.current = null
-            setDragOverId(null)
-          },
-        }
-        return renderCard(app, dragOverId === app.id, handlers, section)
-      })}
-    </div>
-  )
-}
-
-interface DragHandlers {
-  onDragStart: () => void
-  onDragOver: (e: React.DragEvent) => void
-  onDragEnd: () => void
-  onDrop: (e: React.DragEvent) => void
-}
+import { useLauncherLayout } from '@/hooks/useLauncherLayout'
+import FolderPopover from '@/shell/launcher/FolderPopover'
+import LauncherGrid from '@/shell/launcher/LauncherGrid'
+import type { LauncherItem } from '@/types'
 
 export default function Home() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const [toolboxOpen, setToolboxOpen] = useState(false)
-  const [toolboxAnchor, setToolboxAnchor] = useState<DOMRect | null>(null)
-  const { sortedInternal, sortedExternal, comingSoon, hiddenApps, reorder, hide, unhide } =
-    useAppOrder()
+  const [openFolder, setOpenFolder] = useState<LauncherItem | null>(null)
+  const [folderAnchor, setFolderAnchor] = useState<DOMRect | null>(null)
 
-  const openApp = (app: AppInfo, rect: DOMRect) => {
-    if (app.id === 'toolbox') {
-      setToolboxAnchor(rect)
-      setToolboxOpen(true)
-      return
-    }
+  const {
+    sortedInternal,
+    sortedExternal,
+    comingSoon,
+    hiddenApps,
+    getFolderChildren,
+    reorderTopLevel,
+    reorderInFolder,
+    dropIntoFolder,
+    popFromFolder,
+    createFolderFromStack,
+    renameFolder,
+    hide,
+    unhide,
+  } = useLauncherLayout()
+
+  const openApp = (app: LauncherItem) => {
     if (app.externalUrl) {
       window.location.href = app.externalUrl
-    } else {
+    } else if (app.path) {
       navigate(app.path)
     }
   }
 
-  const renderCard = (
-    app: AppInfo,
-    isDragOver: boolean,
-    handlers: DragHandlers,
-    _section: 'internal' | 'external',
-  ) => (
-    <AppCard
-      key={app.id}
-      app={app}
-      isHovered={hoveredId === app.id}
-      onHover={setHoveredId}
-      onClick={(rect) => openApp(app, rect)}
-      onHide={() => hide(app.id)}
-      isDragOver={isDragOver}
-      onDragStart={handlers.onDragStart}
-      onDragOver={handlers.onDragOver}
-      onDragEnd={handlers.onDragEnd}
-      onDrop={handlers.onDrop}
-    />
-  )
+  const openFolderCard = (folder: LauncherItem, rect: DOMRect) => {
+    setOpenFolder(folder)
+    setFolderAnchor(rect)
+  }
+
+  const closeFolder = () => {
+    setOpenFolder(null)
+  }
+
+  const folderChildren = openFolder ? getFolderChildren(openFolder.id) : []
 
   return (
     <div className="min-h-full flex flex-col" style={{ backgroundColor: '#1a1b2e' }}>
@@ -259,7 +70,7 @@ export default function Home() {
           {user?.name ? `${user.name}` : 'Welcome'}
         </h1>
         <p className="mt-2 text-sm" style={{ color: 'rgba(255, 255, 255, 0.3)' }}>
-          拖拽調整順序 · 長按隱藏入口 · 選擇一個應用開始
+          拖拽調整順序 · 拖到資料夾停留即放入 · 兩 App 疊起建資料夾 · 長按隱藏
         </p>
       </div>
 
@@ -271,11 +82,17 @@ export default function Home() {
         >
           內部系統
         </p>
-        <DraggableGrid
-          apps={sortedInternal}
-          section="internal"
-          onReorder={reorder}
-          renderCard={renderCard}
+        <LauncherGrid
+          items={sortedInternal}
+          getFolderChildren={getFolderChildren}
+          hoveredId={hoveredId}
+          onHover={setHoveredId}
+          onOpenApp={openApp}
+          onOpenFolder={openFolderCard}
+          onHide={hide}
+          onReorder={(from, to) => reorderTopLevel('internal', from, to)}
+          onDropIntoFolder={dropIntoFolder}
+          onStackFolder={createFolderFromStack}
         />
       </div>
 
@@ -288,11 +105,17 @@ export default function Home() {
           >
             外部系統
           </p>
-          <DraggableGrid
-            apps={sortedExternal}
-            section="external"
-            onReorder={reorder}
-            renderCard={renderCard}
+          <LauncherGrid
+            items={sortedExternal}
+            getFolderChildren={getFolderChildren}
+            hoveredId={hoveredId}
+            onHover={setHoveredId}
+            onOpenApp={openApp}
+            onOpenFolder={openFolderCard}
+            onHide={hide}
+            onReorder={(from, to) => reorderTopLevel('external', from, to)}
+            onDropIntoFolder={dropIntoFolder}
+            onStackFolder={createFolderFromStack}
           />
         </div>
       )}
@@ -312,12 +135,13 @@ export default function Home() {
                 type="button"
                 key={app.id}
                 onClick={() => unhide(app.id)}
-                className="group flex items-center gap-2 px-3 py-1.5 transition-all"
+                className="group flex items-center gap-2 px-3 py-1.5"
                 style={{
                   backgroundColor: `${app.color}10`,
                   border: `1px solid ${app.color}30`,
                   borderRadius: '6px',
                   opacity: 0.6,
+                  transition: 'all 0.2s ease',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.opacity = '1'
@@ -342,10 +166,18 @@ export default function Home() {
         </div>
       )}
 
-      <ToolboxPopover
-        open={toolboxOpen}
-        anchorRect={toolboxAnchor}
-        onClose={() => setToolboxOpen(false)}
+      <FolderPopover
+        folder={openFolder}
+        anchorRect={folderAnchor}
+        children={folderChildren}
+        onClose={closeFolder}
+        onOpenChild={(child) => {
+          closeFolder()
+          openApp(child)
+        }}
+        onReorderChild={reorderInFolder}
+        onPopChild={popFromFolder}
+        onRename={renameFolder}
       />
 
       {/* Coming soon section */}

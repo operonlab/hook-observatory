@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { APP_LIST } from '@/shared/constants/apps'
+import { LAUNCHER_ITEMS } from '@/shared/constants/apps'
 import type { WidgetProps } from '../types/widget'
 
 /** Clock widget — shows current time */
@@ -73,7 +73,9 @@ export function NotesWidget({ instanceId }: WidgetProps) {
 /** Quick links widget — shortcut to internal apps */
 export function QuickLinksWidget(_props: WidgetProps) {
   const navigate = useNavigate()
-  const apps = APP_LIST.filter((a) => a.status === 'available').slice(0, 6)
+  const apps = LAUNCHER_ITEMS.filter(
+    (a) => a.kind === 'app' && a.status === 'available' && a.path,
+  ).slice(0, 6)
 
   return (
     <div className="flex h-full flex-col p-2">
@@ -88,7 +90,7 @@ export function QuickLinksWidget(_props: WidgetProps) {
           <button
             type="button"
             key={app.id}
-            onClick={() => navigate(app.path)}
+            onClick={() => app.path && navigate(app.path)}
             className="flex flex-col items-center gap-1 rounded p-1.5 transition-colors"
             style={{ backgroundColor: 'transparent' }}
             onMouseEnter={(e) => {
