@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 
 from sdk_client.logging_context import JsonFormatterWithContext
 from src.middleware.request_id import RequestInfoLoggingMiddleware
+from src.modules.admin.middleware import AdminAuditMiddleware
 
 # 2026-05-08: 確保 module-level logger（譬如 memvault.kg_routes）的 INFO/WARNING
 # 會輸出到 stderr → /opt/homebrew/var/log/workshop/core/YYYY-MM-DD.error.log
@@ -186,6 +187,10 @@ app.add_middleware(
 # Generates/validates request_id, sets ContextVar, logs request_start/end,
 # and injects X-Request-ID response header.
 app.add_middleware(RequestInfoLoggingMiddleware)
+
+# Admin audit middleware — isolate /api/admin/* mutations into admin-audit.log
+# (compliance / GDPR-friendly). Reads user_id from ContextVar set by middleware above.
+app.add_middleware(AdminAuditMiddleware)
 
 # --- Event Accumulator Middleware ---
 # Activates per-request event accumulation so that events published by
