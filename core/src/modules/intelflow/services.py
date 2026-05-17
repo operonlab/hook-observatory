@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.events.types import IntelflowEvents
 from src.shared.cache import cached
 from src.shared.embedding import get_embedding
+from src.shared.llm_policy import resolve_model_for_task
 from src.shared.schemas import PaginatedResponse, PaginationParams
 from src.shared.services import BaseCRUDService
 
@@ -527,9 +528,10 @@ class SynthesisService:
         context = "\n\n---\n\n".join(source_chunks)
 
         # 3. Run RLM synthesis (synchronous engine → run in executor)
+        _syn_model = resolve_model_for_task("synthesis")
         config = RLMConfig(
-            model="grok-4-fast",
-            sub_model="grok-4-fast",
+            model=_syn_model,
+            sub_model=_syn_model,
             max_iterations=8,
             max_timeout_secs=120.0,
             api_base="http://localhost:4000/v1",

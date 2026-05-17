@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.events.bus import Event, event_bus
 from src.events.types import MemvaultEvents
+from src.shared.llm_policy import resolve_model_for_task
 
 from .kg_config import PREDICATE_VOCABULARY, VALID_PREDICATES, normalize_predicate
 from .kg_schemas import TripleBatchCreate, TripleCreate
@@ -147,7 +148,7 @@ def _run_rlm_triple_extraction(content: str, block_type: str) -> list[dict[str, 
     from src.shared.rlm_engine import RLMConfig, RLMEngine
 
     config = RLMConfig(
-        model="grok-4-fast",
+        model=resolve_model_for_task("kg_auto_evolve"),
         api_base="http://localhost:4000/v1",
         api_key="sk-litellm-local-dev",
         max_iterations=5,

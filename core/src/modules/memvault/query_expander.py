@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pydantic_ai import Agent
 
 from sdk_client.timeout import dynamic_timeout
+from src.shared.llm_policy import resolve_model_for_task
 
 from .llm_config import get_litellm_model
 
@@ -554,7 +555,7 @@ def _run_rlm_expansion(query: str) -> str | None:
     from src.shared.rlm_engine import RLMConfig, RLMEngine
 
     config = RLMConfig(
-        model="grok-4-fast",
+        model=resolve_model_for_task("query_expand"),
         api_base="http://localhost:4000/v1",
         api_key="sk-litellm-local-dev",
         max_iterations=5,

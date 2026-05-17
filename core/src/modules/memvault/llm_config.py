@@ -22,14 +22,21 @@ _LITELLM_BASE = "http://localhost:4000/v1"
 _LITELLM_KEY = "sk-litellm-local-dev"  # nosec — local dev proxy key
 
 # ── LiteLLM model resolution ──
+# Order matters: when LiteLLM /v1/models is unreachable, resolve_model() falls
+# back to candidates[0]. Putting Gemini first used to trigger 17s timeouts on
+# the UserPromptSubmit hot path because Gemini's free-tier quota would 429
+# and pydantic-ai retried twice at 5s each. DeepSeek-v3 is the safer default:
+# strong Chinese NLU, cheap, no observed quota issues, plus consistent with
+# core/src/shared/llm_policy (the cross-module source of truth for RLMConfig
+# callers — see that module's docstring for the architectural rationale).
 _MODEL_CANDIDATES = [
-    "gemini-3.1-flash-lite",
+    "deepseek-v3",
+    "glm-4.5-air",
+    "qwen3.5-flash",
     "kimi-k2.5",
     "minimax-m2.7-hs",
-    "deepseek-v3",
-    "qwen3.5-flash",
     "grok-4.1-fast",
-    "gemini-3.1-flash",
+    "gemini-2.5-flash",
 ]
 
 _cached_model: str | None = None
