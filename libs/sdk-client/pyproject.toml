@@ -3,7 +3,7 @@ name = "workshop-sdk-client"
 version = "0.1.0"
 description = "Workshop SDK — API clients and shared utilities"
 requires-python = ">=3.12"
-dependencies = ["httpx>=0.27", "redis>=5.0"]
+dependencies = ["httpx>=0.27", "redis>=5.0", "python-json-logger>=2.0,<4.0"]
 
 [project.optional-dependencies]
 audio = ["numpy>=2.0", "soundfile>=0.13"]
