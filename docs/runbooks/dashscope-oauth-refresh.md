@@ -5,7 +5,7 @@ When `agent-metrics dashscope-quota-sync` starts failing with
 session cookies for Alibaba have expired. Follow this runbook to
 re-authenticate via Google OAuth and refresh the cookie snapshot.
 
-Last verified working: **2026-05-17**.
+Last verified working: **2026-05-17** (with full password auto-fill).
 
 ## TL;DR
 
@@ -13,13 +13,38 @@ Last verified working: **2026-05-17**.
 ~/.local/bin/python3 ~/workshop/schedules/runners/ws_dashscope_oauth_refresh.py
 ```
 
-A headed camoufox window opens. The script auto-clicks the first three
-buttons; when the Google passkey screen appears, **touch the fingerprint
-sensor (or enter the system password)** in that window. The script
-polls for up to 3 minutes, then exports cookies and runs a verification.
+A headed camoufox window opens. The script auto-clicks the OAuth
+buttons **and** auto-fills the Google password (read from macOS
+Keychain). If Google is satisfied with just the password (no 2FA, no
+device challenge), the whole flow is **zero-touch**.
 
-Total interactive time: ~30 seconds (most of it is the script waiting
-for redirects).
+If Google throws a 2FA or "verify it's you" challenge, the script
+falls back to manual wait — finish the challenge in the camoufox
+window, the script keeps polling.
+
+Interactive time:
+- Best case (password only): **~0 seconds** of user attention
+- Worst case (2FA prompt): seconds spent on the 2FA, then automatic
+
+## One-time setup: store Google password in Keychain
+
+```bash
+security add-generic-password \
+    -s "google-oauth-dashscope" \
+    -a "<your-google-email>" \
+    -w "<your-google-password>" \
+    -U
+```
+
+The script reads via ``security find-generic-password -s
+google-oauth-dashscope -w``. Override service/account names with
+``--keychain-service`` and ``--keychain-account``. Use
+``--no-auto-password`` to disable auto-fill and fall back to manual
+flow (also the implicit behavior when Keychain entry is missing).
+
+If Google reports "Wrong password" after auto-fill, the script logs
+the same ``security add-generic-password -U`` command for you to
+update the Keychain entry.
 
 ## Symptoms that trigger this runbook
 
@@ -49,28 +74,39 @@ Any one of these is enough:
 
 The script lives at `~/workshop/schedules/runners/ws_dashscope_oauth_refresh.py`.
 
-1. Opens DashScope free-quota dashboard in a **headed** camoufox window
+1. Reads Google password from Keychain (skip on miss; logs only the
+   length, never the value).
+2. Opens DashScope free-quota dashboard in a **headed** camoufox window
    using the master profile.
-2. If already logged in, jumps straight to step 5.
-3. Auto-clicks 「立即登录」 → 「使用Google帳號登入」 → your Google account
+3. If already logged in (Google session still warm), jumps straight to
+   the cookie-export step.
+4. Auto-clicks 「立即登录」 → 「使用Google帳號登入」 → your Google account
    in the chooser (selected by email-substring match, default `@gmail.com`).
-4. **Pauses here** — you must complete the Google passkey/password
-   prompt in the camoufox window. The script polls every 5s for up to
-   3 minutes.
-5. Once login is detected (page contains `模型用量` or `默认业务空间`):
-   - Backs up the old cookies file to
-     `~/.camoufox-profiles/master-login-cookies.json.bak-<ts>`.
-   - Runs `camoufox-cli cookies export …` to write a fresh snapshot.
-6. Runs `agent-metrics dashscope-quota-sync` to verify the new cookies
-   work end-to-end. Looks for the `parsed total_models=N` log line.
-7. Closes the camoufox session.
+5. Detects the Google page state. If on the **passkey** page:
+   - Clicks "Try another way"
+   - Picks "Enter your password" from the alternatives list
+6. Fills the visible password input from Keychain and submits.
+7. Watches the post-submit state for up to 15s and branches:
+   - `logged_in` → proceed to cookie export
+   - `wrong_pw` → log Keychain-update instructions, fall through to
+     the manual wait below
+   - `twofa` → fall through to manual wait (you complete the 2FA in
+     the open window)
+   - anything else → fall through to manual wait
+8. If not yet logged in, polls every 5s for up to 3 minutes, logging
+   the current page state on each tick.
+9. Backs up the old cookies file and writes a fresh snapshot via
+   `camoufox-cli cookies export`.
+10. Runs `agent-metrics dashscope-quota-sync` to verify end-to-end.
+    Looks for the `parsed total_models=N` line in the rust log.
+11. Closes the camoufox session.
 
 Exit codes:
 - `0` — login + export + verify all succeeded.
 - `2` — failed to open the headed window (camoufox broken).
 - `3` — couldn't find the 立即登录 button (layout changed).
 - `4` — couldn't find the Google login link (layout changed).
-- `5` — timeout waiting for user passkey (>3 minutes).
+- `5` — timeout waiting for login (>3 minutes).
 
 ## Manual fallback (if the script breaks)
 
