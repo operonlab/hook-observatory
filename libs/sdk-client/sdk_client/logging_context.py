@@ -21,6 +21,22 @@ def set_request_id(rid: str) -> None:
     request_id_var.set(rid)
 
 
+def set_user_id(uid: str) -> None:
+    user_id_var.set(uid or "")
+
+
+def set_space_id(sid: str) -> None:
+    space_id_var.set(sid or "")
+
+
+def get_user_id() -> str:
+    return user_id_var.get()
+
+
+def get_space_id() -> str:
+    return space_id_var.get()
+
+
 class JsonFormatterWithContext(jsonlogger.JsonFormatter):
     """JSON formatter that auto-injects request_id/user_id/space_id from ContextVar.
 

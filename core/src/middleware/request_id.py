@@ -7,7 +7,12 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from sdk_client.logging_context import request_id_var, set_request_id
+from sdk_client.logging_context import (
+    request_id_var,
+    set_request_id,
+    user_id_var,
+    space_id_var,
+)
 
 logger = logging.getLogger("http.request")
 
@@ -23,6 +28,21 @@ class RequestInfoLoggingMiddleware(BaseHTTPMiddleware):
         if not rid or not _is_valid_rid(rid):
             rid = uuid.uuid4().hex[:12]
         token = request_id_var.set(rid)
+
+        # Try to pull user_id / space_id from request.state (set by SessionMiddleware).
+        # Failure to read is non-fatal — anonymous requests just won't have those fields.
+        user_token = space_token = None
+        try:
+            user_data = getattr(request.state, "user", None)
+            if isinstance(user_data, dict):
+                uid = str(user_data.get("id", "") or "")
+                if uid:
+                    user_token = user_id_var.set(uid)
+                sid = str(user_data.get("current_space_id", "") or "")
+                if sid:
+                    space_token = space_id_var.set(sid)
+        except Exception:  # pragma: no cover — defensive only
+            pass
 
         start = time.monotonic()
         method = request.method
@@ -42,6 +62,10 @@ class RequestInfoLoggingMiddleware(BaseHTTPMiddleware):
                 "request_failed",
                 extra={"method": method, "path": path, "duration_ms": round(elapsed_ms, 2)},
             )
+            if space_token is not None:
+                space_id_var.reset(space_token)
+            if user_token is not None:
+                user_id_var.reset(user_token)
             request_id_var.reset(token)
             raise
 
@@ -60,6 +84,10 @@ class RequestInfoLoggingMiddleware(BaseHTTPMiddleware):
         # 4. Inject response header
         response.headers["X-Request-ID"] = rid
 
+        if space_token is not None:
+            space_id_var.reset(space_token)
+        if user_token is not None:
+            user_id_var.reset(user_token)
         request_id_var.reset(token)
         return response
 
