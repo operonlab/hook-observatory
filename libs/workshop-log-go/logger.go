@@ -2,11 +2,86 @@ package workshoplog
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
+
+// Rotation policy (matches Python RotatingFileHandler).
+const (
+	rotateMaxSize    int64 = 10 * 1024 * 1024 // 10 MB per file
+	rotateMaxBackups       = 5                // keep general.log.1 ... general.log.5
+)
+
+// rotatingFile is a tiny size-based rotating writer (stdlib only, no external deps).
+// Rotates by renaming: general.log -> general.log.1, .1 -> .2, ... oldest dropped.
+type rotatingFile struct {
+	mu      sync.Mutex
+	path    string
+	maxSize int64
+	backups int
+	file    *os.File
+	size    int64
+}
+
+func newRotatingFile(path string, maxSize int64, backups int) (*rotatingFile, error) {
+	rf := &rotatingFile{path: path, maxSize: maxSize, backups: backups}
+	if err := rf.open(); err != nil {
+		return nil, err
+	}
+	return rf, nil
+}
+
+func (rf *rotatingFile) open() error {
+	f, err := os.OpenFile(rf.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return err
+	}
+	rf.file = f
+	rf.size = info.Size()
+	return nil
+}
+
+func (rf *rotatingFile) Write(p []byte) (int, error) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	if rf.file != nil && rf.size+int64(len(p)) > rf.maxSize {
+		rf.rotateLocked()
+	}
+	if rf.file == nil {
+		return len(p), nil // dropped — better than crash
+	}
+	n, err := rf.file.Write(p)
+	rf.size += int64(n)
+	return n, err
+}
+
+func (rf *rotatingFile) rotateLocked() {
+	if rf.file != nil {
+		_ = rf.file.Close()
+		rf.file = nil
+	}
+	// Shift backups: .{n-1} -> .{n}, oldest dropped.
+	oldest := fmt.Sprintf("%s.%d", rf.path, rf.backups)
+	_ = os.Remove(oldest)
+	for i := rf.backups - 1; i >= 1; i-- {
+		from := fmt.Sprintf("%s.%d", rf.path, i)
+		to := fmt.Sprintf("%s.%d", rf.path, i+1)
+		_ = os.Rename(from, to)
+	}
+	_ = os.Rename(rf.path, rf.path+".1")
+	// Reopen.
+	_ = rf.open()
+}
 
 type ctxKey string
 
@@ -17,17 +92,17 @@ const (
 )
 
 // Init creates a slog.Logger writing JSON to /opt/homebrew/var/log/workshop/<service>/general.log
-// (O_APPEND|O_CREATE|O_WRONLY; no rotation yet — TODO: add lumberjack rotation later)
-// and mirrors text to stderr for launchd capture.
+// with size-based rotation (10 MB / 5 backups, matches Python RotatingFileHandler).
+// Mirrors text to stderr for launchd capture.
 func Init(service string) *slog.Logger {
 	logDir := filepath.Join("/opt/homebrew/var/log/workshop", service)
 	_ = os.MkdirAll(logDir, 0o755)
 
-	// TODO: replace with lumberjack for log rotation (MaxSize=10MB, MaxBackups=5)
 	logPath := filepath.Join(logDir, "general.log")
-	fileWriter, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		fileWriter = nil
+	rotating, err := newRotatingFile(logPath, rotateMaxSize, rotateMaxBackups)
+	var fileWriter io.Writer
+	if err == nil {
+		fileWriter = rotating
 	}
 
 	handlerOpts := &slog.HandlerOptions{

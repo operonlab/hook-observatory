@@ -31,7 +31,8 @@ pub mod middleware;
 /// Initialise the global tracing subscriber.
 ///
 /// - Writes JSON-formatted logs (aligned to the Workshop log-event schema) to
-///   `/opt/homebrew/var/log/workshop/<service>/general.log` (rolling daily).
+///   `/opt/homebrew/var/log/workshop/<service>/general.log.YYYY-MM-DD` (rolling daily).
+/// - Keeps at most 7 daily files; older ones are auto-purged by tracing-appender.
 /// - Also writes a compact human-readable stream to stderr.
 /// - Respects the `RUST_LOG` environment variable.
 ///
@@ -41,7 +42,13 @@ pub fn init(service: &'static str) -> WorkerGuard {
     let log_dir = PathBuf::from("/opt/homebrew/var/log/workshop").join(service);
     std::fs::create_dir_all(&log_dir).ok();
 
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "general.log");
+    let file_appender = tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("general")
+        .filename_suffix("log")
+        .max_log_files(7)
+        .build(&log_dir)
+        .expect("failed to build rolling file appender");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let json_layer = WorkshopJsonLayer::new(service, non_blocking);

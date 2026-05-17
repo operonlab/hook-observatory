@@ -888,13 +888,42 @@ def compress_old_logs() -> None:
 
 
 def cleanup_old_logs() -> None:
+    """Backstop cleanup for old log files older than LOG_RETAIN_DAYS.
+
+    Covers files left behind by:
+      - launchd legacy: ``YYYY-MM-DD.out.log.gz`` / ``YYYY-MM-DD.error.log.gz``
+      - Rust ``tracing-appender`` daily rotation: ``general.log.YYYY-MM-DD``
+      - Python ``RotatingFileHandler`` backups: ``general.log.1``, ``.2`` ...
+      - Custom ``server.log.*`` from MCP servers
+      - Any ``*.gz`` archive
+
+    Note: the live ``general.log`` / ``server.log`` (no suffix) and ``cli.log``
+    files are managed in-process by their respective rotating handlers and are
+    intentionally NOT touched here — only their *rotated* / *archived* siblings.
+    """
     cutoff = time.time() - LOG_RETAIN_DAYS * 86400
-    for gz_file in LOG_BASE.rglob("*.gz"):
-        try:
-            if gz_file.stat().st_mtime < cutoff:
-                gz_file.unlink()
-        except Exception:
-            log(f"WARNING: failed to remove old log {gz_file}")
+    patterns = (
+        "*.log.gz",
+        "*.error.log.gz",
+        "*.out.log.gz",
+        "general.log.*",  # Rust daily + Python rotating backups
+        "server.log.*",  # MCP rotating backups
+        "cli.log.*",  # CLI rotating backups
+        "client-errors.log.*",
+        "admin-audit.log.*",
+    )
+    seen: set[Path] = set()
+    for pattern in patterns:
+        for old_file in LOG_BASE.rglob(pattern):
+            if old_file in seen:
+                continue
+            seen.add(old_file)
+            try:
+                if old_file.stat().st_mtime < cutoff:
+                    old_file.unlink()
+                    log(f"Removed old log {old_file}")
+            except Exception:
+                log(f"WARNING: failed to remove old log {old_file}")
 
 
 # ── Health Check Loop ──────────────────────────────────────────
