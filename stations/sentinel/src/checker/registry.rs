@@ -196,10 +196,10 @@ fn build_checks() -> Vec<Check> {
         ("bark",            "bark",             None,                                        None,                         "infra",    false, 10),
         ("mcpproxy",        "mcpproxy",         None,                                        None,                         "infra",    false, 10),
         // core services
+        // paper/intelflow/invest microservice POCs collapsed back into core
+        // monolith (2026-05-17, commit 2f251522). Frontend SPA routes for these
+        // modules are still checked via FRONTEND_MODULES above.
         ("core",            "core",             None,                                        Some(r#"{"status":"healthy"}"#), "internal", false, 10),
-        ("paper",           "paper",            None,                                        None,                         "internal", false, 10),
-        ("intelflow",       "intelflow",        None,                                        None,                         "internal", false, 10),
-        ("invest",          "invest",           None,                                        None,                         "internal", false, 10),
         // stations (infra)
         // hook-observatory removed 2026-05-13 — Python dashboard archived; no listen port
         ("session-channel", "session-channel",  None,                                        None,                         "external", false, 10),
