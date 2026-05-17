@@ -13,6 +13,8 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.llm_policy import resolve_model_for_task
+
 from .models import (
     Budget,
     Category,
@@ -618,7 +620,7 @@ async def generate_monthly_insights_rlm(
     )
 
     config = RLMConfig(
-        model="grok-4-fast",
+        model=resolve_model_for_task("finance_report"),
         sub_model="haiku",
         max_iterations=5,
         max_timeout_secs=60.0,

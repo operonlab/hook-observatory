@@ -26,6 +26,7 @@ from src.shared.conflict import (
     ConflictResult,
     simple_conflict_heuristic,
 )
+from src.shared.llm_policy import resolve_model_for_task
 
 from .llm_config import get_litellm_model
 from .llm_models import ConflictResolutionOutput
@@ -241,7 +242,7 @@ def _run_rlm_conflict(new_content: str, existing_content: str, block_type: str) 
     from src.shared.rlm_engine import RLMConfig, RLMEngine
 
     config = RLMConfig(
-        model="grok-4-fast",
+        model=resolve_model_for_task("conflict_resolve"),
         api_base="http://localhost:4000/v1",
         api_key="sk-litellm-local-dev",
         max_iterations=5,

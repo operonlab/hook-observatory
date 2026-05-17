@@ -15,6 +15,7 @@ from typing import Any
 
 from src.modules.capture.strategies import EnrichmentResult, EnrichmentStrategy
 from src.shared.llm_json import parse_llm_json
+from src.shared.llm_policy import resolve_model_for_task
 from src.shared.rlm_engine import RLMConfig, RLMEngine
 
 logger = logging.getLogger(__name__)
@@ -169,8 +170,8 @@ class RLMEnrichmentStrategy(EnrichmentStrategy):
         )
         self._engine = RLMEngine(
             RLMConfig(
-                model="grok-4-fast",
-                sub_model="grok-4-fast",
+                model=resolve_model_for_task("capture_enrich"),
+                sub_model=resolve_model_for_task("capture_enrich"),
                 max_iterations=5,
                 max_timeout_secs=60.0,
                 max_depth=1,

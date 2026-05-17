@@ -26,6 +26,7 @@ from src.shared.grc import (
     ReflectResult,
     three_guard_filter,
 )
+from src.shared.llm_policy import resolve_model_for_task
 
 logger = logging.getLogger(__name__)
 
@@ -292,9 +293,10 @@ class IntelflowGRCAdapter:
             + "\n".join(skill_summary_lines)
         )
 
+        _syn_model = resolve_model_for_task("synthesis")
         config = RLMConfig(
-            model="grok-4-fast",
-            sub_model="grok-4-fast",
+            model=_syn_model,
+            sub_model=_syn_model,
             max_iterations=8,
             max_timeout_secs=120.0,
             api_base="http://localhost:4000/v1",

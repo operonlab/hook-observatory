@@ -310,14 +310,16 @@ async def generate_digest_rlm(
     Returns same schema as generate_digest() for compatibility.
     """
     from src.shared.llm_json import parse_llm_json
+    from src.shared.llm_policy import resolve_model_for_task
     from src.shared.rlm_engine import RLMConfig, RLMEngine
 
     paper_id = arxiv_id or title[:40]
     logger.info("digest_generator_rlm: starting RLM digest for %s", paper_id)
 
+    _digest_model = resolve_model_for_task("digest")
     config = RLMConfig(
-        model="grok-4-fast",
-        sub_model="grok-4-fast",
+        model=_digest_model,
+        sub_model=_digest_model,
         max_iterations=5,
         max_timeout_secs=60.0,
         max_depth=2,

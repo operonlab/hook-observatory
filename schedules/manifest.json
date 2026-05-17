@@ -804,6 +804,21 @@
       "category": "personal",
       "type": "periodic",
       "enabled": false
+    },
+    {
+      "name": "ws-litellm-model-audit",
+      "label": "com.joneshong.scheduler.ws-litellm-model-audit",
+      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_litellm_model_audit.py",
+      "schedule": {
+        "calendar": {
+          "Hour": 8,
+          "Minute": 15
+        }
+      },
+      "description": "每日 08:15: 比對 LiteLLM /v1/models 與 codebase 引用，偵測 model drift (取代被改名的 model)，drift 時 exit 1 讓 Cronicle 標紅",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }
