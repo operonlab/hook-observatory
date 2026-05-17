@@ -114,43 +114,6 @@ SERVICES = [
         "workdir": "/Users/joneshong/workshop/core",
         "preflight": _core_preflight,
     },
-    # ── Microservices (extracted from Core) ──
-    {
-        "name": "paper",
-        "type": "uvicorn",
-        "cmd": (
-            "/Users/joneshong/workshop/services/paper/.venv/bin/python3 -m uvicorn"
-            f" main:app --host 127.0.0.1 --port {get_port('paper')}"
-        ),
-        "port": get_port("paper"),
-        "health": get("paper").health_url,
-        "workdir": "/Users/joneshong/workshop/services/paper",
-        "env": {"PAPER_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
-    },
-    {
-        "name": "intelflow",
-        "type": "uvicorn",
-        "cmd": (
-            "/Users/joneshong/workshop/services/intelflow/.venv/bin/python3 -m uvicorn"
-            f" main:app --host 127.0.0.1 --port {get_port('intelflow')}"
-        ),
-        "port": get_port("intelflow"),
-        "health": get("intelflow").health_url,
-        "workdir": "/Users/joneshong/workshop/services/intelflow",
-        "env": {"INTELFLOW_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
-    },
-    {
-        "name": "invest",
-        "type": "uvicorn",
-        "cmd": (
-            "/Users/joneshong/workshop/services/invest/.venv/bin/python3 -m uvicorn"
-            f" main:app --host 127.0.0.1 --port {get_port('invest')}"
-        ),
-        "port": get_port("invest"),
-        "health": get("invest").health_url,
-        "workdir": "/Users/joneshong/workshop/services/invest",
-        "env": {"INVEST_DB_URL": "postgresql+asyncpg://joneshong:dev_12345@localhost/workshop"},
-    },
     # ── Stations ──
     {
         "name": "agent-vista",
