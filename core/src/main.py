@@ -281,3 +281,7 @@ register_capture_sse_events()
 app.include_router(dailyos_router, prefix="/api/dailyos", tags=["dailyos"])
 app.include_router(paper_router, prefix="/api/paper", tags=["paper"])
 app.include_router(docvault_router, prefix="/api/docvault", tags=["docvault"])
+
+from src.modules._diagnostics import router as _diagnostics_router  # noqa: E402
+
+app.include_router(_diagnostics_router, prefix="/api", tags=["diagnostics"])
