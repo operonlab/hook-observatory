@@ -46,6 +46,7 @@ enum Cmd {
 }
 
 fn main() -> Result<()> {
+    let _log_guard = workshop_log::init("session-channel");
     let cli = Cli::parse();
     match cli.cmd {
         Cmd::Send(a) => cmd::send::run(a),

@@ -41,6 +41,7 @@ name = "channel-service"
 path = "src/bin/channel-service.rs"
 
 [dependencies]
+workshop-log = { path = "../../libs/workshop-log-rs" }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }

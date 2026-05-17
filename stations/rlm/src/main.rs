@@ -60,6 +60,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+    let _log_guard = workshop_log::init("rlm");
     let cli = Cli::parse();
 
     // Read context

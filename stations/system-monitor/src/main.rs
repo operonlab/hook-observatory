@@ -6,8 +6,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::net::SocketAddr;
-use tracing_subscriber::EnvFilter;
-
 use system_monitor::config::Settings;
 use system_monitor::{api, guardian, reporter, tmux_status};
 
@@ -56,10 +54,7 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    let _log_guard = workshop_log::init("system-monitor");
 
     let cli = Cli::parse();
     let cmd = cli.command.unwrap_or(Command::Serve {

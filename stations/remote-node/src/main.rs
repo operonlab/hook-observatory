@@ -7,7 +7,6 @@ mod state;
 use clap::Parser;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -21,11 +20,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Route logs to stderr so stdout is reserved for any future CLI output.
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    let _log_guard = workshop_log::init("remote-node");
 
     let cli = Cli::parse();
     let cfg = config::Config::load(&cli.config)?;

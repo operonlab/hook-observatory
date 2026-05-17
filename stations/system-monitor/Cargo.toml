@@ -14,6 +14,7 @@ name = "system_monitor"
 path = "src/lib.rs"
 
 [dependencies]
+workshop-log = { path = "../../libs/workshop-log-rs" }
 # HTTP / async
 axum = { version = "0.7", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }

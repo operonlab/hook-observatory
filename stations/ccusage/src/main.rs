@@ -146,6 +146,7 @@ fn local_today(tz: &Option<String>) -> NaiveDate {
 }
 
 fn main() -> Result<()> {
+    let _log_guard = workshop_log::init("ccusage");
     let cli = Cli::parse();
 
     // Handle completions subcommand (no data processing needed)
