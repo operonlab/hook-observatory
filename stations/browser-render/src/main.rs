@@ -30,13 +30,7 @@ struct Cli {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "browser_render=info,tower_http=info".into()),
-        )
-        .init();
+    let _log_guard = workshop_log::init("browser-render");
 
     let cli = Cli::parse();
     let cfg = match Config::load(&cli.config) {

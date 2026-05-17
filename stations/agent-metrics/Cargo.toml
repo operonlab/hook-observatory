@@ -21,6 +21,7 @@ tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "uuid", "chrono", "json"] }
 workshop-sqlite-pool = { path = "../../libs/sqlite-pool" }
 workshop-port-registry = { path = "../../libs/port-registry" }
+workshop-log = { path = "../../libs/workshop-log-rs", features = ["axum-middleware"] }
 reqwest = { version = "0.12", features = ["json", "native-tls"], default-features = false }
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 serde = { version = "1", features = ["derive"] }
