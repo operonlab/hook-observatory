@@ -129,19 +129,42 @@ function getSnapshot() {
 
 let synced = false
 
+/** Returns true if localStorage already has a v2 layout written. */
+function localIsV2(): boolean {
+  return typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) !== null
+}
+
 async function syncFromBackend() {
   if (synced) return
+  synced = true
   try {
     const prefs = await getPreferences()
-    // Backend stores either v1 or v2 under `app_order` (legacy key kept for
-    // backward compat — server is schema-agnostic, it's JSONB).
     const remote = prefs.app_order
-    if (remote) {
+    if (!remote) return
+
+    // Case 1: backend already has v2 — trust it (multi-device sync).
+    if (isV2(remote)) {
       const normalized = normalize(remote)
       writeCache(normalized)
       emitChange()
+      return
     }
-    synced = true
+
+    // Case 2: backend stuck on v1 (or earlier) but local already migrated
+    // to v2 — local has user mutations (drag-into-folder, rename, etc.)
+    // that v1 can't represent. Push local up rather than clobbering it
+    // with the migration of a stale snapshot.
+    if (localIsV2()) {
+      const local = readCache()
+      void persistToBackend(local)
+      return
+    }
+
+    // Case 3: first launch on this device — take backend v1 (will be
+    // re-persisted as v2 on the next mutation).
+    const normalized = normalize(remote)
+    writeCache(normalized)
+    emitChange()
   } catch {
     // Offline or unauthenticated — use cache
   }

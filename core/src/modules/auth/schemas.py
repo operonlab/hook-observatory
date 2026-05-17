@@ -1,6 +1,7 @@
 """Pydantic models for auth request/response validation."""
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -59,9 +60,15 @@ class UserDetailResponse(UserResponse):
 
 
 class PreferencesUpdate(BaseModel):
-    """Partial update — merges into existing preferences JSONB."""
+    """Partial update — merges into existing preferences JSONB.
 
-    app_order: dict[str, list[str]] | None = None
+    `app_order` is a free-form launcher layout payload (v1 was
+    `dict[str, list[str]]`, v2 adds `version`, `folders`, `userFolders`,
+    `hidden`). The schema accepts arbitrary nested structures so the
+    frontend can evolve its layout shape without backend migrations.
+    """
+
+    app_order: dict[str, Any] | None = None
 
 
 class SessionResponse(BaseModel):
