@@ -18,23 +18,6 @@
       "enabled": true
     },
     {
-      "name": "ws-observation-gate-dream",
-      "label": "com.joneshong.scheduler.ws-observation-gate-dream",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_observation_gate.py dream-consolidation",
-      "schedule": {
-        "calendar": {
-          "Month": 4,
-          "DayOfMonth": 15,
-          "Hour": 18,
-          "Minute": 0
-        }
-      },
-      "description": "一次性: 2026-04-15 18:00 — Dream consolidation 觀察期結束，Bark 通知檢查結果",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
       "name": "ws-memvault-synthesis",
       "label": "com.joneshong.scheduler.ws-memvault-synthesis",
       "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_memvault_synthesis.py",
@@ -373,22 +356,6 @@
         }
       },
       "description": "每日 6AM: 訂閱帳單 + 分期到期自動生成交易紀錄",
-      "category": "workshop",
-      "type": "periodic",
-      "enabled": true
-    },
-    {
-      "name": "ws-finance-monthly-snapshot",
-      "label": "com.joneshong.scheduler.ws-finance-monthly-snapshot",
-      "command": "~/.local/bin/python3 ~/workshop/schedules/runners/ws_finance_snapshot.py",
-      "schedule": {
-        "calendar": {
-          "Day": 1,
-          "Hour": 0,
-          "Minute": 30
-        }
-      },
-      "description": "每月 1 日 00:30: 全域錢包快照存檔（RPG 式資產備份）",
       "category": "workshop",
       "type": "periodic",
       "enabled": true
