@@ -9,6 +9,8 @@ dependencies = [
     "httpx>=0.27",
     "uuid-utils>=0.9",
     "immutables>=0.20",
+    "starlette>=0.40",
+    "python-json-logger>=2.0,<4.0",
 ]
 
 [build-system]

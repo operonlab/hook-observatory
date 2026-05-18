@@ -10,4 +10,7 @@ dependencies = [
     "sherpa-onnx>=1.11",
     "soundfile>=0.13",
     "numpy>=2.0",
+    "pyyaml>=6.0",
+    "starlette>=0.40",
+    "python-json-logger>=2.0,<4.0"
 ]

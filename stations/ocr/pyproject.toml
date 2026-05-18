@@ -11,4 +11,7 @@ dependencies = [
     "paddlepaddle>=3.0",
     "paddleocr>=3.0",
     "opencv-python-headless>=4.10",
+    "pyyaml>=6.0",
+    "starlette>=0.40",
+    "python-json-logger>=2.0,<4.0"
 ]
