@@ -12,7 +12,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-PYTHON = Path.home() / ".local" / "bin" / "python3"
+# Use the station's own .venv — it carries sdk_client's transitive deps
+# (python-json-logger etc.) which the user-global ~/.local/bin/python3
+# can't see because uv-managed pythons are externally-managed.
+PYTHON = Path.home() / "workshop" / "stations" / "session-archiver" / ".venv" / "bin" / "python"
 ARCHIVER = Path.home() / "workshop" / "stations" / "session-archiver" / "src"
 
 
