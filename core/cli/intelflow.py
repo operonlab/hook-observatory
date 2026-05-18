@@ -49,16 +49,34 @@ def cmd_reports_list(args):
             print(f"  [{date}] {r.get('title', '?')[:60]}")
             if tags:
                 print(f"           tags: {tags}")
-            print(f"           id={r.get('id', '?')[:12]}")
+            print(f"           id={r.get('id', '?')}")
     except (APIError, APIConnectionError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
+def _resolve_report_id_prefix(client, prefix):
+    result = client.list_reports(page=1, page_size=100)
+    items = result.get("items", []) if isinstance(result, dict) else []
+    matches = [r for r in items if str(r.get("id", "")).startswith(prefix)]
+    if not matches:
+        print(f"Error: no report ID starts with '{prefix}' (searched latest 100 — use full ID for older reports)", file=sys.stderr)
+        sys.exit(1)
+    if len(matches) > 1:
+        print(f"Error: prefix '{prefix}' matches {len(matches)} reports — be more specific:", file=sys.stderr)
+        for m in matches[:5]:
+            print(f"  {m.get('id', '?')}  {m.get('title', '?')[:60]}", file=sys.stderr)
+        sys.exit(1)
+    return matches[0]["id"]
+
+
 def cmd_reports_get(args):
     client = IntelflowClient()
     try:
-        r = client.get_report(args.id)
+        rid = args.id
+        if len(rid) < 32:
+            rid = _resolve_report_id_prefix(client, rid)
+        r = client.get_report(rid)
         if json_out(r, args):
             return
         print(f"Title: {r.get('title', '?')}")
@@ -85,7 +103,7 @@ def cmd_reports_search(args):
         for r in items:
             score = r.get("score", r.get("similarity", 0))
             print(f"  [{score:.3f}] {r.get('title', '?')[:60]}")
-            print(f"           id={r.get('id', r.get('report_id', '?'))[:12]}")
+            print(f"           id={r.get('id', r.get('report_id', '?'))}")
     except (APIError, APIConnectionError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -104,7 +122,7 @@ def cmd_reports_check(args):
                 score = m.get("score", 0)
                 rpt = m.get("report", m)
                 print(f"  [{score:.3f}] {rpt.get('title', '?')[:60]}")
-                print(f"           id={rpt.get('id', '?')[:12]}")
+                print(f"           id={rpt.get('id', '?')}")
         else:
             print("No similar reports found.")
     except (APIError, APIConnectionError) as e:
@@ -145,7 +163,7 @@ def cmd_topics_list(args):
         print(f"Topics ({len(items)}):\n")
         for t in items:
             count = t.get("report_count", 0)
-            print(f"  {t.get('name', '?'):30s}  reports: {count:>4d}  id={t.get('id', '?')[:12]}")
+            print(f"  {t.get('name', '?'):30s}  reports: {count:>4d}  id={t.get('id', '?')}")
     except (APIError, APIConnectionError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -176,7 +194,7 @@ def cmd_briefings_list(args):
         for b in items:
             date = str(b.get("briefing_date", b.get("created_at", "")))[:10]
             domain = b.get("domain", "?")
-            print(f"  [{date}] {domain:20s}  id={b.get('id', '?')[:12]}")
+            print(f"  [{date}] {domain:20s}  id={b.get('id', '?')}")
     except (APIError, APIConnectionError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
