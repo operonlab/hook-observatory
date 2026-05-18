@@ -85,15 +85,26 @@ def cfx_snapshot() -> str:
 
 def submit_single_url_cfx(url: str) -> str:
     """Submit one URL to GSC via camoufox-cli. Returns 'ok', 'quota', or error."""
-    snap = cfx_snapshot()
-    health = check_session_health(snap)
-    if health:
-        return health
-
-    # Find search combobox
-    search_ref = find_ref(snap, r"combobox.*檢查")
-    if not search_ref:
-        search_ref = find_ref(snap, r"combobox.*Inspect")
+    # GSC is a heavy SPA — the URL Inspection combobox can take 10-20s to
+    # render after navigation, especially in cron/headless mode. The fixed
+    # 5s sleep in submit_urls_to_gsc_cfx is not enough; on 2026-05-17 10:02
+    # all 10 URLs failed with search_box_not_found in the same second
+    # because the first snapshot was taken before the SPA hydrated. Poll
+    # for the combobox here so the first URL pays the warmup cost and the
+    # rest get the ref in one shot.
+    search_ref = None
+    snap = ""
+    for _ in range(6):  # up to ~30s on cold open; ~0s once hydrated
+        snap = cfx_snapshot()
+        health = check_session_health(snap)
+        if health:
+            return health
+        search_ref = find_ref(snap, r"combobox.*檢查") or find_ref(
+            snap, r"combobox.*Inspect"
+        )
+        if search_ref:
+            break
+        time.sleep(5)
     if not search_ref:
         log("  WARN: Cannot find search box in snapshot")
         return "search_box_not_found"
