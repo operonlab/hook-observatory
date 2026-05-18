@@ -551,19 +551,36 @@ def _scrape_dashscope_playwright() -> str | None:
         log(f"  ERROR: playwright DashScope failed: {e}")
         return None
     finally:
+        # Fail-loud cleanup: surface failures so leaked Chrome instances are
+        # detected (see 19h-leak incident, /tmp/pw-5201e67a3964, 2026-05-17).
         try:
-            subprocess.run(
+            close_r = subprocess.run(
                 ["playwright-cli", f"-s={session_id}", "close"],
                 capture_output=True,
+                text=True,
                 timeout=5,
             )
-            subprocess.run(
+            if close_r.returncode != 0:
+                log(
+                    f"  ERROR: playwright close failed (rc={close_r.returncode}): "
+                    f"{close_r.stderr[:200]}"
+                )
+        except Exception as e:
+            log(f"  ERROR: playwright close raised: {e}")
+        try:
+            cleanup_r = subprocess.run(
                 [str(PYTHON), str(PW_SESSION), "cleanup", profile_dir],
                 capture_output=True,
+                text=True,
                 timeout=5,
             )
-        except Exception:
-            pass
+            if cleanup_r.returncode != 0:
+                log(
+                    f"  ERROR: pw_session cleanup failed (rc={cleanup_r.returncode}): "
+                    f"{cleanup_r.stderr[:200]}"
+                )
+        except Exception as e:
+            log(f"  ERROR: pw_session cleanup raised: {e}")
 
 
 def _scrape_dashscope_safari() -> str | None:

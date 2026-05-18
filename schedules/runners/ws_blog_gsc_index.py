@@ -194,9 +194,15 @@ def submit_urls_to_gsc_cfx(urls: list[str]) -> dict[str, str]:
         log(f"ERROR: camoufox unexpected: {e}")
     finally:
         try:
-            _cfx("close", timeout=10)
-        except Exception:
-            pass
+            close_r = _cfx("close", timeout=10)
+            if close_r.returncode != 0:
+                msg = f"camoufox close failed (rc={close_r.returncode}): {close_r.stderr[:200]}"
+                log(f"ERROR: {msg}")
+                bark_notify("Browser Cleanup Alert", msg)
+        except Exception as e:
+            msg = f"camoufox close raised: {e}"
+            log(f"ERROR: {msg}")
+            bark_notify("Browser Cleanup Alert", msg)
 
     return results
 
@@ -335,23 +341,41 @@ def pw_open(profile_dir: str, session_id: str, url: str) -> str:
 
 
 def pw_close(session_id: str, profile_dir: str) -> None:
-    """Close browser and cleanup profile."""
+    """Close browser and cleanup profile.
+
+    Fail-loud: surface close failures so leaked headless Chrome instances
+    are detected (see 19h-leak incident, /tmp/pw-5201e67a3964, 2026-05-17).
+    """
     try:
-        subprocess.run(
+        close_r = subprocess.run(
             ["playwright-cli", f"-s={session_id}", "close"],
             capture_output=True,
+            text=True,
             timeout=10,
         )
-    except Exception:
-        pass
+        if close_r.returncode != 0:
+            msg = f"playwright close failed (rc={close_r.returncode}): {close_r.stderr[:200]}"
+            log(f"ERROR: {msg}")
+            bark_notify("Browser Cleanup Alert", msg)
+    except Exception as e:
+        msg = f"playwright close raised: {e}"
+        log(f"ERROR: {msg}")
+        bark_notify("Browser Cleanup Alert", msg)
     try:
-        subprocess.run(
+        cleanup_r = subprocess.run(
             [str(PYTHON), str(PW_SESSION), "cleanup", profile_dir],
             capture_output=True,
+            text=True,
             timeout=10,
         )
-    except Exception:
-        pass
+        if cleanup_r.returncode != 0:
+            msg = f"pw_session cleanup failed (rc={cleanup_r.returncode}): {cleanup_r.stderr[:200]}"
+            log(f"ERROR: {msg}")
+            bark_notify("Browser Cleanup Alert", msg)
+    except Exception as e:
+        msg = f"pw_session cleanup raised: {e}"
+        log(f"ERROR: {msg}")
+        bark_notify("Browser Cleanup Alert", msg)
 
 
 def find_ref(snapshot: str, pattern: str) -> str | None:
