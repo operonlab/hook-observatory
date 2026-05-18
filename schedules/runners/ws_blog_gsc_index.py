@@ -85,15 +85,26 @@ def cfx_snapshot() -> str:
 
 def submit_single_url_cfx(url: str) -> str:
     """Submit one URL to GSC via camoufox-cli. Returns 'ok', 'quota', or error."""
-    snap = cfx_snapshot()
-    health = check_session_health(snap)
-    if health:
-        return health
-
-    # Find search combobox
-    search_ref = find_ref(snap, r"combobox.*檢查")
-    if not search_ref:
-        search_ref = find_ref(snap, r"combobox.*Inspect")
+    # GSC is a heavy SPA — the URL Inspection combobox can take 10-20s to
+    # render after navigation, especially in cron/headless mode. The fixed
+    # 5s sleep in submit_urls_to_gsc_cfx is not enough; on 2026-05-17 10:02
+    # all 10 URLs failed with search_box_not_found in the same second
+    # because the first snapshot was taken before the SPA hydrated. Poll
+    # for the combobox here so the first URL pays the warmup cost and the
+    # rest get the ref in one shot.
+    search_ref = None
+    snap = ""
+    for _ in range(6):  # up to ~30s on cold open; ~0s once hydrated
+        snap = cfx_snapshot()
+        health = check_session_health(snap)
+        if health:
+            return health
+        search_ref = find_ref(snap, r"combobox.*檢查") or find_ref(
+            snap, r"combobox.*Inspect"
+        )
+        if search_ref:
+            break
+        time.sleep(5)
     if not search_ref:
         log("  WARN: Cannot find search box in snapshot")
         return "search_box_not_found"
@@ -194,9 +205,15 @@ def submit_urls_to_gsc_cfx(urls: list[str]) -> dict[str, str]:
         log(f"ERROR: camoufox unexpected: {e}")
     finally:
         try:
-            _cfx("close", timeout=10)
-        except Exception:
-            pass
+            close_r = _cfx("close", timeout=10)
+            if close_r.returncode != 0:
+                msg = f"camoufox close failed (rc={close_r.returncode}): {close_r.stderr[:200]}"
+                log(f"ERROR: {msg}")
+                bark_notify("Browser Cleanup Alert", msg)
+        except Exception as e:
+            msg = f"camoufox close raised: {e}"
+            log(f"ERROR: {msg}")
+            bark_notify("Browser Cleanup Alert", msg)
 
     return results
 
@@ -335,23 +352,41 @@ def pw_open(profile_dir: str, session_id: str, url: str) -> str:
 
 
 def pw_close(session_id: str, profile_dir: str) -> None:
-    """Close browser and cleanup profile."""
+    """Close browser and cleanup profile.
+
+    Fail-loud: surface close failures so leaked headless Chrome instances
+    are detected (see 19h-leak incident, /tmp/pw-5201e67a3964, 2026-05-17).
+    """
     try:
-        subprocess.run(
+        close_r = subprocess.run(
             ["playwright-cli", f"-s={session_id}", "close"],
             capture_output=True,
+            text=True,
             timeout=10,
         )
-    except Exception:
-        pass
+        if close_r.returncode != 0:
+            msg = f"playwright close failed (rc={close_r.returncode}): {close_r.stderr[:200]}"
+            log(f"ERROR: {msg}")
+            bark_notify("Browser Cleanup Alert", msg)
+    except Exception as e:
+        msg = f"playwright close raised: {e}"
+        log(f"ERROR: {msg}")
+        bark_notify("Browser Cleanup Alert", msg)
     try:
-        subprocess.run(
+        cleanup_r = subprocess.run(
             [str(PYTHON), str(PW_SESSION), "cleanup", profile_dir],
             capture_output=True,
+            text=True,
             timeout=10,
         )
-    except Exception:
-        pass
+        if cleanup_r.returncode != 0:
+            msg = f"pw_session cleanup failed (rc={cleanup_r.returncode}): {cleanup_r.stderr[:200]}"
+            log(f"ERROR: {msg}")
+            bark_notify("Browser Cleanup Alert", msg)
+    except Exception as e:
+        msg = f"pw_session cleanup raised: {e}"
+        log(f"ERROR: {msg}")
+        bark_notify("Browser Cleanup Alert", msg)
 
 
 def find_ref(snapshot: str, pattern: str) -> str | None:
