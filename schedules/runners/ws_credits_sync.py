@@ -2,32 +2,31 @@
 """
 ws_credits_sync.py — Unified LLM credits & quota sync
 
-[DEPRECATED 2026-04-20] Orphaned draft — never registered with launchd/Cronicle.
-Superseded by Rust implementations:
-  - agent-metrics provider-balance-sync   (replaces Section 1)
-  - agent-metrics dashscope-quota-sync    (replaces Section 2)
-  - Section 3 (Google Developer credits) was experimental and not ported;
-    if needed, add a new Rust collector under
-    stations/agent-metrics/src/collectors/.
+Dual-track scope (2026-05-18 revised — supersedes the 2026-04-20 deprecation
+note, which was incorrect: this runner is actively scheduled by Cronicle via
+a credits-sync wrapper and was relied on by the 2026-05-17 DashScope OAuth
+refresh work):
 
-This file may be deleted after 2026-05-20 if no consumer surfaces.
+  - Python (this file): Sections 2 & 3 — DashScope (Qwen) free quota with
+    Google OAuth auto-refresh, plus Google Developer Program credits.
+  - Rust (stations/agent-metrics/src/collectors/): Section 1 equivalent —
+    provider-balance-sync (MiniMax, Moonshot, Z.AI, DeepSeek, xAI).
+    Section 1 here is retained but the Rust collector is the source of truth.
 
-──── Original docstring ────────────────────────────────────────
 Runs three sections in sequence, sharing a single camoufox browser session
 across all provider scrapes:
 
   1. Provider balance sync (MiniMax, Moonshot, Z.AI, DeepSeek, xAI)
   2. DashScope (Qwen) free quota sync
-  3. Google Developer Program credits (NEW — scrapes billing console)
-
-Replaces:
-  - ws_provider_balance_sync.py (subprocess → inline)
-  - ws_dashscope_quota_sync.py  (subprocess → inline)
+  3. Google Developer Program credits (scrapes billing console)
 
 Session strategy:
   - Single persistent camoufox session "credits-sync" shared by all 3 sections
   - Persistent Firefox profile holds all cookies (no domain isolation needed)
   - Session opened in Section 1, closed in main() finally block
+
+Scrape fallback chain (DashScope, intentionally retained):
+  camoufox-cli → playwright-cli → osascript+Safari
 
 Redis key patterns:
   - agent-metrics:provider:{name}:balance   (Section 1)
