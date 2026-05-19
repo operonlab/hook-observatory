@@ -762,6 +762,7 @@ async def qa_question(
             quote=c.get("quote"),
             source_role=c.get("source_role"),
             doc_weight=c.get("doc_weight"),
+            role_warning=c.get("role_warning"),
         )
         for c in raw_citations
     ]

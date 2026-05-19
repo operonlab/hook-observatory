@@ -290,6 +290,9 @@ class CitationRef(BaseModel):
     source_role: str | None = None
     doc_weight: float | None = None
     # Authority-aware retrieval metadata surfaced for client inspection (Phase 1).
+    role_warning: bool | None = None
+    # P2.3: true when this citation is a fallback chunk used as the primary
+    # answer source while contradicting authoritative chunks were also present.
 
 
 class QAResponse(BaseModel):

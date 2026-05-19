@@ -36,6 +36,14 @@ verbatim in the evidence chunks. If the evidence says "up to 1024 characters", \
 do NOT rephrase as "5000 words" or any other number.
 3. When quoting a specific fact (number, limit, name), use the EXACT wording from \
 the evidence chunk.
+4. SOURCE-ROLE PRIORITY. Each evidence chunk may carry a source_role label. \
+When chunks disagree, prefer the higher-authority role: \
+invariant > open-decision > decision-rationale > reference > fallback > raw-note. \
+A `fallback` chunk describes a "what if PoC fails" plan, NOT the current decision. \
+If your answer's main claim relies on a `fallback` chunk while `invariant` or \
+`open-decision` chunks contradict it, you MUST: (a) lead with the invariant/decision \
+content, (b) describe the fallback content as a contingency, and (c) cap your \
+self-rated confidence at 0.5.
 
 EXAMPLES of correct behavior:
 
@@ -337,6 +345,27 @@ class CitedAnswerOp:
 
             # Build structured citations from the indices the LLM referenced
             citations: list[dict[str, Any]] = []
+            cited_chunks = [
+                chunks[i - 1] for i in citations_used if 1 <= i <= len(chunks)
+            ]
+            # P2.3: fallback-as-primary detection. If the LLM's first
+            # citation is a fallback chunk AND any authoritative role was
+            # available among all evidence (cited or not), flag it.
+            authoritative_seen = any(
+                c.get("source_role") in ("invariant", "open-decision")
+                for c in chunks
+            )
+            first_is_fallback = bool(
+                cited_chunks and cited_chunks[0].get("source_role") == "fallback"
+            )
+            role_warning = first_is_fallback and authoritative_seen
+            if role_warning and confidence > 0.5:
+                logger.info(
+                    "CitedAnswerOp: capping confidence at 0.5 (fallback-as-primary "
+                    "with authoritative evidence available)"
+                )
+                confidence = 0.5
+
             for idx in citations_used:
                 if 1 <= idx <= len(chunks):
                     chunk = chunks[idx - 1]
@@ -350,6 +379,7 @@ class CitedAnswerOp:
                             "quote": chunk.get("content", "")[:200],
                             "source_role": chunk.get("source_role"),
                             "doc_weight": chunk.get("doc_weight"),
+                            "role_warning": role_warning,
                         }
                     )
 
