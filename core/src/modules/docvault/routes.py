@@ -168,6 +168,16 @@ async def upload_document(
     title = body.title or file_metadata.get("title", path.stem)
     source_type = body.source_type or file_metadata.get("source_type", "markdown")
 
+    # P3.1: parse YAML frontmatter for authority lifecycle keys.
+    # Merged into metadata under "frontmatter" subkey so it survives
+    # alongside parser-supplied file_metadata.
+    from .ops.frontmatter import parse_frontmatter
+
+    fm = parse_frontmatter(raw_content)
+    base_metadata = dict(body.metadata or file_metadata or {})
+    if fm:
+        base_metadata["frontmatter"] = fm
+
     # 4. Create Document record
     doc_create = DocumentCreate(
         title=title,
@@ -175,7 +185,7 @@ async def upload_document(
         source_uri=body.source_uri or str(path),
         content_hash=content_hash,
         tags=body.tags,
-        metadata=body.metadata or file_metadata,
+        metadata=base_metadata,
     )
     doc_instance = await document_service.create(db, space_id, doc_create)
     await db.flush()
