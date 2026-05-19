@@ -290,6 +290,8 @@ def _build_fallback_answer(
                 "section": section,
                 "page": page,
                 "quote": chunk.get("content", "")[:200],
+                "source_role": chunk.get("source_role"),
+                "doc_weight": chunk.get("doc_weight"),
             }
         )
 
@@ -346,6 +348,8 @@ class CitedAnswerOp:
                             "section": chunk.get("section_path", ""),
                             "page": chunk.get("page_range", ""),
                             "quote": chunk.get("content", "")[:200],
+                            "source_role": chunk.get("source_role"),
+                            "doc_weight": chunk.get("doc_weight"),
                         }
                     )
 

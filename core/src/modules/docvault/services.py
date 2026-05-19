@@ -208,6 +208,8 @@ class ChunkService(
             heading=instance.heading,
             token_count=instance.token_count,
             chunk_type=instance.chunk_type,
+            source_role=instance.source_role,
+            doc_weight=instance.doc_weight,
         )
 
     async def list_by_version(

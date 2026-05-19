@@ -103,6 +103,8 @@ class HybridRRFSearchOp:
                         "chunk_index": r.metadata.get("chunk_index"),
                         "version_id": r.metadata.get("version_id", ""),
                         "created_at": r.metadata.get("created_at", ""),
+                        "source_role": r.metadata.get("source_role"),
+                        "doc_weight": r.metadata.get("doc_weight"),
                     }
                 )
 
