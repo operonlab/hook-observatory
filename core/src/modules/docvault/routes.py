@@ -760,6 +760,8 @@ async def qa_question(
             section=c.get("section"),
             page=c.get("page"),
             quote=c.get("quote"),
+            source_role=c.get("source_role"),
+            doc_weight=c.get("doc_weight"),
         )
         for c in raw_citations
     ]
