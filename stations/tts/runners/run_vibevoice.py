@@ -46,6 +46,11 @@ def main():
                 sys.exit(1)
             speakers = [{"speaker_id": voice_id, "ref_wav": ref_wav, "ref_text": ref_text}]
 
+        # VibeVoice processor 要求 podcast script 格式 "Speaker N: <text>"
+        # 若 input text 沒含 "Speaker" prefix，自動 wrap 為單 speaker 模式
+        if "Speaker" not in text:
+            text = f"Speaker 0: {text}"
+
         import numpy as np
         from vibevoice.modular.modeling_vibevoice_inference import (
             VibeVoiceForConditionalGenerationInference,
@@ -57,6 +62,10 @@ def main():
             model_path, torch_dtype="bfloat16", device_map="cuda"
         )
 
+        # VibeVoice generate() 內部需要 tokenizer (bos_token_id)；attach 上去
+        # (round 2 diag: model 自己沒帶 tokenizer，需從 processor 傳)
+        model.set_ddpm_inference_steps(num_steps=10)
+
         # 多 speaker 場景：text 內含 "[Speaker X]" 標籤，VibeVoice 自己 parse
         voice_samples = [s["ref_wav"] for s in speakers]
         inputs = proc(
@@ -67,7 +76,11 @@ def main():
             return_attention_mask=True,
         ).to("cuda")
 
-        out = model.generate(**inputs, max_new_tokens=None)
+        out = model.generate(
+            **inputs,
+            max_new_tokens=None,
+            tokenizer=proc.tokenizer,
+        )
         # VibeVoice 1.5B 輸出結構在不同 fork / version 命名不同；嘗試多種屬性
         # ⚠ win-gpu 部署時若 AttributeError，需對齊實際 fork 的 API（reviewer Bug #3）
         audio_obj = None
@@ -77,9 +90,7 @@ def main():
                 audio_obj = cand[0] if isinstance(cand, (list, tuple)) else cand
                 break
         if audio_obj is None:
-            write_err(
-                f"VibeVoice output has no known audio attr; got {dir(out)[:10]}"
-            )
+            write_err(f"VibeVoice output has no known audio attr; got {dir(out)[:10]}")
             sys.exit(1)
         audio = audio_obj.cpu().numpy().astype(np.float32).squeeze()
         sr = 24000  # VibeVoice 1.5B 預設

@@ -25,7 +25,9 @@ def main():
         text = inp["text"]
         lang = inp["lang"]
         voice_id = inp.get("voice_id", "master")
-        model_path = inp.get("model_path", "/home/joneshong/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base")
+        model_path = inp.get(
+            "model_path", "/home/joneshong/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base"
+        )
 
         if lang == "zh":
             text = to_simplified(text)
@@ -42,9 +44,21 @@ def main():
 
         import soundfile as sf
         import torch  # noqa: F401
+        import transformers
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        # Qwen3-TTS-0.6B-Base 的 generate_voice_clone API
+        # 2026-05-19 預檢：transformers 4.57.x 尚未 ship qwen3_tts model_type
+        # → AutoConfig 直接 KeyError。Fail-loud 給清楚 message。
+        from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
+
+        if "qwen3_tts" not in CONFIG_MAPPING_NAMES:
+            write_err(
+                f"transformers {transformers.__version__} 尚未支援 qwen3_tts model_type；"
+                "需 4.58+ 或 from-source。Workaround: "
+                "venv pip install -U git+https://github.com/huggingface/transformers.git"
+            )
+            sys.exit(1)
+
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         model = AutoModelForCausalLM.from_pretrained(
             model_path, trust_remote_code=True, torch_dtype="bfloat16", device_map="cuda"

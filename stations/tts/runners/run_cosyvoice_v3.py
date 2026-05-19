@@ -16,13 +16,24 @@ from __future__ import annotations
 import os
 import sys
 
-# 必須在 import cosyvoice 前加 sys.path（讓 third_party/Matcha-TTS 可被找到）
+# 必須在 import cosyvoice 前加 sys.path：
+#   - "." = CWD (= cosyvoice repo root, 內含 cosyvoice/ namespace package)
+#   - "third_party/Matcha-TTS" = matcha-tts 依賴
+# WSL subprocess 下 cwd 不一定預設在 sys.path，必須顯式加。
+sys.path.insert(0, ".")
 sys.path.insert(0, "third_party/Matcha-TTS")
 
 # Runner 自己住在 stations/tts/runners/，加 parent 進 path 取 _common
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _common import read_input, resolve_voice_ref, to_katakana_spaced, to_simplified, write_err, write_ok
+from _common import (
+    read_input,
+    resolve_voice_ref,
+    to_katakana_spaced,
+    to_simplified,
+    write_err,
+    write_ok,
+)
 
 
 def main():
@@ -52,7 +63,7 @@ def main():
         if ref_transcript:
             ref_transcript = to_simplified(ref_transcript)
 
-        import torch  # noqa: F401
+        import torch
         from cosyvoice.cli.cosyvoice import CosyVoice3
 
         cosy = CosyVoice3(model_dir, load_trt=False, load_vllm=use_vllm, fp16=fp16)
@@ -60,9 +71,13 @@ def main():
         # 中文同語走 zero_shot（音色最穩）；英日走 cross_lingual
         if lang == "zh" and ref_transcript:
             prompt_text_with_sys = sys_prompt + ref_transcript
-            gen = cosy.inference_zero_shot(text, prompt_text_with_sys, ref_wav, stream=False, speed=speed)
+            gen = cosy.inference_zero_shot(
+                text, prompt_text_with_sys, ref_wav, stream=False, speed=speed
+            )
         else:
-            gen = cosy.inference_cross_lingual(sys_prompt + text, ref_wav, stream=False, speed=speed)
+            gen = cosy.inference_cross_lingual(
+                sys_prompt + text, ref_wav, stream=False, speed=speed
+            )
 
         chunks = []
         for j in gen:

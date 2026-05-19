@@ -33,12 +33,14 @@ class CosyVoiceV3NativeEngine(SubprocessEngine):
 
     def _build_input(self, req):
         d = super()._build_input(req)
-        d.update({
-            "model_dir": "pretrained_models/Fun-CosyVoice3-0.5B",
-            "use_vllm": False,
-            "fp16": False,
-            "sys_prompt": SYS_PROMPT,
-        })
+        d.update(
+            {
+                "model_dir": "pretrained_models/Fun-CosyVoice3-0.5B",
+                "use_vllm": False,
+                "fp16": False,
+                "sys_prompt": SYS_PROMPT,
+            }
+        )
         return d
 
     def capability(self) -> EngineCapability:
@@ -53,8 +55,11 @@ class CosyVoiceV3NativeEngine(SubprocessEngine):
             ref_duration_range=(3, 30),
             needs_ref_text=False,
             supported_outputs=[
-                OutputMode.FILE, OutputMode.BUFFER, OutputMode.NUMPY,
-                OutputMode.TENSOR, OutputMode.BASE64,
+                OutputMode.FILE,
+                OutputMode.BUFFER,
+                OutputMode.NUMPY,
+                OutputMode.TENSOR,
+                OutputMode.BASE64,
             ],
             sample_rate=24000,
             notes="Windows native CUDA. Baseline RTF 1.76, 中文需 OpenCC t2s + 日文 pykakasi",
@@ -71,17 +76,22 @@ class CosyVoiceV3VllmEngine(SubprocessEngine):
     WSL_DISTRO = "Ubuntu"
     PYTHON = "/home/joneshong/.venvs/cosyvoice_vllm/bin/python3"
     RUNNER = "run_cosyvoice_v3.py"  # 共用同 runner，differ in_use_vllm
-    CWD = "/home/joneshong/workshop/lab/cosyvoice"
+    # WSL home 內沒獨立 cosyvoice repo；走 9P /mnt/c 共享 Windows 端那份
+    CWD = "/mnt/c/Users/User/workshop/lab/cosyvoice"
     TIMEOUT_SEC = 300
 
     def _build_input(self, req):
         d = super()._build_input(req)
-        d.update({
-            "model_dir": "pretrained_models/Fun-CosyVoice3-0.5B",
-            "use_vllm": True,
-            "fp16": False,
-            "sys_prompt": SYS_PROMPT,
-        })
+        d.update(
+            {
+                "model_dir": "pretrained_models/Fun-CosyVoice3-0.5B",
+                # 2026-05-19：vllm 0.x 與 transformers 4.57.3 衝突 (aimv2 重複 register)
+                # 暫時降級 native PyTorch 推理路徑；待 vllm 升版（或 transformers 降版）再開
+                "use_vllm": False,
+                "fp16": False,
+                "sys_prompt": SYS_PROMPT,
+            }
+        )
         return d
 
     def capability(self) -> EngineCapability:
@@ -96,8 +106,12 @@ class CosyVoiceV3VllmEngine(SubprocessEngine):
             ref_duration_range=(3, 30),
             needs_ref_text=False,
             supported_outputs=[
-                OutputMode.FILE, OutputMode.BUFFER, OutputMode.NUMPY,
-                OutputMode.TENSOR, OutputMode.BASE64, OutputMode.STREAM,
+                OutputMode.FILE,
+                OutputMode.BUFFER,
+                OutputMode.NUMPY,
+                OutputMode.TENSOR,
+                OutputMode.BASE64,
+                OutputMode.STREAM,
             ],
             sample_rate=24000,
             notes="WSL2 + vllm. RTF 0.43，預設 en 首選。GPU wedge 已設 TDR.",
