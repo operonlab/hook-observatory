@@ -169,8 +169,12 @@ class DocvaultClient(BaseClient):
         domain: str = "default",
         top_k: int = 20,
         session_id: str | None = None,
+        tags: list[str] | None = None,
     ) -> dict:
-        """Ask a question against document corpus. POST /qa"""
+        """Ask a question against document corpus. POST /qa
+
+        tags filters chunks whose payload tags contain ALL of the given values.
+        """
         body: dict = {
             "question": question,
             "mode": mode,
@@ -179,6 +183,8 @@ class DocvaultClient(BaseClient):
         }
         if session_id:
             body["session_id"] = session_id
+        if tags:
+            body["tags"] = tags
         return self._post("/qa", body)
 
     def qa_feedback(self, qa_log_id: str, feedback: str) -> dict:

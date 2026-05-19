@@ -110,11 +110,17 @@ def cmd_search(client: DocvaultClient, args: argparse.Namespace) -> None:
 
 def cmd_qa(client: DocvaultClient, args: argparse.Namespace) -> None:
     """Ask a question against the document corpus."""
+    tags_list = (
+        [t.strip() for t in args.tags.split(",") if t.strip()]
+        if getattr(args, "tags", None)
+        else None
+    )
     data = client.qa(
         args.question,
         mode=args.mode,
         domain=args.domain,
         top_k=args.top_k,
+        tags=tags_list,
     )
     if json_out(data, args):
         return
@@ -445,6 +451,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--domain", default="default", help="Domain profile (default: default)")
     p.add_argument("--top-k", type=int, default=20, help="Evidence chunks (default: 20)")
+    p.add_argument(
+        "--tags",
+        default=None,
+        help="Comma-separated tags. Chunks must carry ALL listed tags. "
+        "Use 'core-blueprint' to scope to core docs only.",
+    )
 
     # list
     p = sub.add_parser("list", parents=[common, paginated], help="List documents")
