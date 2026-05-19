@@ -99,6 +99,8 @@ class DocumentChunkCreate(BaseModel):
     heading: str | None = None
     token_count: int = 0
     chunk_type: str = Field(default="text", pattern="^(text|table|list|code)$")
+    source_role: str | None = None
+    doc_weight: float | None = None
 
 
 class DocumentChunkResponse(SpaceScopedResponse):
@@ -111,6 +113,8 @@ class DocumentChunkResponse(SpaceScopedResponse):
     heading: str | None = None
     token_count: int = 0
     chunk_type: str = "text"
+    source_role: str | None = None
+    doc_weight: float | None = None
 
 
 # ======================== DocumentRelation ========================
@@ -283,6 +287,9 @@ class CitationRef(BaseModel):
     confidence_type: Literal["extracted", "inferred", "ambiguous"] | None = None
     # 三段式證據強度（graphify-cannibalized 2026-05-11）
     # extracted=quote 直接出現原文 | inferred=LLM 推斷 | ambiguous=多源模糊
+    source_role: str | None = None
+    doc_weight: float | None = None
+    # Authority-aware retrieval metadata surfaced for client inspection (Phase 1).
 
 
 class QAResponse(BaseModel):

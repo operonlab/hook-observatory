@@ -149,6 +149,9 @@ class DocumentChunk(SpaceScopedModel):
     chunk_type: Mapped[str] = mapped_column(
         String(32), server_default=text("'text'")
     )  # text | table | list | code
+    # Authority-aware retrieval metadata (Phase 1, refs migration u1v2w3x4y5z6).
+    source_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    doc_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Relationships
     version: Mapped["DocumentVersion"] = relationship("DocumentVersion", back_populates="chunks")
