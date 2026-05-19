@@ -25,10 +25,10 @@ class VibeVoiceEngine(SubprocessEngine):
     CWD = "/home/joneshong/VibeVoice"
     TIMEOUT_SEC = 600  # podcast 場景單次合成較長
 
-    def _build_input(self, req, npy_out):
+    def _build_input(self, req):
         if req.lang == "ja":
             raise ValueError("vibevoice 不支援日語，請走 indextts2_jmica 或 qwen3tts_gpu")
-        d = super()._build_input(req, npy_out)
+        d = super()._build_input(req)
         d.update({
             "model_path": "/home/joneshong/vibevoice_models/VibeVoice-1.5B",
             # speakers: 多 speaker 場景透過 engine_specific["speakers"] 傳遞

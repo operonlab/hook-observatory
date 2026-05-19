@@ -15,29 +15,31 @@
 
 *indextts2_jmica routing 已強制只接 ja，傳其他語言會 ValueError
 
-## 選擇決策樹
+## 選擇決策樹（2026-05-19 少爺指令：中英日全 indextts-2 為主）
 
 ```
 任務需要多 speaker？ ────────── yes ─→ vibevoice
                                 no
                                  ↓
+任務是韓語？ ──────────────────── yes ─→ qwen3tts_gpu (唯一)
+                                no
+                                 ↓
 任務是日語？ ──────────────────── yes ─→ indextts2_jmica
                                 no
                                  ↓
-任務是韓語？ ──────────────────── yes ─→ qwen3tts_gpu
+顯式 --prefer-fast 極速批次？    yes ─→ cosyvoice_v3_vllm (RTF 0.43)
                                 no
                                  ↓
-追求最快（批次 / podcast 預錄）？ yes ─→ cosyvoice_v3_vllm (RTF 0.43)
+中文 or 英文（任一）？ ───────── yes ─→ **indextts2_base**（少爺預設）
                                 no
                                  ↓
-中文音色品質優先？ ──────────── yes ─→ indextts2_base
-                                no
-                                 ↓
-英語音色品質優先？ ──────────── yes ─→ cosyvoice_v3_vllm
-                                no
-                                 ↓
-WSL2 不可用（GPU wedge 復發）？  yes ─→ cosyvoice_v3_native (baseline，慢但穩)
+indextts2_base 不可用？ ──────── yes ─→ fallback chain:
+                                       cosyvoice_v3_vllm
+                                       → cosyvoice_v3_native
+                                       → qwen3tts_gpu
 ```
+
+**為何 indextts2_base 升為中英共同首選**：少爺 2026-05-19 確認 — 同一音色 master 在 zh/en 共享同一個 engine，音色一致性 > vllm 的 RTF 速度優勢；vllm 改為 batch 模式的逃生口。
 
 ## VRAM 預算
 

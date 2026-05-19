@@ -132,6 +132,10 @@ class TTSEngineV2(ABC):
                 f"supported: {[o.value for o in cap.supported_outputs]}"
             )
 
+        # Validate early — before spawning subprocess (reviewer-flagged guard)
+        if req.output == OutputMode.FILE and not req.output_path:
+            raise ValueError(f"{cap.name}: FILE mode requires output_path")
+
         t0 = time.time()
         audio, sr = self._synthesize_raw(req)
         elapsed = time.time() - t0
@@ -152,8 +156,6 @@ class TTSEngineV2(ABC):
 
         if req.output == OutputMode.FILE:
             import soundfile as sf
-            if not req.output_path:
-                raise ValueError("FILE mode requires output_path")
             sf.write(req.output_path, audio, sr)
             result.audio_path = req.output_path
         elif req.output == OutputMode.BUFFER:

@@ -15,18 +15,19 @@ import yaml
 _MANIFEST_PATH = Path(__file__).parent / "manifest.yaml"
 
 DEFAULTS = {
-    "zh": "indextts2_base",
-    "en": "cosyvoice_v3_vllm",
-    "ja": "indextts2_jmica",
+    "zh": "indextts2_base",     # 少爺偏好（中文勝 CosyVoice）
+    "en": "indextts2_base",     # 少爺指令 2026-05-19：中英都用 indextts-2
+    "ja": "indextts2_jmica",    # 少爺偏好（日語 fine-tune）
     "multi_speaker": "vibevoice",
-    "fast_batch": "cosyvoice_v3_vllm",
+    "fast_batch": "cosyvoice_v3_vllm",  # 仍保留快速批次入口
 }
 
+# CosyVoice / Qwen3TTS 全部降為 fallback，前面只有 indextts2 + vibevoice
 FALLBACK_CHAIN = {
-    "zh": ["indextts2_base", "qwen3tts_gpu", "cosyvoice_v3_vllm", "cosyvoice_v3_native"],
-    "en": ["cosyvoice_v3_vllm", "indextts2_base", "qwen3tts_gpu", "cosyvoice_v3_native"],
-    "ja": ["indextts2_jmica", "qwen3tts_gpu", "cosyvoice_v3_vllm", "cosyvoice_v3_native"],
-    "ko": ["qwen3tts_gpu"],
+    "zh": ["indextts2_base", "cosyvoice_v3_vllm", "cosyvoice_v3_native", "qwen3tts_gpu"],
+    "en": ["indextts2_base", "cosyvoice_v3_vllm", "cosyvoice_v3_native", "qwen3tts_gpu"],
+    "ja": ["indextts2_jmica", "cosyvoice_v3_vllm", "cosyvoice_v3_native", "qwen3tts_gpu"],
+    "ko": ["qwen3tts_gpu"],  # 唯一支援 ko
 }
 
 

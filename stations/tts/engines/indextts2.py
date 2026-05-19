@@ -24,8 +24,8 @@ class IndexTTS2BaseEngine(SubprocessEngine):
     CWD = "C:/Users/User/workshop/lab/indextts"
     TIMEOUT_SEC = 300
 
-    def _build_input(self, req, npy_out):
-        d = super()._build_input(req, npy_out)
+    def _build_input(self, req):
+        d = super()._build_input(req)
         d.update({
             "checkpoint_dir": "checkpoints",
             "config_yaml": "checkpoints/config_abs.yaml",
@@ -61,14 +61,14 @@ class IndexTTS2JmicaEngine(SubprocessEngine):
     CWD = "C:/Users/User/workshop/lab/indextts"
     TIMEOUT_SEC = 300
 
-    def _build_input(self, req, npy_out):
+    def _build_input(self, req):
         # 守門：jmica 只接 ja，其他語言應由 routing 攔下（fail-loud）
         if req.lang not in ("ja", "auto"):
             raise ValueError(
                 f"indextts2_jmica 只接 ja，收到 lang={req.lang}；"
                 "中英請走 indextts2_base（routing.py 已預設）"
             )
-        d = super()._build_input(req, npy_out)
+        d = super()._build_input(req)
         d.update({
             "checkpoint_dir": "checkpoints_ja",
             "config_yaml": "checkpoints_ja/config_abs.yaml",

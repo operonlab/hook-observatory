@@ -31,8 +31,8 @@ class CosyVoiceV3NativeEngine(SubprocessEngine):
     EXTRA_ENV = {"PYTHONPATH": "C:/Users/User/workshop/lab/cosyvoice/third_party/Matcha-TTS"}
     TIMEOUT_SEC = 300
 
-    def _build_input(self, req, npy_out):
-        d = super()._build_input(req, npy_out)
+    def _build_input(self, req):
+        d = super()._build_input(req)
         d.update({
             "model_dir": "pretrained_models/Fun-CosyVoice3-0.5B",
             "use_vllm": False,
@@ -74,8 +74,8 @@ class CosyVoiceV3VllmEngine(SubprocessEngine):
     CWD = "/home/joneshong/workshop/lab/cosyvoice"
     TIMEOUT_SEC = 300
 
-    def _build_input(self, req, npy_out):
-        d = super()._build_input(req, npy_out)
+    def _build_input(self, req):
+        d = super()._build_input(req)
         d.update({
             "model_dir": "pretrained_models/Fun-CosyVoice3-0.5B",
             "use_vllm": True,

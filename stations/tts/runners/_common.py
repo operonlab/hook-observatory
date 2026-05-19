@@ -16,8 +16,25 @@ def read_input() -> dict[str, Any]:
     return json.loads(raw)
 
 
-def write_ok(npy_path: str, sample_rate: int) -> None:
-    print(json.dumps({"ok": True, "npy_path": npy_path, "sample_rate": sample_rate}))
+def write_ok(audio, sample_rate: int) -> None:
+    """Encode raw float32 audio as base64 on stdout (last line).
+
+    跨 OS 安全（WSL ↔ Windows ↔ Mac 不需共用 fs path）。
+    """
+    import base64
+    import numpy as np
+
+    arr = np.asarray(audio, dtype=np.float32).squeeze()
+    if arr.ndim > 1:
+        arr = arr.mean(axis=tuple(range(1, arr.ndim)))  # mono mix
+    b64 = base64.b64encode(arr.tobytes()).decode()
+    print(json.dumps({
+        "ok": True,
+        "audio_b64": b64,
+        "sample_rate": int(sample_rate),
+        "dtype": "float32",
+        "shape": [int(arr.shape[0])],
+    }))
 
 
 def write_err(msg: str) -> None:

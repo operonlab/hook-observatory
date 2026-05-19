@@ -26,7 +26,6 @@ def main():
         lang = inp["lang"]
         voice_id = inp.get("voice_id", "master")
         model_path = inp.get("model_path", "/home/joneshong/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base")
-        npy_out = inp["npy_out"]
 
         if lang == "zh":
             text = to_simplified(text)
@@ -39,7 +38,8 @@ def main():
             write_err(f"qwen3tts zero-shot 需 ref_text，但 {voice_id}.transcript 為空")
             sys.exit(1)
 
-        import numpy as np
+        import tempfile
+
         import soundfile as sf
         import torch  # noqa: F401
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -50,26 +50,26 @@ def main():
             model_path, trust_remote_code=True, torch_dtype="bfloat16", device_map="cuda"
         )
 
-        # 視 model 內部實作而定；以下對應 Qwen3-TTS-0.6B-Base 公開的 API：
-        audio_out_path = npy_out + ".tmp.wav"
-        model.generate_voice_clone(
-            text=text,
-            ref_wav=ref_wav,
-            ref_text=ref_text,
-            output_path=audio_out_path,
-            tokenizer=tokenizer,
-        )
-
-        audio, sr = sf.read(audio_out_path, dtype="float32")
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)
-        np.save(npy_out, audio.astype(np.float32))
+        # ⚠ generate_voice_clone 是假設 API（reviewer Bug #3），win-gpu 部署時對齊實際 model card
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+            audio_out_path = tf.name
         try:
-            os.unlink(audio_out_path)
-        except Exception:
-            pass
-
-        write_ok(npy_out, int(sr))
+            model.generate_voice_clone(
+                text=text,
+                ref_wav=ref_wav,
+                ref_text=ref_text,
+                output_path=audio_out_path,
+                tokenizer=tokenizer,
+            )
+            audio, sr = sf.read(audio_out_path, dtype="float32")
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            write_ok(audio, int(sr))
+        finally:
+            try:
+                os.unlink(audio_out_path)
+            except Exception:
+                pass
     except Exception as e:
         write_err(str(e))
         sys.exit(2)

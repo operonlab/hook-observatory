@@ -25,8 +25,8 @@ class Qwen3TTSGpuEngine(SubprocessEngine):
     CWD = "/home/joneshong"
     TIMEOUT_SEC = 180
 
-    def _build_input(self, req, npy_out):
-        d = super()._build_input(req, npy_out)
+    def _build_input(self, req):
+        d = super()._build_input(req)
         d.update({
             "model_path": "/home/joneshong/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base",
         })

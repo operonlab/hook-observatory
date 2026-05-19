@@ -31,7 +31,6 @@ def main():
         voice_id = inp.get("voice_id", "master")
         model_path = inp.get("model_path", "/home/joneshong/vibevoice_models/VibeVoice-1.5B")
         speakers = inp.get("speakers", [])
-        npy_out = inp["npy_out"]
 
         if lang == "ja":
             write_err("vibevoice 不支援日語")
@@ -69,12 +68,22 @@ def main():
         ).to("cuda")
 
         out = model.generate(**inputs, max_new_tokens=None)
-        # VibeVoice 輸出 raw audio tensor on .speech_outputs
-        audio = out.speech_outputs[0].cpu().numpy().astype(np.float32).squeeze()
+        # VibeVoice 1.5B 輸出結構在不同 fork / version 命名不同；嘗試多種屬性
+        # ⚠ win-gpu 部署時若 AttributeError，需對齊實際 fork 的 API（reviewer Bug #3）
+        audio_obj = None
+        for attr in ("speech_outputs", "audio", "audios", "outputs", "speech"):
+            if hasattr(out, attr):
+                cand = getattr(out, attr)
+                audio_obj = cand[0] if isinstance(cand, (list, tuple)) else cand
+                break
+        if audio_obj is None:
+            write_err(
+                f"VibeVoice output has no known audio attr; got {dir(out)[:10]}"
+            )
+            sys.exit(1)
+        audio = audio_obj.cpu().numpy().astype(np.float32).squeeze()
         sr = 24000  # VibeVoice 1.5B 預設
-
-        np.save(npy_out, audio)
-        write_ok(npy_out, sr)
+        write_ok(audio, sr)
     except Exception as e:
         write_err(str(e))
         sys.exit(2)

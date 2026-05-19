@@ -49,26 +49,36 @@ class LifecycleManager:
         return (time.monotonic() - last) > self.idle_timeout
 
     def sweep(self) -> list[str]:
-        """Unload all idle engines. Returns names unloaded."""
+        """Unload all idle engines. Returns names unloaded.
+
+        Holds the lock for the duration to prevent double-unload race
+        between concurrent sweep calls (reviewer Bug #4).
+        """
         unloaded = []
         with self._lock:
-            candidates = [n for n, _ in self._engines.items() if self.is_idle(n)]
-        for name in candidates:
-            eng = self._engines.get(name)
-            if eng is None:
-                continue
-            unload = getattr(eng, "unload", None)
-            if not callable(unload):
-                continue
-            try:
-                unload()
-                unloaded.append(name)
-                logger.info("Idle unload: %s", name)
-            except Exception as e:
-                logger.warning("Unload failed for %s: %s", name, e)
-            with self._lock:
+            candidates = [n for n in list(self._engines.keys()) if self._is_idle_unlocked(n)]
+            for name in candidates:
+                eng = self._engines.get(name)
+                if eng is None:
+                    continue
+                unload = getattr(eng, "unload", None)
+                if not callable(unload):
+                    continue
+                try:
+                    unload()
+                    unloaded.append(name)
+                    logger.info("Idle unload: %s", name)
+                except Exception as e:
+                    logger.warning("Unload failed for %s: %s", name, e)
                 self._last_used.pop(name, None)
         return unloaded
+
+    def _is_idle_unlocked(self, name: str) -> bool:
+        """is_idle() variant assumed called under self._lock."""
+        last = self._last_used.get(name)
+        if last is None:
+            return False
+        return (time.monotonic() - last) > self.idle_timeout
 
     def force_unload_all_except(self, keep: str | None = None) -> list[str]:
         """Swap mode — unload everything except `keep`. Used before loading a heavy engine."""

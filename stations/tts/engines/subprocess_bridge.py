@@ -5,10 +5,11 @@ Station 主 venv 保持輕量（fastapi+httpx+pyyaml），每個 engine 的沉�
 （torch/cosyvoice/indextts/vllm/transformers/vibevoice）住在各自 venv，
 透過 subprocess 呼叫對應的 runner script。
 
-Runner I/O 規約：
+Runner I/O 規約（base64 走 stdout，跨 OS 安全）：
 - stdin: JSON{text, lang, voice_id, ref_wav, ref_text, speed, engine_specific}
-- stdout: JSON{ok, sample_rate, npy_path, duration_s, error}
-- runner 把 audio 寫到 tmp npy（不走 stdout，避免大 payload 卡管道）
+- stdout 最後一行: JSON{ok: bool, sample_rate: int, audio_b64: str (raw float32),
+                       shape: [N], dtype: "float32", error: str?}
+- 不使用檔案系統共享（解決 WSL/Windows path mismatch — reviewer Bug #1+#2 修補）
 """
 
 from __future__ import annotations
@@ -17,7 +18,6 @@ import json
 import logging
 import os
 import subprocess
-import tempfile
 import time
 from abc import abstractmethod
 from pathlib import Path
@@ -72,63 +72,68 @@ class SubprocessEngine(TTSEngineV2):
 
     # ---- I/O contract ----
 
-    def _build_input(self, req: SynthesizeRequest, npy_out: str) -> dict:
+    def _build_input(self, req: SynthesizeRequest) -> dict:
         return {
             "text": req.text,
             "lang": req.lang,
             "voice_id": req.voice_id,
             "speed": req.speed,
             "engine_specific": req.engine_specific,
-            "npy_out": npy_out,
         }
 
     def _synthesize_raw(self, req: SynthesizeRequest) -> tuple[np.ndarray, int]:
-        with tempfile.TemporaryDirectory(prefix="tts_") as tmpdir:
-            npy_out = os.path.join(tmpdir, "out.npy")
-            input_blob = self._build_input(req, npy_out)
-            cmd = self._build_cmd()
+        import base64
 
-            env = os.environ.copy()
-            env.update(self.EXTRA_ENV)
-            logger.info("Calling %s runner (lang=%s, len=%d)", self.capability().name, req.lang, len(req.text))
-            t0 = time.time()
-            try:
-                proc = subprocess.run(
-                    cmd,
-                    input=json.dumps(input_blob).encode(),
-                    capture_output=True,
-                    cwd=self.CWD if not self.WSL_DISTRO else None,
-                    env=env,
-                    timeout=self.TIMEOUT_SEC,
-                )
-            except subprocess.TimeoutExpired:
-                raise RuntimeError(f"{self.capability().name} runner timeout > {self.TIMEOUT_SEC}s")
-            elapsed = time.time() - t0
+        input_blob = self._build_input(req)
+        cmd = self._build_cmd()
 
-            stderr_tail = proc.stderr.decode(errors="replace")[-1000:] if proc.stderr else ""
-            if proc.returncode != 0:
-                raise RuntimeError(
-                    f"{self.capability().name} runner exit={proc.returncode}\n{stderr_tail}"
-                )
-            try:
-                meta = json.loads(proc.stdout.decode(errors="replace").strip().splitlines()[-1])
-            except Exception as e:
-                raise RuntimeError(
-                    f"{self.capability().name} runner bad JSON output: {e}\nstderr={stderr_tail}"
-                )
-            if not meta.get("ok"):
-                raise RuntimeError(f"{self.capability().name} failed: {meta.get('error', 'unknown')}")
-
-            audio = np.load(meta["npy_path"])
-            sr = int(meta["sample_rate"])
-            logger.info(
-                "%s done in %.2fs (audio=%.2fs, RTF=%.2f)",
-                self.capability().name,
-                elapsed,
-                len(audio) / sr,
-                elapsed / max(len(audio) / sr, 1e-3),
+        env = os.environ.copy()
+        env.update(self.EXTRA_ENV)
+        logger.info(
+            "Calling %s runner (lang=%s, len=%d)", self.capability().name, req.lang, len(req.text)
+        )
+        t0 = time.time()
+        try:
+            proc = subprocess.run(
+                cmd,
+                input=json.dumps(input_blob).encode(),
+                capture_output=True,
+                cwd=self.CWD if not self.WSL_DISTRO else None,
+                env=env,
+                timeout=self.TIMEOUT_SEC,
             )
-            return audio.astype(np.float32), sr
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"{self.capability().name} runner timeout > {self.TIMEOUT_SEC}s")
+        elapsed = time.time() - t0
+
+        stderr_tail = proc.stderr.decode(errors="replace")[-1000:] if proc.stderr else ""
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"{self.capability().name} runner exit={proc.returncode}\n{stderr_tail}"
+            )
+        try:
+            meta = json.loads(proc.stdout.decode(errors="replace").strip().splitlines()[-1])
+        except Exception as e:
+            raise RuntimeError(
+                f"{self.capability().name} runner bad JSON output: {e}\nstderr={stderr_tail}"
+            )
+        if not meta.get("ok"):
+            raise RuntimeError(f"{self.capability().name} failed: {meta.get('error', 'unknown')}")
+
+        audio_b64 = meta.get("audio_b64")
+        if not audio_b64:
+            raise RuntimeError(f"{self.capability().name} runner returned no audio_b64")
+        raw = base64.b64decode(audio_b64)
+        audio = np.frombuffer(raw, dtype=np.float32).copy()
+        sr = int(meta["sample_rate"])
+        logger.info(
+            "%s done in %.2fs (audio=%.2fs, RTF=%.2f)",
+            self.capability().name,
+            elapsed,
+            len(audio) / sr,
+            elapsed / max(len(audio) / sr, 1e-3),
+        )
+        return audio, sr
 
     # ---- Lifecycle hooks (subprocess mode: noop) ----
 

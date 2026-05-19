@@ -31,13 +31,16 @@ workshop-tts list-engines      # 列 capability + RTF + VRAM
 
 ## 語言 → engine 自動路由（預設）
 
-| 語言 | 預設引擎 | RTF | 備註 |
-|---|---|---|---|
-| zh 中文 | `indextts2_base` | 0.7 | 少爺偏好中英音色；繁體輸入會自動 OpenCC t2s |
-| en 英文 | `cosyvoice_v3_vllm` | 0.43 | 最快，WSL2 vllm |
-| ja 日文 | `indextts2_jmica` | 0.7 | 少爺偏好日語音色，fine-tune 後中英 catastrophic forgetting |
-| ko 韓文 | `qwen3tts_gpu` | 1.19 | 唯一支援韓文 |
-| 多 speaker | `vibevoice` | 1.2 | podcast / dialogue 場景 |
+少爺主路線：中英日全走 indextts-2 系列；CosyVoice / Qwen3TTS 是 fallback；多人對話走 VibeVoice。
+
+| 語言 | 預設引擎 | RTF | Fallback chain | 備註 |
+|---|---|---|---|---|
+| zh 中文 | `indextts2_base` | 0.7 | cosyvoice_v3_vllm → cosyvoice_v3_native → qwen3tts_gpu | 少爺偏好；繁體自動 OpenCC t2s |
+| en 英文 | `indextts2_base` | 0.7 | cosyvoice_v3_vllm → cosyvoice_v3_native → qwen3tts_gpu | 少爺偏好（同音色一致性勝 RTF）|
+| ja 日文 | `indextts2_jmica` | 0.7 | cosyvoice_v3_vllm → cosyvoice_v3_native → qwen3tts_gpu | jmica fine-tune，中英 catastrophic forgetting |
+| ko 韓文 | `qwen3tts_gpu` | 1.19 | （只有 Qwen3 支援）| 唯一選項 |
+| 多 speaker | `vibevoice` | 1.2 | （唯一）| podcast / dialogue |
+| `--prefer-fast` | `cosyvoice_v3_vllm` | 0.43 | — | 顯式要求極速批次時走 vllm |
 
 ## 主要用法（CLI-first）
 

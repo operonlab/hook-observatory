@@ -108,9 +108,10 @@ engines:
       注意：與舊版 mlx engine (qwen3-tts) 區分，這是 win-gpu HF 版。
 
 # Default routing — see routing.py for fallback chains
+# 2026-05-19 少爺指令：中英都用 indextts2_base，cosyvoice/qwen 降為 fallback
 defaults:
   zh: indextts2_base
-  en: cosyvoice_v3_vllm
+  en: indextts2_base       # 改：原本 cosyvoice_v3_vllm
   ja: indextts2_jmica
   multi_speaker: vibevoice
-  fast_batch: cosyvoice_v3_vllm
+  fast_batch: cosyvoice_v3_vllm  # 顯式要求極速批次時才走

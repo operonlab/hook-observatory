@@ -95,6 +95,15 @@ TTS_LIVE=1 .venv/Scripts/python.exe -m pytest tests/smoke_test_v2.py -v
 
 `scripts/workshop_services.py` 中 tts station 已存在，不必改。
 
+**sentinel binary rebuild**（本 PR 加了 `"tts"` 進 `WORKSHOP_SERVICES`）：
+
+```bash
+cd ~/workshop/stations/sentinel && cargo build --release
+launchctl kickstart -k gui/$UID/workshop.sentinel
+```
+
+驗證：`curl http://127.0.0.1:4101/checks | jq '.[] | select(.name=="tts")'` 應該見到 tts 在 sentinel 視野內，且 remediation 在 service-down 時會 auto-restart。
+
 ### 7. ~/.local/bin/workshop-tts symlink
 
 ```bash

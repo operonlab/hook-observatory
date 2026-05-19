@@ -28,7 +28,6 @@ def main():
         ckpt_dir = inp.get("checkpoint_dir", "checkpoints")
         config_yaml = inp.get("config_yaml", "checkpoints/config_abs.yaml")
         device = inp.get("device", "cuda")
-        npy_out = inp["npy_out"]
 
         if lang == "zh":
             text = to_simplified(text)
@@ -40,31 +39,28 @@ def main():
 
         # IndexTTS2 Python API（避免 CLI subprocess 多一層 overhead）
         # 對應 lab/indextts repo 的 IndexTTS2 類別
-        import numpy as np
+        import tempfile
+
         import soundfile as sf
 
         from indextts.infer_v2 import IndexTTS2  # 對應 IndexTTS-2 repo 結構
 
         tts = IndexTTS2(model_dir=ckpt_dir, cfg_path=config_yaml, device=device)
 
-        # output 走 tmp wav 再 load 成 numpy
-        tmp_wav = npy_out + ".tmp.wav"
-        tts.infer(
-            spk_audio_prompt=ref_wav,
-            text=text,
-            output_path=tmp_wav,
-        )
-
-        audio, sr = sf.read(tmp_wav, dtype="float32")
-        if audio.ndim > 1:
-            audio = audio.mean(axis=1)  # to mono
-        np.save(npy_out, audio.astype(np.float32))
+        # IndexTTS infer() 寫到 disk → 我們讀 numpy 後走 stdout base64 回 host
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+            tmp_wav = tf.name
         try:
-            os.unlink(tmp_wav)
-        except Exception:
-            pass
-
-        write_ok(npy_out, int(sr))
+            tts.infer(spk_audio_prompt=ref_wav, text=text, output_path=tmp_wav)
+            audio, sr = sf.read(tmp_wav, dtype="float32")
+            if audio.ndim > 1:
+                audio = audio.mean(axis=1)
+            write_ok(audio, int(sr))
+        finally:
+            try:
+                os.unlink(tmp_wav)
+            except Exception:
+                pass
     except Exception as e:
         write_err(str(e))
         sys.exit(2)

@@ -36,7 +36,6 @@ def main():
         model_dir = inp.get("model_dir", "pretrained_models/Fun-CosyVoice3-0.5B")
         use_vllm = bool(inp.get("use_vllm", False))
         fp16 = bool(inp.get("fp16", False))
-        npy_out = inp["npy_out"]
 
         # 語言預處理
         if lang == "zh":
@@ -53,7 +52,6 @@ def main():
         if ref_transcript:
             ref_transcript = to_simplified(ref_transcript)
 
-        import numpy as np
         import torch  # noqa: F401
         from cosyvoice.cli.cosyvoice import CosyVoice3
 
@@ -75,8 +73,7 @@ def main():
 
         wav_tensor = torch.cat(chunks, dim=-1)
         audio = wav_tensor.squeeze().cpu().numpy().astype("float32")
-        np.save(npy_out, audio)
-        write_ok(npy_out, int(cosy.sample_rate))
+        write_ok(audio, int(cosy.sample_rate))
     except Exception as e:
         write_err(str(e))
         sys.exit(2)

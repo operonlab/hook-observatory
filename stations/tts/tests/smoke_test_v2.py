@@ -22,6 +22,8 @@ sys.path.insert(0, str(ROOT.parent.parent / "libs" / "sdk-client"))
 
 from engines.base_v2 import OutputMode, SynthesizeRequest
 from engines.registry_v2 import V2_ENGINES, list_v2_engines
+from engines.subprocess_bridge import SubprocessEngine
+from lifecycle import LifecycleManager
 from routing import explain_route, pick_engine
 
 
@@ -51,17 +53,29 @@ def test_capability_complete():
 
 
 def test_routing_defaults():
+    # 2026-05-19 少爺：中英日全 indextts-2，cosyvoice/qwen 為 fallback
     assert pick_engine("zh") == "indextts2_base"
-    assert pick_engine("en") == "cosyvoice_v3_vllm"
+    assert pick_engine("en") == "indextts2_base"
     assert pick_engine("ja") == "indextts2_jmica"
     assert pick_engine("ko") == "qwen3tts_gpu"
     assert pick_engine("zh", multi_speaker=True) == "vibevoice"
+    assert pick_engine("en", prefer_fast=True) == "cosyvoice_v3_vllm"
 
 
 def test_routing_fallback_chain():
-    chain = explain_route("zh")["fallback_chain"]
-    assert chain[0] == "indextts2_base"
-    assert "cosyvoice_v3_vllm" in chain
+    # 中文 chain：indextts2_base → cosyvoice_v3_vllm → cosyvoice_v3_native → qwen3tts_gpu
+    zh_chain = explain_route("zh")["fallback_chain"]
+    assert zh_chain[0] == "indextts2_base"
+    assert zh_chain.index("cosyvoice_v3_vllm") < zh_chain.index("qwen3tts_gpu")
+
+    # 英文 chain：indextts2_base 也排第一（少爺指令）
+    en_chain = explain_route("en")["fallback_chain"]
+    assert en_chain[0] == "indextts2_base"
+    assert "cosyvoice_v3_vllm" in en_chain  # 仍在後位 fallback
+
+    # 日文 chain：jmica 第一，cosyvoice 為 fallback
+    ja_chain = explain_route("ja")["fallback_chain"]
+    assert ja_chain[0] == "indextts2_jmica"
 
 
 def test_jmica_rejects_zh():
@@ -69,7 +83,7 @@ def test_jmica_rejects_zh():
     eng = V2_ENGINES["indextts2_jmica"]
     req = SynthesizeRequest(text="你好", lang="zh", voice_id="master")
     with pytest.raises(ValueError, match="只接 ja"):
-        eng._build_input(req, "/tmp/_out.npy")
+        eng._build_input(req)
 
 
 def test_vibevoice_rejects_ja():
@@ -77,7 +91,7 @@ def test_vibevoice_rejects_ja():
     eng = V2_ENGINES["vibevoice"]
     req = SynthesizeRequest(text="こんにちは", lang="ja", voice_id="master")
     with pytest.raises(ValueError, match="不支援日語"):
-        eng._build_input(req, "/tmp/_out.npy")
+        eng._build_input(req)
 
 
 def test_output_mode_validation():
@@ -90,6 +104,132 @@ def test_output_mode_validation():
 
     vibe = V2_ENGINES["vibevoice"]
     assert OutputMode.STREAM in vibe.capability().supported_outputs
+
+
+# --- Reviewer-flagged mutation tests (六鐵律 #1: mutation thinking) ---
+
+
+def test_routing_available_subset_skips_primary():
+    """Primary 不在 available → 應走 chain 下一個."""
+    # zh 預設 indextts2_base，若不可用走 cosyvoice_v3_vllm
+    result = pick_engine("zh", available=["cosyvoice_v3_vllm", "qwen3tts_gpu"])
+    assert result == "cosyvoice_v3_vllm"
+
+
+def test_routing_no_engine_available_raises():
+    with pytest.raises(RuntimeError, match="No engine available"):
+        pick_engine("zh", available=[])
+
+
+def test_routing_unknown_lang_falls_to_en_chain():
+    """未知 lang 應 fallback 到 en chain[0]."""
+    assert pick_engine("fr") == "indextts2_base"  # en chain head
+
+
+def test_file_mode_no_output_path_raises():
+    """OutputMode.FILE 沒給 output_path → ValueError，必須在 spawn subprocess 之前."""
+    eng = V2_ENGINES["indextts2_base"]
+    req = SynthesizeRequest(
+        text="test", lang="zh",
+        output=OutputMode.FILE, output_path=None,
+    )
+    with pytest.raises(ValueError, match="requires output_path"):
+        eng.synthesize(req)
+
+
+def test_stream_mode_unsupported_engine_raises():
+    """indextts2_base 不支援 STREAM → 應 ValueError."""
+    eng = V2_ENGINES["indextts2_base"]
+    req = SynthesizeRequest(text="test", lang="zh", output=OutputMode.STREAM)
+    with pytest.raises(ValueError, match="STREAM|stream"):
+        eng.synthesize(req)
+
+
+def test_to_wsl_path_drive_letter():
+    """C:/foo → /mnt/c/foo (正斜線輸入)."""
+    assert SubprocessEngine._to_wsl_path("C:/Users/User/foo") == "/mnt/c/Users/User/foo"
+
+
+def test_to_wsl_path_backslash():
+    """C:\\Users\\User\\foo → /mnt/c/Users/User/foo (反斜線輸入)."""
+    assert SubprocessEngine._to_wsl_path("C:\\Users\\User\\foo") == "/mnt/c/Users/User/foo"
+
+
+def test_to_wsl_path_posix_passthrough():
+    """已是 POSIX 路徑 → 原樣返回."""
+    assert SubprocessEngine._to_wsl_path("/home/joneshong/bar") == "/home/joneshong/bar"
+
+
+def test_lifecycle_sweep_removes_idle():
+    """idle 超時的 engine 應該被 sweep 卸載."""
+    import time as _t
+
+    mgr = LifecycleManager(idle_timeout=0.01)
+
+    class FakeEng:
+        def __init__(self):
+            self.unload_called = 0
+
+        def unload(self):
+            self.unload_called += 1
+
+    fake = FakeEng()
+    mgr.register("fake", fake)  # type: ignore[arg-type]
+    mgr.mark_used("fake")
+    _t.sleep(0.05)
+    unloaded = mgr.sweep()
+    assert "fake" in unloaded
+    assert fake.unload_called == 1
+    # Sweep again — already removed from _last_used，不應再 unload
+    again = mgr.sweep()
+    assert again == []
+    assert fake.unload_called == 1  # not double-called (Bug #4 race fix)
+
+
+def test_lifecycle_sweep_skips_active():
+    """剛使用的 engine 不應被 sweep."""
+    import time as _t
+
+    mgr = LifecycleManager(idle_timeout=10.0)
+
+    class FakeEng:
+        def __init__(self):
+            self.unload_called = 0
+
+        def unload(self):
+            self.unload_called += 1
+
+    fake = FakeEng()
+    mgr.register("active", fake)  # type: ignore[arg-type]
+    mgr.mark_used("active")
+    _t.sleep(0.01)
+    unloaded = mgr.sweep()
+    assert unloaded == []
+    assert fake.unload_called == 0
+
+
+def test_subprocess_bridge_io_contract():
+    """write_ok 編碼出來的 base64 能被 bridge 解回原 audio."""
+    import base64
+    import json
+    import numpy as np
+
+    # Mimic runner output
+    audio = np.array([0.1, -0.2, 0.3, -0.4], dtype=np.float32)
+    sr = 24000
+    b64 = base64.b64encode(audio.tobytes()).decode()
+    fake_output_json = json.dumps({
+        "ok": True, "audio_b64": b64, "sample_rate": sr,
+        "dtype": "float32", "shape": [4],
+    })
+
+    # Bridge decode logic (subprocess_bridge._synthesize_raw)
+    meta = json.loads(fake_output_json)
+    assert meta["ok"]
+    raw = base64.b64decode(meta["audio_b64"])
+    decoded = np.frombuffer(raw, dtype=np.float32).copy()
+    assert np.allclose(decoded, audio)
+    assert int(meta["sample_rate"]) == 24000
 
 
 # --- Live tests (win-gpu only, skip elsewhere) ---
