@@ -23,11 +23,13 @@ DEFAULT_OVERLAP = 100
 # --- authority metadata helpers ---
 
 _ROLE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"^##\s+Invariant\b|^###\s+I\d+[a-z]*\b", re.IGNORECASE), "invariant"),
-    (re.compile(r"^##\s+Open\s+Decision\b", re.IGNORECASE), "open-decision"),
-    (re.compile(r"^###?\s+Fallback\b|^###?\s+Pass\b", re.IGNORECASE), "fallback"),
-    (re.compile(r"^##\s+為什麼"), "decision-rationale"),
-    (re.compile(r"^##\s+相關段落|^##\s+依據"), "reference"),
+    # Headings can arrive with markdown prefix ("## Invariant") or stripped
+    # by _extract_sections ("Invariant"). Both forms must match.
+    (re.compile(r"^(?:#+\s+)?Invariant\b|^(?:#+\s+)?I\d+[a-z]*\b", re.IGNORECASE), "invariant"),
+    (re.compile(r"^(?:#+\s+)?Open\s+Decision\b", re.IGNORECASE), "open-decision"),
+    (re.compile(r"^(?:#+\s+)?Fallback\b|^(?:#+\s+)?Pass\b", re.IGNORECASE), "fallback"),
+    (re.compile(r"^(?:#+\s+)?為什麼"), "decision-rationale"),
+    (re.compile(r"^(?:#+\s+)?相關段落|^(?:#+\s+)?依據"), "reference"),
 ]
 
 _DOC_WEIGHT_RULES: list[tuple[re.Pattern[str], float]] = [
