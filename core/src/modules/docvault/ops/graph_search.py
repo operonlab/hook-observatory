@@ -234,6 +234,8 @@ class GraphSearchOp:
             DocumentChunk.heading,
             DocumentChunk.chunk_index,
             DocumentChunk.version_id,
+            DocumentChunk.source_role,
+            DocumentChunk.doc_weight,
         ).where(
             DocumentChunk.id.in_(chunk_ids),
             DocumentChunk.deleted_at == None,  # noqa: E711
@@ -253,6 +255,8 @@ class GraphSearchOp:
                     "heading": row.heading or "",
                     "chunk_index": row.chunk_index,
                     "version_id": row.version_id,
+                    "source_role": row.source_role,
+                    "doc_weight": row.doc_weight,
                     "source": "graph",
                 }
             )

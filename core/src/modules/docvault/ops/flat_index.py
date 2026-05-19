@@ -52,6 +52,8 @@ def _chunks_to_index_docs(
                     "page_range": chunk.get("page_range", ""),
                     "heading": chunk.get("heading", ""),
                     "token_count": chunk.get("token_count", 0),
+                    "source_role": chunk.get("source_role"),
+                    "doc_weight": chunk.get("doc_weight"),
                 },
             )
         )

@@ -191,8 +191,15 @@ async def upload_document(
     ver_instance = await version_service.create(db, space_id, ver_create)
     await db.flush()
 
-    # 6. Chunk content
-    chunks = contextual_chunk(raw_content, doc_title=title, extract_headings=True)
+    # 6. Chunk content. source_path lets contextual_chunk infer doc_weight
+    # from path tier (00-*.md → 1.0, scattered → 0.4, etc.). file path is
+    # the most authoritative signal we have here (Phase 1 P1.5).
+    chunks = contextual_chunk(
+        raw_content,
+        doc_title=title,
+        extract_headings=True,
+        source_path=str(path),
+    )
 
     # 7. Create Chunk records in DB + collect DB IDs for Qdrant indexing
     chunk_db_ids: list[str] = []
@@ -206,6 +213,8 @@ async def upload_document(
             heading=chunk_data.get("heading"),
             page_range=chunk_data.get("page_range"),
             token_count=chunk_data.get("token_count", 0),
+            source_role=chunk_data.get("source_role"),
+            doc_weight=chunk_data.get("doc_weight"),
         )
         chunk_instance = await chunk_service.create(db, space_id, chunk_create)
         await db.flush()
