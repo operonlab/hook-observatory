@@ -1,0 +1,116 @@
+# TTS Engine Manifest — declarative source of truth for v2 engines.
+# 對應 INTEGRATION-PLAN.md §2「目標架構」，6 個 v3 系列 engine 在 win-gpu。
+# 舊版 Mac engine（edge/apple/elevenlabs/...）走 engines/__init__.py 不在此列。
+
+version: 2
+
+engines:
+  cosyvoice_v3_native:
+    family: cosyvoice
+    variant: v3-native
+    languages: [zh, en, ja]
+    multi_speaker: false
+    rtf_typical: 1.76
+    vram_mb: 5000
+    needs_wsl: false
+    needs_gpu: true
+    needs_ref_text: false  # CosyVoice3 zero_shot 可不給 ref_text
+    ref_duration_range: [3, 30]
+    supported_outputs: [file, buffer, numpy, tensor, base64]
+    sample_rate: 24000
+    notes: |
+      Windows native (anaconda env=cosyvoice). 適合穩定 baseline。
+      中文輸入經 OpenCC t2s，日文需 pykakasi 轉片假名 + 空格切詞。
+
+  cosyvoice_v3_vllm:
+    family: cosyvoice
+    variant: v3-vllm
+    languages: [zh, en, ja]
+    multi_speaker: false
+    rtf_typical: 0.43
+    vram_mb: 7500
+    needs_wsl: true
+    needs_gpu: true
+    needs_ref_text: false
+    ref_duration_range: [3, 30]
+    supported_outputs: [file, buffer, numpy, tensor, base64, stream]
+    sample_rate: 24000
+    notes: |
+      WSL2 + vllm (env=cosyvoice_vllm)。RTF 0.43 最快，預設 en 引擎。
+      TDR Registry 已設防 GPU wedge，仍建議 healthcheck 後再 keep alive。
+
+  indextts2_base:
+    family: indextts2
+    variant: base
+    languages: [zh, en]
+    multi_speaker: false
+    rtf_typical: 0.7
+    vram_mb: 7000
+    needs_wsl: false
+    needs_gpu: true
+    needs_ref_text: false
+    ref_duration_range: [5, 15]
+    supported_outputs: [file, buffer, numpy, tensor, base64]
+    sample_rate: 22050
+    notes: |
+      Windows native (uv venv at lab/indextts/.venv)。少爺偏好中英音色。
+      checkpoints/ 是原版 ckpt。繁體輸入經 OpenCC t2s。
+
+  indextts2_jmica:
+    family: indextts2
+    variant: jmica-ja
+    languages: [ja]   # 注意：fine-tune 後中英 catastrophic forgetting
+    multi_speaker: false
+    rtf_typical: 0.7
+    vram_mb: 7000
+    needs_wsl: false
+    needs_gpu: true
+    needs_ref_text: false
+    ref_duration_range: [5, 15]
+    supported_outputs: [file, buffer, numpy, tensor, base64]
+    sample_rate: 22050
+    notes: |
+      Windows native，checkpoints_ja/ swap。只接 ja 請求，zh/en 路由給 base。
+      少爺偏好的日語音色。
+
+  vibevoice:
+    family: vibevoice
+    variant: "1.5b"
+    languages: [zh, en]   # 不支援 ja
+    multi_speaker: true   # 唯一 niche
+    rtf_typical: 1.2
+    vram_mb: 8000
+    needs_wsl: true
+    needs_gpu: true
+    needs_ref_text: true
+    ref_duration_range: [3, 30]
+    supported_outputs: [file, buffer, numpy, tensor, base64, stream]
+    sample_rate: 24000
+    notes: |
+      WSL2 community fork at ~/VibeVoice。多 speaker / podcast 場景。
+      賣點是 streaming，可邊聽邊講。
+
+  qwen3tts_gpu:
+    family: qwen3tts
+    variant: 0.6b-base-gpu
+    languages: [zh, en, ja, ko]
+    multi_speaker: false
+    rtf_typical: 1.19
+    vram_mb: 3000
+    needs_wsl: true
+    needs_gpu: true
+    needs_ref_text: true  # zero-shot 需 ref_text
+    ref_duration_range: [3, 15]
+    supported_outputs: [file, buffer, numpy, tensor, base64]
+    sample_rate: 24000
+    notes: |
+      WSL2 HuggingFace model (env=cosyvoice_vllm 共用)。中英日韓 native。
+      注意：與舊版 mlx engine (qwen3-tts) 區分，這是 win-gpu HF 版。
+
+# Default routing — see routing.py for fallback chains
+defaults:
+  zh: indextts2_base
+  en: cosyvoice_v3_vllm
+  ja: indextts2_jmica
+  multi_speaker: vibevoice
+  fast_batch: cosyvoice_v3_vllm
