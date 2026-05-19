@@ -532,7 +532,7 @@ async def qa_question(
     from .schemas import CitationRef
 
     # ── 0. QA cache lookup (pre-generated + FAQ) ──
-    cache_ctx: dict = {"query": body.question, "space_id": space_id}
+    cache_ctx: dict = {"query": body.question, "space_id": space_id, "db": db}
     try:
         await QACacheLookupOp()(cache_ctx)
     except Exception:
@@ -762,6 +762,7 @@ async def qa_question(
             quote=c.get("quote"),
             source_role=c.get("source_role"),
             doc_weight=c.get("doc_weight"),
+            role_warning=c.get("role_warning"),
         )
         for c in raw_citations
     ]

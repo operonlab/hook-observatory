@@ -42,6 +42,26 @@ class QAEmbedOp:
         try:
             from src.shared.qdrant_search import index_documents_batch
 
+            # P2.2: snapshot doc.updated_at so lookup can invalidate when
+            # the source document changes underneath the cache entry.
+            doc_updated_at_iso: str | None = None
+            try:
+                from sqlalchemy import select  # noqa: PLC0415
+
+                from src.modules.docvault.models import Document  # noqa: PLC0415
+
+                db = ctx.get("db")
+                if db is not None and document_id:
+                    row = (
+                        await db.execute(
+                            select(Document.updated_at).where(Document.id == document_id)
+                        )
+                    ).first()
+                    if row and row[0]:
+                        doc_updated_at_iso = row[0].isoformat()
+            except Exception:
+                logger.debug("QAEmbedOp: doc_updated_at snapshot failed for %s", document_id)
+
             docs = []
             for i, pair in enumerate(validated_pairs):
                 question = pair.question if hasattr(pair, "question") else str(pair)
@@ -56,6 +76,7 @@ class QAEmbedOp:
                             "answer_preview": answer[:200],
                             "question_type": getattr(pair, "question_type", "factual"),
                             "full_answer": answer,
+                            "doc_updated_at": doc_updated_at_iso,
                         },
                     }
                 )

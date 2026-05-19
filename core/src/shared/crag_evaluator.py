@@ -80,6 +80,54 @@ DEFAULT_CORRECT_AVG = 0.6
 DEFAULT_CORRECT_MAX = 0.7
 DEFAULT_AMBIGUOUS_AVG = 0.3
 
+# Phase 2 — role-aware verdict (docvault). Roles that should not coexist as
+# primary evidence: an invariant says "this is the rule", a fallback says
+# "if PoC fails, do this instead". Top-K containing both, sourced from
+# different documents, is a conflict the LLM should not silently average.
+_AUTHORITATIVE_ROLES = {"invariant", "open-decision"}
+_DEROGATIVE_ROLES = {"fallback"}
+
+
+def _role_aware_check(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Detect role-level conflicts in top-5. Returns metadata dict.
+
+    Only activates when at least one item carries `source_role`; otherwise
+    returns an empty dict so modules without authority metadata (e.g.
+    memvault) keep their existing verdict.
+    """
+    top5 = items[:5]
+    has_role = any(it.get("source_role") for it in top5)
+    if not has_role:
+        return {}
+
+    breakdown: dict[str, int] = {}
+    role_to_docs: dict[str, set[str]] = {}
+    for it in top5:
+        role = it.get("source_role")
+        if not role:
+            continue
+        breakdown[role] = breakdown.get(role, 0) + 1
+        role_to_docs.setdefault(role, set()).add(it.get("document_id", ""))
+
+    auth_present = _AUTHORITATIVE_ROLES & breakdown.keys()
+    derog_present = _DEROGATIVE_ROLES & breakdown.keys()
+    conflicting_roles: list[str] = []
+    forced_ambiguous = False
+    if auth_present and derog_present:
+        # Same doc with both roles is normal (one doc has multiple sections).
+        # Cross-doc co-occurrence is the conflict signal.
+        auth_docs = {d for r in auth_present for d in role_to_docs.get(r, set())}
+        derog_docs = {d for r in derog_present for d in role_to_docs.get(r, set())}
+        if auth_docs - derog_docs and derog_docs - auth_docs:
+            forced_ambiguous = True
+            conflicting_roles = sorted(auth_present | derog_present)
+
+    return {
+        "evidence_breakdown": breakdown,
+        "conflicting_roles": conflicting_roles,
+        "forced_ambiguous": forced_ambiguous,
+    }
+
 
 def evaluate_evaluable(
     query: str,
@@ -130,19 +178,28 @@ def evaluate_evaluable(
     else:
         verdict = CRAGVerdict.INCORRECT
 
+    # Role-aware override (P2): authoritative+derogative co-occurrence forces
+    # AMBIGUOUS so downstream can switch to chain-of-evidence answering.
+    role_meta = _role_aware_check(items)
+    if role_meta.get("forced_ambiguous") and verdict == CRAGVerdict.CORRECT:
+        verdict = CRAGVerdict.AMBIGUOUS
+
     confidence = round(min(adjusted_avg, 1.0), 3)
+
+    metadata: dict[str, Any] = {
+        "result_count": len(items),
+        "avg_score": round(avg_score, 3),
+        "max_score": round(max_score, 3),
+        "layer_count": layer_count,
+        "coverage_bonus": round(coverage_bonus, 3),
+        "density_bonus": round(density_bonus, 3),
+    }
+    metadata.update(role_meta)
 
     return CRAGEvaluation(
         verdict=verdict,
         confidence_score=confidence,
-        metadata={
-            "result_count": len(items),
-            "avg_score": round(avg_score, 3),
-            "max_score": round(max_score, 3),
-            "layer_count": layer_count,
-            "coverage_bonus": round(coverage_bonus, 3),
-            "density_bonus": round(density_bonus, 3),
-        },
+        metadata=metadata,
     )
 
 
