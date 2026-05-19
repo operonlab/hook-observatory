@@ -190,10 +190,13 @@ class WorkerTrioDaemon(WorkerDaemon):
             raise ValueError("vibevoice 不支援日語")
         if lang == "zh":
             text = self.to_simplified(text)
-        # VibeVoice processor 要求 podcast script 格式 "Speaker N: <text>"，
-        # 單 speaker 也必須 wrap（否則 processor raise "No valid speaker lines"）。
+        # VibeVoice processor 要求 podcast script 格式 "Speaker N: <text>"。
+        # ⚠ Speaker 編號從 1 開始（官方 processor._convert_text_to_script 預設
+        # current_speaker=1，podcast_zh.txt demo 也是 Speaker 1/2）。
+        # 寫成 "Speaker 0:" 屬 OOD（training 沒見過 0），模型 fallback → 中文聽起來
+        # 像外國人腔調。
         if "Speaker" not in text:
-            text = f"Speaker 0: {text}"
+            text = f"Speaker 1: {text}"
 
         import numpy as np
 
