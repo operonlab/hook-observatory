@@ -107,11 +107,17 @@ class WorkerQwen3Daemon(WorkerDaemon):
         import numpy as np
 
         language = self._resolve_language(lang)
+        # 官方 hard_defaults: repetition_penalty=1.05, max_new_tokens=2048, do_sample=True.
+        # 偶發 repetition collapse（觀察到日文長句 + 連續 -masu 結尾 → "歩歩歩歩" hallucination,
+        # 同 input 重跑時好時壞）。raise repetition_penalty 至 1.2 抑制 token 重複；
+        # max_new_tokens=1024（仍可容納 ~85s 音檔）擋 over-generation。
         audios, sr = self.model.generate_voice_clone(
             text=text,
             language=language,
             ref_audio=ref_wav,
             ref_text=ref_text,
+            repetition_penalty=1.2,
+            max_new_tokens=1024,
         )
         if isinstance(audios, list):
             audio = np.concatenate([np.asarray(a, dtype=np.float32).squeeze() for a in audios])
