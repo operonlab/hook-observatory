@@ -168,6 +168,16 @@ async def upload_document(
     title = body.title or file_metadata.get("title", path.stem)
     source_type = body.source_type or file_metadata.get("source_type", "markdown")
 
+    # P3.1: parse YAML frontmatter for authority lifecycle keys.
+    # Merged into metadata under "frontmatter" subkey so it survives
+    # alongside parser-supplied file_metadata.
+    from .ops.frontmatter import parse_frontmatter
+
+    fm = parse_frontmatter(raw_content)
+    base_metadata = dict(body.metadata or file_metadata or {})
+    if fm:
+        base_metadata["frontmatter"] = fm
+
     # 4. Create Document record
     doc_create = DocumentCreate(
         title=title,
@@ -175,7 +185,7 @@ async def upload_document(
         source_uri=body.source_uri or str(path),
         content_hash=content_hash,
         tags=body.tags,
-        metadata=body.metadata or file_metadata,
+        metadata=base_metadata,
     )
     doc_instance = await document_service.create(db, space_id, doc_create)
     await db.flush()
@@ -724,6 +734,45 @@ async def qa_question(
             parent = parent_content_map.get(c.get("id", ""))
             if parent:
                 c["content"] = parent
+
+    # ── 3.5. P3.2 doc-status filter (drop superseded, demote draft) ──
+    # Pull doc-level frontmatter.status for every cited document and apply:
+    #   superseded → drop chunk entirely
+    #   draft      → multiply score by 0.6
+    # No-op for docs without frontmatter (back-compat). Runs BEFORE rerank
+    # so rerank operates on the filtered set.
+    chunks_for_filter: list[dict[str, Any]] = ctx.get("evidence_chunks", []) or []
+    doc_ids_for_status = {c.get("document_id") for c in chunks_for_filter if c.get("document_id")}
+    if doc_ids_for_status:
+        try:
+            from sqlalchemy import select as _select
+
+            from .models import Document as _Document
+
+            rows = (
+                await db.execute(
+                    _select(_Document.id, _Document.metadata_).where(
+                        _Document.id.in_(doc_ids_for_status),
+                        _Document.deleted_at == None,  # noqa: E711
+                    )
+                )
+            ).all()
+            status_by_doc: dict[str, str | None] = {}
+            for r in rows:
+                meta = r.metadata_ or {}
+                fm = meta.get("frontmatter") or {}
+                status_by_doc[r.id] = fm.get("status")
+            kept: list[dict[str, Any]] = []
+            for c in chunks_for_filter:
+                s = status_by_doc.get(c.get("document_id", ""))
+                if s == "superseded":
+                    continue
+                if s == "draft":
+                    c["score"] = c.get("score", 0.0) * 0.6
+                kept.append(c)
+            ctx["evidence_chunks"] = kept
+        except Exception:
+            logger.debug("doc-status filter failed; using unfiltered chunks", exc_info=True)
 
     # ── 4. Cross-encoder rerank ──
     try:
