@@ -18,6 +18,21 @@ from src.shared.rerank_utils import rerank_generic
 logger = logging.getLogger(__name__)
 
 
+# Authority-aware reweighting factors (Phase 1 of authority-aware retrieval).
+# Applied after cross-encoder rerank: final = ce_blended * doc_weight * role_factor.
+# Tuned via regression set; see plans/agent-docvault-smart-search-buzzing-bird.md.
+ROLE_FACTOR: dict[str, float] = {
+    "invariant": 1.10,
+    "open-decision": 1.05,
+    "decision-rationale": 1.00,
+    "reference": 0.90,
+    "fallback": 0.55,
+    "raw-note": 0.40,
+}
+DEFAULT_ROLE_FACTOR = 1.00
+DEFAULT_DOC_WEIGHT = 0.7
+
+
 class JinaRerankOp:
     """Cross-encoder reranking of evidence chunks.
 
@@ -68,6 +83,16 @@ class JinaRerankOp:
             weight_original=self._weight_original,
             weight_rerank=self._weight_rerank,
         )
+
+        # Authority-aware reweighting: final = ce_blended * doc_weight * role_factor.
+        # Chunks without metadata fall back to defaults (back-compat with older indexes).
+        for chunk in reranked:
+            doc_weight = chunk.get("doc_weight", DEFAULT_DOC_WEIGHT)
+            role_factor = ROLE_FACTOR.get(
+                chunk.get("source_role"), DEFAULT_ROLE_FACTOR
+            )
+            chunk["score"] = chunk.get("score", 0.0) * doc_weight * role_factor
+        reranked.sort(key=lambda c: c.get("score", 0.0), reverse=True)
 
         # Truncate to synth_top_k (best N for LLM synthesis)
         synth_top_k = ctx.get("layer_plan", {}).get("synth_top_k")
