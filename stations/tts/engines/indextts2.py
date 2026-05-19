@@ -28,7 +28,7 @@ class IndexTTS2BaseEngine(SubprocessEngine):
         d = super()._build_input(req)
         d.update({
             "checkpoint_dir": "checkpoints",
-            "config_yaml": "checkpoints/config_abs.yaml",
+            "config_yaml": "checkpoints/config.yaml",
             "device": "cuda",
         })
         return d
@@ -71,7 +71,7 @@ class IndexTTS2JmicaEngine(SubprocessEngine):
         d = super()._build_input(req)
         d.update({
             "checkpoint_dir": "checkpoints_ja",
-            "config_yaml": "checkpoints_ja/config_abs.yaml",
+            "config_yaml": "checkpoints_ja/config.yaml",
             "device": "cuda",
         })
         return d
