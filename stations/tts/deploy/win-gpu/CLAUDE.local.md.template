@@ -1,0 +1,89 @@
+# win-gpu CLAUDE.local.md template
+
+> 這份是**模板**，部署時 cp 到 `C:\Users\User\workshop\CLAUDE.local.md`。
+> CLAUDE.local.md 不入 git（per `.gitignore`），記錄本機特殊路徑 / venv / 對應規則。
+> 跟 main repo 的 CLAUDE.md（共用約束）配合 — 一個入 git 一個不入。
+
+## 機器身份
+
+- Hostname: win-gpu
+- OS: Windows 11 + WSL2 Ubuntu
+- GPU: RTX 3090 (24GB VRAM)
+- Role: TTS / 訓練 / 重 inference 機
+
+## 主要路徑
+
+| 用途 | Windows host | WSL2 |
+|---|---|---|
+| Workshop sparse checkout | `C:\Users\User\workshop` | `/mnt/c/Users/User/workshop` |
+| Python (Windows native) | anaconda3 / each lab repo 的 `.venv` | — |
+| Python (WSL2) | — | `/home/joneshong/.local/bin/python3` |
+| CosyVoice repo | `C:\Users\User\workshop\lab\cosyvoice` | `/home/joneshong/workshop/lab/cosyvoice` |
+| IndexTTS repo | `C:\Users\User\workshop\lab\indextts` | — |
+| VibeVoice repo | — | `/home/joneshong/VibeVoice` |
+| Qwen3-TTS model | — | `/home/joneshong/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base` |
+| VibeVoice model | — | `/home/joneshong/vibevoice_models/VibeVoice-1.5B` |
+
+## TTS Engine venv 對應
+
+| Engine | venv | Python | 安裝 deps |
+|---|---|---|---|
+| cosyvoice_v3_native | `anaconda3/envs/cosyvoice` (Windows) | `C:/Users/User/anaconda3/envs/cosyvoice/python.exe` | opencc-python pykakasi soundfile numpy |
+| cosyvoice_v3_vllm | `~/.venvs/cosyvoice_vllm` (WSL2 uv) | `/home/joneshong/.venvs/cosyvoice_vllm/bin/python3` | （同上 + vllm）|
+| indextts2_base | `lab/indextts/.venv` (Windows uv) | `C:/Users/User/workshop/lab/indextts/.venv/Scripts/python.exe` | opencc-python soundfile numpy |
+| indextts2_jmica | （同上，checkpoints_ja/ swap） | （同上） | （同上） |
+| vibevoice | 共用 `~/.venvs/cosyvoice_vllm` (WSL2) | （同 vllm） | + vibevoice |
+| qwen3tts_gpu | 共用 `~/.venvs/cosyvoice_vllm` (WSL2) | （同 vllm） | transformers + torch |
+
+## 跨 OS 路徑橋接規則
+
+- Windows → WSL：`C:\foo` → `/mnt/c/foo`（subprocess_bridge._to_wsl_path 已處理）
+- Git Bash for Windows：`/mnt/c/Program Files/Git/bin/bash.exe -lc '...'`（少爺記憶 wsl2-rtx3090）
+- 從 Mac dispatch 過來：用 Fleet `mode=gpu` + `target=win-gpu`
+
+## 已知特殊行為
+
+- WSL2 vllm GPU wedge：boot 後 nvlddmkm 可能被自動清；TDR Registry 已設 `TdrLevel=3 + HAGS off`（少爺記憶 wsl2-rtx3090-vllm-gpu-wedge-2026-05-18）
+- CosyVoice EN cold-start 雜音：runner 應在第一次 inference 前跑 dummy warmup
+- CosyVoice 中文必繁→簡：`opencc.OpenCC("t2s")`（runner 已內建）
+- CosyVoice 日文必轉片假名：`pykakasi`（runner 已內建）
+- IndexTTS 繁體 BPE 不認：同 OpenCC t2s
+- IndexTTS jmica fine-tune 後中英 catastrophic forgetting：只接 ja，runner 已守門
+
+## TTS Service 啟動
+
+```powershell
+# Windows host：service main.py 跑在 Windows native，呼叫各 venv runner
+cd C:\Users\User\workshop\stations\tts
+.venv\Scripts\python.exe main.py    # port 10201
+```
+
+或透過 Task Scheduler 自啟（見 deploy/win-gpu/tts-autostart.xml）。
+
+## 排查 SOP
+
+| 症狀 | 看哪 |
+|---|---|
+| `/v2/healthz` engine ok=false | manifest.yaml 對應 venv 路徑 + `ls` 確認存在 |
+| runner timeout | nvidia-smi 看 GPU；若 wedge 必須 cold reboot Windows |
+| WSL runner 找不到檔 | 檢查 subprocess_bridge `_to_wsl_path` 是否轉對 |
+| 繁體中文音字錯亂 | 確認對應 venv 有裝 `opencc-python` |
+| 日文發音崩 | 確認對應 venv 有裝 `pykakasi` |
+
+## Memory 該寫到哪
+
+win-gpu 端的 Claude Code session 用獨立 memory（`~/.claude/projects/-mnt-c-Users-User-workshop/memory/`），跟 Mac 的 `~/.claude/projects/-Users-joneshong-workshop/memory/` 是兩個獨立庫。
+
+- 跨機器通用的知識 → Mac memory（少爺主機 + 主要 session 在那）
+- win-gpu 特定知識（path / venv / Windows 特殊 bug） → 這個 CLAUDE.local.md
+- 不要在 win-gpu memory 重複 Mac memory 的內容
+
+---
+
+## 部署步驟（部署人讀這段）
+
+1. ssh win-gpu 後跑 `setup-sparse-checkout.ps1`（或 `.sh`）拉 workshop sparse 子集
+2. cp 這份 template 到 `C:\Users\User\workshop\CLAUDE.local.md`
+3. 在 `C:\Users\User\workshop` 跑 `claude code`（如未裝先裝），會自動讀 CLAUDE.md + CLAUDE.local.md
+4. session 內輸入 `/init`：Claude 會掃描那邊的結構生補完版 CLAUDE.md（會跳 review 確認）
+5. review 完 git commit（這 commit 只動 CLAUDE.md，不動 CLAUDE.local.md）

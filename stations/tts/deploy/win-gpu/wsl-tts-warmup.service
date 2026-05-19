@@ -1,0 +1,44 @@
+# WSL2 systemd-user unit — vllm cold-start warmup
+#
+# WSL engine (cosyvoice_v3_vllm / vibevoice / qwen3tts_gpu) 第一次 inference
+# 要 1-2min 載入 vllm engine。boot 後跑一次 warmup 把模型 pre-warm，後續呼叫 <1s。
+#
+# 安裝（WSL2 systemd-user）：
+#   mkdir -p ~/.config/systemd/user
+#   cp wsl-tts-warmup.service ~/.config/systemd/user/tts-warmup.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable tts-warmup.service
+#   systemctl --user start tts-warmup.service
+#
+# 檢查：
+#   systemctl --user status tts-warmup.service
+#   journalctl --user -u tts-warmup.service -f
+
+[Unit]
+Description=Workshop TTS WSL Engine Warmup (vllm cold-start mitigation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/mnt/c/Users/User/workshop/stations/tts
+
+# 對 vllm engine 跑一句 dummy synthesize，把模型 load 進 GPU
+# 預期 90-120s 第一次跑；之後 service main.py 重啟也走這條 warmup
+ExecStart=/bin/bash -c '\
+    /home/joneshong/.venvs/cosyvoice_vllm/bin/python3 \
+        /mnt/c/Users/User/workshop/stations/tts/runners/run_cosyvoice_v3.py \
+        <<< "{\\"text\\": \\"warm up\\", \\"lang\\": \\"en\\", \\"voice_id\\": \\"master\\", \\"speed\\": 1.0, \\"engine_specific\\": {}, \\"use_vllm\\": true, \\"model_dir\\": \\"pretrained_models/Fun-CosyVoice3-0.5B\\", \\"fp16\\": false, \\"sys_prompt\\": \\"You are a helpful assistant.<|endofprompt|>\\"}" \
+        > /tmp/tts-warmup.json 2>&1 || true'
+
+# 允許失敗（GPU wedge 時 service main 仍能用 native cosyvoice）
+SuccessExitStatus=0 1
+
+# 失敗時不停 retry（避免 GPU wedge 時 systemd 灌爆 retry loop）
+Restart=no
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

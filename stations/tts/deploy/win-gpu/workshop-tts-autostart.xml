@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  Windows Task Scheduler XML — Workshop TTS Service Autostart
+
+  Import via:
+    schtasks /Create /TN "Workshop TTS Service" /XML workshop-tts-autostart.xml /F
+
+  Or PowerShell (preferred — see install-autostart.ps1):
+    Register-ScheduledTask -Xml (Get-Content workshop-tts-autostart.xml | Out-String) -TaskName "Workshop TTS Service"
+
+  Trigger: At User Logon (more reliable than At Startup for GPU drivers + path init)
+  Action:  Start main.py in stations/tts via the station's .venv Python
+  Restart: 5min on failure, max 3 retries; runs hidden in background
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>workshop</Author>
+    <Description>Workshop TTS station — port 10201, FastAPI service routing 6 GPU engines</Description>
+    <URI>\Workshop\TTS Service</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>User</UserId>
+      <Delay>PT30S</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-32-545</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>5</Priority>
+    <RestartOnFailure>
+      <Interval>PT5M</Interval>
+      <Count>3</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>-NoProfile -WindowStyle Hidden -Command "Set-Location 'C:\Users\User\workshop\stations\tts'; .\.venv\Scripts\python.exe main.py *&gt; 'C:\Users\User\workshop\stations\tts\tts.autostart.log'"</Arguments>
+    </Exec>
+  </Actions>
+</Task>
