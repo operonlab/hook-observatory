@@ -1,0 +1,19 @@
+voice_id: master
+speaker: 少爺
+language: zh
+description: 少爺主音色，從 v3/ref/ 整理而來
+files:
+  - file: master.wav
+    sample_rate: 22050
+    duration_s: 5.0
+    source: outputs/tts-finetune-test/v3/ref/master_ref_5s_22k.wav
+    preferred_engines: [cosyvoice_v3_native, cosyvoice_v3_vllm]
+  - file: master_16k_8s.wav
+    sample_rate: 16000
+    duration_s: 8.0
+    source: outputs/tts-finetune-test/v3/ref/master_ref_8s_16k.wav
+    preferred_engines: [indextts2_base, indextts2_jmica, vibevoice]
+transcript: master.transcript
+notes: |
+  cosyvoice zero_shot 同語言模式可空 ref_text；cross-lingual 模式需要 ref_text。
+  qwen3tts zero-shot 必填 ref_text。indextts2 / vibevoice / cosyvoice cross-lingual 不需要 ref_text。

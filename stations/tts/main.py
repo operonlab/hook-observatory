@@ -61,12 +61,21 @@ async def lifespan(app: FastAPI):
         _unloader_task.cancel()
 
 
-app = FastAPI(title="TTS Station", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="TTS Station", version="0.3.0", lifespan=lifespan)
+
+# v2 router (cosyvoice_v3 / indextts2 / vibevoice / qwen3tts_gpu, win-gpu only)
+try:
+    from routes_v2 import router_v2
+
+    app.include_router(router_v2)
+except ImportError as _e:
+    import logging as _l
+    _l.getLogger(__name__).warning("v2 router unavailable: %s", _e)
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "tts", "port": 10201, "streaming": True}
+    return {"status": "ok", "service": "tts", "port": 10201, "streaming": True, "v2": True}
 
 
 @app.post("/synthesize")

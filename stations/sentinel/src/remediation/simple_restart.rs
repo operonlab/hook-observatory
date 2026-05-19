@@ -11,7 +11,7 @@ pub const WORKSHOP_SERVICES: &[&str] = &[
     "agent-metrics", "agent-vista", "litellm",
     "auto-survey", "capture-console", "anvil", "blog",
     "cronicle", "mcpproxy", "tmux-webui", "fleet",
-    "stt", "ocr", "voice-gateway", "translate",
+    "stt", "tts", "ocr", "voice-gateway", "translate",
     "sentinel",
 ];
 
