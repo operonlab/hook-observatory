@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
-"""Qwen3-TTS GPU runner — HuggingFace 0.6B-Base zero-shot (WSL2).
+"""Qwen3-TTS GPU runner — qwen_tts package + voice clone (WSL2).
 
 執行環境（win-gpu WSL2）：
-  Venv:    ~/.venvs/cosyvoice_vllm
+  Venv:    ~/.venvs/tts-qwen3  (transformers main + torch cu121 + qwen-tts package)
   Model:   ~/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base
 
+API 路徑（2026-05-19 round 5 對齊）：
+  transformers main 仍未 ship qwen3_tts model_type，但官方 `qwen-tts` PyPI 套件
+  自帶 Qwen3TTSModel + generate_voice_clone()，繞過 AutoModelForCausalLM.
+
+  from qwen_tts import Qwen3TTSModel
+  model = Qwen3TTSModel.from_pretrained(path)
+  audios, sr = model.generate_voice_clone(text, language, ref_audio, ref_text)
+
 Input JSON (stdin):
-  text, lang, voice_id, speed, npy_out, model_path
+  text, lang, voice_id, speed, model_path
 """
 
 from __future__ import annotations
@@ -17,6 +25,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from _common import read_input, resolve_voice_ref, to_simplified, write_err, write_ok
+
+# Qwen3-TTS language code 對應（HF model card 規約）
+_LANG_MAP = {"zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean"}
 
 
 def main():
@@ -40,50 +51,28 @@ def main():
             write_err(f"qwen3tts zero-shot 需 ref_text，但 {voice_id}.transcript 為空")
             sys.exit(1)
 
-        import tempfile
+        import numpy as np
 
-        import soundfile as sf
-        import torch  # noqa: F401
-        import transformers
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        # 用官方 qwen-tts PyPI 套件 — 自帶 Qwen3TTSModel class，不走 transformers AutoConfig
+        from qwen_tts import Qwen3TTSModel
 
-        # 2026-05-19 預檢：transformers 4.57.x 尚未 ship qwen3_tts model_type
-        # → AutoConfig 直接 KeyError。Fail-loud 給清楚 message。
-        from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
+        model = Qwen3TTSModel.from_pretrained(model_path)
 
-        if "qwen3_tts" not in CONFIG_MAPPING_NAMES:
-            write_err(
-                f"transformers {transformers.__version__} 尚未支援 qwen3_tts model_type；"
-                "需 4.58+ 或 from-source。Workaround: "
-                "venv pip install -U git+https://github.com/huggingface/transformers.git"
-            )
-            sys.exit(1)
-
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path, trust_remote_code=True, torch_dtype="bfloat16", device_map="cuda"
+        language = _LANG_MAP.get(lang, lang)
+        audios, sr = model.generate_voice_clone(
+            text=text,
+            language=language,
+            ref_audio=ref_wav,
+            ref_text=ref_text,
         )
 
-        # ⚠ generate_voice_clone 是假設 API（reviewer Bug #3），win-gpu 部署時對齊實際 model card
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
-            audio_out_path = tf.name
-        try:
-            model.generate_voice_clone(
-                text=text,
-                ref_wav=ref_wav,
-                ref_text=ref_text,
-                output_path=audio_out_path,
-                tokenizer=tokenizer,
-            )
-            audio, sr = sf.read(audio_out_path, dtype="float32")
-            if audio.ndim > 1:
-                audio = audio.mean(axis=1)
-            write_ok(audio, int(sr))
-        finally:
-            try:
-                os.unlink(audio_out_path)
-            except Exception:
-                pass
+        # audios is List[np.ndarray]; mono concat
+        audio = (
+            np.concatenate([a.astype(np.float32).squeeze() for a in audios])
+            if isinstance(audios, list)
+            else np.asarray(audios, dtype=np.float32).squeeze()
+        )
+        write_ok(audio, int(sr))
     except Exception as e:
         write_err(str(e))
         sys.exit(2)

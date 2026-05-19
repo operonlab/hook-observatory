@@ -85,9 +85,10 @@ class CosyVoiceV3VllmEngine(SubprocessEngine):
         d.update(
             {
                 "model_dir": "pretrained_models/Fun-CosyVoice3-0.5B",
-                # 2026-05-19：vllm 0.x 與 transformers 4.57.3 衝突 (aimv2 重複 register)
-                # 暫時降級 native PyTorch 推理路徑；待 vllm 升版（或 transformers 降版）再開
-                "use_vllm": False,
+                # 2026-05-19：transformers 4.51.3（sweet spot）下 vllm 0.9.0 import OK
+                # 走 vllm path 拿回 RTF 0.43 (4.1x 加速)。若以後 transformers 升 4.57+
+                # 觸發 aimv2 衝突再降回 use_vllm=False。
+                "use_vllm": True,
                 "fp16": False,
                 "sys_prompt": SYS_PROMPT,
             }

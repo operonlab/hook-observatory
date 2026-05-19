@@ -20,16 +20,20 @@ from .subprocess_bridge import SubprocessEngine
 
 class Qwen3TTSGpuEngine(SubprocessEngine):
     WSL_DISTRO = "Ubuntu"
-    PYTHON = "/home/joneshong/.venvs/cosyvoice_vllm/bin/python3"
+    # 獨立 venv tts-qwen3（transformers main + qwen-tts PyPI 套件）—
+    # 避免跟 tts-trio 的 transformers 4.51.3 共存衝突。
+    PYTHON = "/home/joneshong/.venvs/tts-qwen3/bin/python3"
     RUNNER = "run_qwen3tts.py"
     CWD = "/home/joneshong"
-    TIMEOUT_SEC = 180
+    TIMEOUT_SEC = 300
 
     def _build_input(self, req):
         d = super()._build_input(req)
-        d.update({
-            "model_path": "/home/joneshong/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base",
-        })
+        d.update(
+            {
+                "model_path": "/home/joneshong/qwen3tts_models/Qwen3-TTS-12Hz-0.6B-Base",
+            }
+        )
         return d
 
     def capability(self) -> EngineCapability:
@@ -44,8 +48,11 @@ class Qwen3TTSGpuEngine(SubprocessEngine):
             ref_duration_range=(3, 15),
             needs_ref_text=True,
             supported_outputs=[
-                OutputMode.FILE, OutputMode.BUFFER, OutputMode.NUMPY,
-                OutputMode.TENSOR, OutputMode.BASE64,
+                OutputMode.FILE,
+                OutputMode.BUFFER,
+                OutputMode.NUMPY,
+                OutputMode.TENSOR,
+                OutputMode.BASE64,
             ],
             sample_rate=24000,
             notes="WSL2 HF 版 0.6B-Base。中英日韓 native，zero-shot 必填 ref_text",
