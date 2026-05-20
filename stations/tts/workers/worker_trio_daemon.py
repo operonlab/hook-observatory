@@ -131,15 +131,23 @@ class WorkerTrioDaemon(WorkerDaemon):
         **kwargs,
     ):
         if self.current_engine_name in ("cosyvoice_v3_vllm", "cosyvoice_v3_native"):
-            return self._synth_cosyvoice(text, lang, ref_wav, ref_text)
+            return self._synth_cosyvoice(
+                text, lang, ref_wav, ref_text,
+                instruct=kwargs.get("instruct") or "",
+            )
         elif self.current_engine_name == "vibevoice":
             return self._synth_vibevoice(text, lang, ref_wav, ref_text)
         raise RuntimeError(f"no synth method for {self.current_engine_name}")
 
-    def _synth_cosyvoice(self, text: str, lang: str, ref_wav: str, ref_text: str):
-        """少爺 V2/V3 規格：全走 inference_zero_shot，不再 cross_lingual.
+    def _synth_cosyvoice(
+        self, text: str, lang: str, ref_wav: str, ref_text: str, instruct: str = ""
+    ):
+        """少爺 V2/V3 規格：預設走 inference_zero_shot；若 caller 傳 instruct
+        則改走 inference_instruct2（自然語言情緒/風格指令）。
 
         ref_text 用簡體輸入；text 也經繁簡轉換（zh）+ pykakasi (ja).
+        Inline paralinguistic tag（[laughter] / <strong>... / [breath] 等）
+        留在 text 內，由 cosyvoice tokenizer 原生消化，本層無須干涉。
         """
         # 預處理
         if lang == "zh":
@@ -157,8 +165,18 @@ class WorkerTrioDaemon(WorkerDaemon):
         # 家族，內部 noise 仍隨機。固定 seed 讓 SSE 跨段 / 重跑可重現。
         self.seed_rngs()
 
-        prompt_text_with_sys = SYS_PROMPT + (ref_text or "")
-        gen = self.engine_obj.inference_zero_shot(text, prompt_text_with_sys, ref_wav, stream=False)
+        if instruct:
+            # instruct2 (CosyVoice2/3) takes the prompt wav directly and the
+            # natural-language instruct text as a separate channel; ref_text /
+            # SYS_PROMPT are not used in this path.
+            gen = self.engine_obj.inference_instruct2(
+                text, instruct, ref_wav, stream=False
+            )
+        else:
+            prompt_text_with_sys = SYS_PROMPT + (ref_text or "")
+            gen = self.engine_obj.inference_zero_shot(
+                text, prompt_text_with_sys, ref_wav, stream=False
+            )
         chunks = [j["tts_speech"] for j in gen]
         if not chunks:
             raise RuntimeError("CosyVoice produced no output")
