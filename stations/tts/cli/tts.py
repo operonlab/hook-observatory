@@ -29,12 +29,56 @@ import sys
 from sdk_client.tts import TTSClient
 
 
+def _build_engine_specific(args) -> dict | None:
+    """Common --emotion* / --instruct / --ref-text → engine_specific dict.
+
+    Subcommands attach a subset of these flags via `_add_engine_specific_args`;
+    missing attributes are treated as None so this helper is safe to call
+    from any cmd_*.
+    """
+    es: dict = {}
+    ref_text = getattr(args, "ref_text", None)
+    if ref_text:
+        es["ref_text"] = ref_text
+    instruct = getattr(args, "instruct", None)
+    if instruct:
+        es["instruct"] = instruct
+
+    # IndexTTS-2 emotion — at most one of preset / text / audio / vector.
+    emo: dict = {}
+    preset = getattr(args, "emotion", None)
+    if preset:
+        emo["preset"] = preset
+    emo_text = getattr(args, "emotion_text", None)
+    if emo_text:
+        emo["text"] = emo_text
+    emo_audio = getattr(args, "emotion_audio", None)
+    if emo_audio:
+        emo["audio"] = emo_audio
+    emo_vector = getattr(args, "emotion_vector", None)
+    if emo_vector:
+        try:
+            vec = [float(x) for x in emo_vector.split(",")]
+        except ValueError as e:
+            raise SystemExit(f"--emotion-vector must be 8 floats separated by commas: {e}")
+        if len(vec) != 8:
+            raise SystemExit(f"--emotion-vector must be 8-dim, got {len(vec)}")
+        emo["vector"] = vec
+    if emo:
+        alpha = getattr(args, "emotion_alpha", None)
+        # Default alpha = TTSClient.DEFAULT_EMOTION_ALPHA (0.4) — speaker-
+        # similarity sweep showed voice identity collapses above ~0.6 (see
+        # outputs/tts-emotion-smoke/similarity_bar.png). Explicit
+        # --emotion-alpha 1.0 still works for callers who want max strength.
+        if alpha is None:
+            alpha = TTSClient.DEFAULT_EMOTION_ALPHA
+        emo["alpha"] = float(alpha)
+        es["emotion"] = emo
+    return es or None
+
+
 def cmd_synthesize(args, client: TTSClient) -> int:
-    engine_specific = {}
-    if args.ref_text:
-        engine_specific["ref_text"] = args.ref_text
-    if args.instruct:
-        engine_specific["instruct"] = args.instruct
+    engine_specific = _build_engine_specific(args)
 
     res = client.synthesize_v2(
         text=args.text,
@@ -45,7 +89,7 @@ def cmd_synthesize(args, client: TTSClient) -> int:
         out_path=args.out,
         target_sample_rate=args.sample_rate,
         speed=args.speed,
-        engine_specific=engine_specific or None,
+        engine_specific=engine_specific,
         mode=getattr(args, "mode", None),
     )
 
@@ -90,6 +134,7 @@ def cmd_long(args, client: TTSClient) -> int:
         max_chars=args.max_chars,
         speed=args.speed,
         mode=getattr(args, "mode", None),
+        engine_specific=_build_engine_specific(args),
     )
 
     audio_b64 = res.get("audio_base64") or res.get("audio_bytes_b64", "")
@@ -156,6 +201,7 @@ def cmd_stream(args, client: TTSClient) -> int:
             speed=args.speed,
             ref_text=args.ref_text,
             mode=getattr(args, "mode", None),
+            engine_specific=_build_engine_specific(args),
         ):
             wall = round(_time.monotonic() - t0, 2)
             d = evt["data"]
@@ -255,6 +301,7 @@ def cmd_podcast(args, client: TTSClient) -> int:
         output="base64",
         speed=args.speed,
         mode=getattr(args, "mode", None),
+        engine_specific=_build_engine_specific(args),
     )
     audio_b64 = res.get("audio_base64") or res.get("audio_bytes_b64", "")
     if not audio_b64:
@@ -353,6 +400,49 @@ def cmd_lifecycle(args, client: TTSClient) -> int:
     return 0
 
 
+_EMOTION_CHOICES = TTSClient.EMOTION_NAMES
+
+
+def _add_engine_specific_args(
+    sp: argparse.ArgumentParser, *, with_instruct: bool = True, with_ref_text: bool = True
+) -> None:
+    """Attach the engine_specific flag set to a subparser.
+
+    Subcommands that already declare --ref-text / --instruct themselves skip
+    the matching part via the with_* flags.
+    """
+    if with_ref_text:
+        sp.add_argument("--ref-text", help="reference transcript (qwen3tts zero-shot 必填)")
+    if with_instruct:
+        sp.add_argument(
+            "--instruct",
+            help="CosyVoice instruct2 natural-language directive (overrides zero_shot path)",
+        )
+    sp.add_argument(
+        "--emotion",
+        choices=_EMOTION_CHOICES,
+        help="IndexTTS-2 emotion preset (mutually exclusive with --emotion-text/-audio/-vector)",
+    )
+    sp.add_argument(
+        "--emotion-text",
+        help="IndexTTS-2 emotion via natural-language description (routes through QwenEmotion)",
+    )
+    sp.add_argument(
+        "--emotion-audio",
+        help="IndexTTS-2 emotion via reference wav path",
+    )
+    sp.add_argument(
+        "--emotion-vector",
+        help="IndexTTS-2 emotion via raw 8-dim float CSV (e.g. '1,0,0,0,0,0,0,0')",
+    )
+    sp.add_argument(
+        "--emotion-alpha",
+        type=float,
+        default=None,
+        help="Emotion intensity 0.0-1.0 (default 1.0)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="workshop-tts", description="Workshop TTS station CLI (v2 API)"
@@ -375,8 +465,7 @@ def build_parser() -> argparse.ArgumentParser:
     syn.add_argument("--out", help="output path (FILE mode)")
     syn.add_argument("--sample-rate", type=int)
     syn.add_argument("--speed", type=float, default=1.0)
-    syn.add_argument("--ref-text", help="reference transcript (qwen3tts zero-shot 必填)")
-    syn.add_argument("--instruct", help="instruct prompt (cosyvoice)")
+    _add_engine_specific_args(syn)
     syn.add_argument(
         "--mode",
         choices=["quality", "live"],
@@ -394,6 +483,7 @@ def build_parser() -> argparse.ArgumentParser:
     lng.add_argument("--max-chars", type=int, help="override per-lang segment cap")
     lng.add_argument("--speed", type=float, default=1.0)
     lng.add_argument("--verbose", action="store_true", help="print per-segment durations")
+    _add_engine_specific_args(lng)
     lng.add_argument("--mode", choices=["quality", "live"], help="routing preset")
 
     # stream subcommand — SSE chunks; CLI rebuilds wav locally
@@ -408,10 +498,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     strm.add_argument("--max-chars", type=int, help="override per-lang segment cap")
     strm.add_argument("--speed", type=float, default=1.0)
-    strm.add_argument("--ref-text")
     strm.add_argument("--out", help="write concatenated wav to this path")
     strm.add_argument("--segments-dir", help="also write each segment as seg_NNN.wav into this dir")
     strm.add_argument("--quiet", action="store_true", help="suppress per-event stderr progress")
+    _add_engine_specific_args(strm)
     strm.add_argument("--mode", choices=["quality", "live"], help="routing preset")
 
     # podcast subcommand — multi-speaker conversational synthesis
@@ -428,6 +518,10 @@ def build_parser() -> argparse.ArgumentParser:
     pod.add_argument("--engine", default="auto")
     pod.add_argument("--out", help="output wav path")
     pod.add_argument("--speed", type=float, default=1.0)
+    # Podcast emotion/instruct applies whole-script. Per-speaker override is
+    # available via the SDK (engine_specific_by_speaker) and the /v2 endpoint
+    # body; CLI keeps the surface flat for now.
+    _add_engine_specific_args(pod, with_ref_text=False)
     pod.add_argument("--mode", choices=["quality", "live"], help="routing preset")
 
     le = sub.add_parser("list-engines")  # noqa: F841
@@ -455,6 +549,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--speed", type=float, default=1.0, help=argparse.SUPPRESS)
     p.add_argument("--ref-text", help=argparse.SUPPRESS)
     p.add_argument("--instruct", help=argparse.SUPPRESS)
+    p.add_argument("--emotion", choices=_EMOTION_CHOICES, help=argparse.SUPPRESS)
+    p.add_argument("--emotion-text", help=argparse.SUPPRESS)
+    p.add_argument("--emotion-audio", help=argparse.SUPPRESS)
+    p.add_argument("--emotion-vector", help=argparse.SUPPRESS)
+    p.add_argument("--emotion-alpha", type=float, default=None, help=argparse.SUPPRESS)
     p.add_argument("--mode", choices=["quality", "live"], help=argparse.SUPPRESS)
     return p
 

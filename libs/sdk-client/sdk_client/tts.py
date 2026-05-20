@@ -49,6 +49,67 @@ _V2_FAILURE_COOLDOWN_SEC = float(os.environ.get("TTS_V2_COOLDOWN_SEC", "30"))
 class TTSClient:
     """HTTP client for TTS station (port 10201)."""
 
+    # ── engine_specific helpers (purely string assembly — no network) ──
+    # Locked to worker_indextts_daemon.EMOTION_PRESETS keys; new names must
+    # be added in both places together.
+    EMOTION_NAMES = (
+        "happy", "angry", "sad", "afraid",
+        "disgusted", "melancholic", "surprised", "calm", "neutral",
+    )
+
+    # alpha=0.4 chosen from speaker-similarity sweep (outputs/tts-emotion-smoke/
+    # similarity_bar.png, 2026-05-20). Resemblyzer d-vector vs master.wav:
+    #   alpha 0.2 → 0.890 (~ baseline 0.872, emotion barely audible)
+    #   alpha 0.4 → 0.841  ← sweet spot: emotion clear, voice still recognisable
+    #   alpha 0.6 → 0.794  (audible drift)
+    #   alpha 0.8 → 0.664  ← cliff: voice identity collapses
+    #   alpha 1.0 → 0.681
+    # IndexTTS-2's emo_vec is additive to the conditioning mel, so strong
+    # emotion overwhelms speaker identity by design. Callers who genuinely
+    # need maximum emotion expressiveness can pass alpha=1.0 explicitly.
+    DEFAULT_EMOTION_ALPHA = 0.4
+
+    @staticmethod
+    def emotion_preset(name: str, alpha: float | None = None) -> dict:
+        """Build engine_specific={"emotion":...} for IndexTTS-2 preset mode.
+
+        alpha defaults to DEFAULT_EMOTION_ALPHA (0.4) — chosen from a sweep
+        showing voice fidelity holds until alpha=0.6 then collapses.
+        """
+        if name not in TTSClient.EMOTION_NAMES:
+            raise ValueError(
+                f"unknown emotion '{name}'; choose from {TTSClient.EMOTION_NAMES}"
+            )
+        a = TTSClient.DEFAULT_EMOTION_ALPHA if alpha is None else float(alpha)
+        return {"emotion": {"preset": name, "alpha": a}}
+
+    @staticmethod
+    def emotion_text(text: str, alpha: float | None = None) -> dict:
+        """Build engine_specific for IndexTTS-2 emotion-from-text mode."""
+        a = TTSClient.DEFAULT_EMOTION_ALPHA if alpha is None else float(alpha)
+        return {"emotion": {"text": text, "alpha": a}}
+
+    @staticmethod
+    def emotion_audio(audio_path: str, alpha: float | None = None) -> dict:
+        """Build engine_specific for IndexTTS-2 emotion-from-audio mode."""
+        a = TTSClient.DEFAULT_EMOTION_ALPHA if alpha is None else float(alpha)
+        return {"emotion": {"audio": audio_path, "alpha": a}}
+
+    @staticmethod
+    def instruct(text: str) -> dict:
+        """Build engine_specific={"instruct":...} for CosyVoice instruct2."""
+        return {"instruct": text}
+
+    @staticmethod
+    def wrap_laughter(text: str) -> str:
+        """Wrap a span in CosyVoice's <laughter>...</laughter> tag."""
+        return f"<laughter>{text}</laughter>"
+
+    @staticmethod
+    def wrap_strong(text: str) -> str:
+        """Wrap a span in CosyVoice's <strong>...</strong> tag."""
+        return f"<strong>{text}</strong>"
+
     def __init__(self, base_url: str | None = None, timeout: float = 180):
         self.base_url = (base_url or os.environ.get("TTS_URL", get_url("tts"))).rstrip("/")
         self._timeout = timeout
@@ -261,12 +322,17 @@ class TTSClient:
         max_chars: int | None = None,
         speed: float = 1.0,
         mode: str | None = None,
+        engine_specific: dict | None = None,
     ) -> dict:
         """POST /v2/synthesize/long — auto-segment + per-segment synth + concat.
 
         TTS engines (cosyvoice / qwen3 / vibevoice / indextts2) degrade on inputs
         beyond ~150 zh chars. This endpoint splits at sentence/punctuation
         boundaries and concatenates the resulting waveforms server-side.
+
+        engine_specific applies to every segment (whole-passage emotion /
+        instruct). Pass `TTSClient.emotion_preset("sad")` or similar helpers
+        for ergonomics, or `{"instruct": "..."}` for CosyVoice instruct.
 
         Returns the standard v2 payload (duration_s, sample_rate, engine,
         output_mode, audio_path/audio_bytes_b64/audio_base64) plus:
@@ -288,6 +354,8 @@ class TTSClient:
             body["output_path"] = out_path
         if max_chars is not None:
             body["max_chars"] = max_chars
+        if engine_specific:
+            body["engine_specific"] = engine_specific
         return self._post_json("/v2/synthesize/long", body)
 
     # ======================== v2 Multi-speaker podcast ========================
@@ -302,6 +370,8 @@ class TTSClient:
         out_path: str | None = None,
         speed: float = 1.0,
         mode: str | None = None,
+        engine_specific: dict | None = None,
+        engine_specific_by_speaker: dict[str, dict] | None = None,
     ) -> dict:
         """POST /v2/synthesize/podcast — multi-speaker fake-via-dispatch.
 
@@ -310,6 +380,10 @@ class TTSClient:
         with the corresponding reference. vibevoice currently runs in the
         same fake-dispatch mode as the others; native multi-speaker would
         need a worker-side opcode extension.
+
+        engine_specific is a default applied to every segment;
+        engine_specific_by_speaker fully overrides the default per speaker
+        id (no shallow-merge — give the full dict for that speaker).
         """
         body: dict[str, Any] = {
             "script": script,
@@ -323,6 +397,12 @@ class TTSClient:
             body["mode"] = mode
         if out_path:
             body["output_path"] = out_path
+        if engine_specific:
+            body["engine_specific"] = engine_specific
+        if engine_specific_by_speaker:
+            body["engine_specific_by_speaker"] = {
+                str(k): v for k, v in engine_specific_by_speaker.items()
+            }
         return self._post_json("/v2/synthesize/podcast", body)
 
     # ======================== v2 SSE streaming ========================
@@ -338,6 +418,7 @@ class TTSClient:
         ref_text: str | None = None,
         timeout: float = 600.0,
         mode: str | None = None,
+        engine_specific: dict | None = None,
     ) -> Iterator[dict[str, Any]]:
         """POST /v2/synthesize/stream — SSE generator yielding parsed events.
 
@@ -371,6 +452,8 @@ class TTSClient:
             body["max_chars"] = max_chars
         if ref_text is not None:
             body["ref_text"] = ref_text
+        if engine_specific:
+            body["engine_specific"] = engine_specific
 
         with self.client.stream(
             "POST",

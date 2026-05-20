@@ -47,6 +47,10 @@ def main():
         model_dir = inp.get("model_dir", "pretrained_models/Fun-CosyVoice3-0.5B")
         use_vllm = bool(inp.get("use_vllm", False))
         fp16 = bool(inp.get("fp16", False))
+        # engine_specific arrives flattened (subprocess_bridge) or nested.
+        instruct = inp.get("instruct") or ""
+        if not instruct and isinstance(inp.get("engine_specific"), dict):
+            instruct = inp["engine_specific"].get("instruct") or ""
 
         # 語言預處理
         if lang == "zh":
@@ -68,8 +72,18 @@ def main():
 
         cosy = CosyVoice3(model_dir, load_trt=False, load_vllm=use_vllm, fp16=fp16)
 
-        # 中文同語走 zero_shot（音色最穩）；英日走 cross_lingual
-        if lang == "zh" and ref_transcript:
+        if instruct:
+            # instruct2 channel takes a separate natural-language directive;
+            # ref_transcript / sys_prompt are unused on this path.
+            # CosyVoice3 llm asserts <|endofprompt|> in instruct_text — append
+            # when missing. CosyVoice2 ignores the trailing tag harmlessly.
+            instruct_eop = (
+                instruct if "<|endofprompt|>" in instruct else instruct + "<|endofprompt|>"
+            )
+            gen = cosy.inference_instruct2(
+                text, instruct_eop, ref_wav, stream=False, speed=speed
+            )
+        elif lang == "zh" and ref_transcript:
             prompt_text_with_sys = sys_prompt + ref_transcript
             gen = cosy.inference_zero_shot(
                 text, prompt_text_with_sys, ref_wav, stream=False, speed=speed

@@ -182,7 +182,6 @@ async def synthesize_v2(req: SynthesizeReqModel, request: Request) -> Synthesize
     if output_mode == OutputMode.FILE and not output_path:
         output_path = tempfile.mktemp(suffix=".wav", prefix=f"tts_{engine_name}_")
 
-    ref_text = req.engine_specific.get("ref_text") if req.engine_specific else None
     try:
         resp = await pool.synth(
             engine_name=engine_name,
@@ -190,7 +189,7 @@ async def synthesize_v2(req: SynthesizeReqModel, request: Request) -> Synthesize
             lang=req.lang,
             voice_id=req.voice_id,
             speed=req.speed,
-            ref_text=ref_text,
+            engine_specific=req.engine_specific or None,
         )
         audio, sr = decode_synth_response(resp)
     except RuntimeError as e:
@@ -231,6 +230,7 @@ async def synthesize_v2_long(payload: dict, request: Request) -> dict:
     voice_id = payload.get("voice_id", "master")
     speed = payload.get("speed", 1.0)
     max_chars = payload.get("max_chars")
+    engine_specific = payload.get("engine_specific") or {}
     output_mode = OutputMode(payload.get("output", "buffer"))
     output_path = payload.get("output_path")
     if output_mode == OutputMode.FILE and not output_path:
@@ -254,7 +254,19 @@ async def synthesize_v2_long(payload: dict, request: Request) -> dict:
     if not chunks:
         raise HTTPException(400, "text resolved to zero chunks")
 
-    items = [{"text": c, "lang": lang, "voice_id": voice_id, "speed": speed} for c in chunks]
+    # All segments inherit the same engine_specific (whole-passage emotion /
+    # instruct). Per-segment override is not exposed at this endpoint — callers
+    # who need per-segment customization should use /v2/synthesize/batch.
+    items = [
+        {
+            "text": c,
+            "lang": lang,
+            "voice_id": voice_id,
+            "speed": speed,
+            "engine_specific": engine_specific or None,
+        }
+        for c in chunks
+    ]
     try:
         resps = await pool.synth_batch(engine_name, items)
     except RuntimeError as e:
@@ -318,6 +330,12 @@ async def synthesize_v2_podcast(payload: dict, request: Request) -> dict:
         raise HTTPException(400, 'voices map required, e.g. {"1":"master","2":"xinran"}')
     voices = {str(k): v for k, v in voices.items()}
     speed = payload.get("speed", 1.0)
+    # engine_specific: whole-podcast default applied to every segment.
+    # engine_specific_by_speaker: {"1":{...}, "2":{...}} per-speaker overrides
+    # that fully replace the default for that speaker (no shallow-merge).
+    engine_specific_default = payload.get("engine_specific") or {}
+    es_by_speaker_raw = payload.get("engine_specific_by_speaker") or {}
+    engine_specific_by_speaker = {str(k): v for k, v in es_by_speaker_raw.items()}
     output_mode = OutputMode(payload.get("output", "buffer"))
     output_path = payload.get("output_path")
     if output_mode == OutputMode.FILE and not output_path:
@@ -354,6 +372,9 @@ async def synthesize_v2_podcast(payload: dict, request: Request) -> dict:
                 400,
                 f"segment {i} speaker={speaker} has no voice mapping; voices keys={list(voices)}",
             )
+        seg_engine_specific = (
+            engine_specific_by_speaker.get(str(speaker)) or engine_specific_default or None
+        )
         try:
             resp = await pool.synth(
                 engine_name=engine_name,
@@ -361,6 +382,7 @@ async def synthesize_v2_podcast(payload: dict, request: Request) -> dict:
                 lang=lang,
                 voice_id=voice_id,
                 speed=speed,
+                engine_specific=seg_engine_specific,
             )
             a, s = decode_synth_response(resp)
         except RuntimeError as e:
@@ -424,7 +446,10 @@ async def synthesize_v2_stream(payload: dict, request: Request):
     voice_id = payload.get("voice_id", "master")
     speed = payload.get("speed", 1.0)
     max_chars = payload.get("max_chars")
-    ref_text = payload.get("ref_text")
+    # Both top-level ref_text (legacy) and engine_specific.ref_text supported;
+    # explicit ref_text wins (back-compat).
+    engine_specific = payload.get("engine_specific") or {}
+    ref_text = payload.get("ref_text") or engine_specific.get("ref_text")
 
     engine_param = payload.get("engine", "auto")
     if engine_param == "auto":
@@ -502,6 +527,7 @@ async def synthesize_v2_stream(payload: dict, request: Request):
                     voice_id=voice_id,
                     speed=speed,
                     ref_text=ref_text,
+                    engine_specific=engine_specific or None,
                 )
                 audio, sr = decode_synth_response(resp)
             except Exception as e:
