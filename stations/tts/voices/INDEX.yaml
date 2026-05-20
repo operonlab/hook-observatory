@@ -1,0 +1,125 @@
+# Voice INDEX — Schema v2 (2026-05-20)
+#
+# 全域索引：列出所有可用 voice 的 metadata 摘要，方便：
+#   - station UI / SDK 做 voice picker
+#   - tag-based query（按 language / gender / style 篩選）
+#   - 部署時 rsync 同步檢查（哪些 voice 已部署到 win-gpu）
+#
+# 維護規約：
+#   - 新增 voice 時：先建 voices/<id>.meta.yaml，再把摘要登錄到此 INDEX
+#   - 此檔入 git，wav / m4a / mp3 / flac 不入 git（見 .gitignore）
+#
+# 命名規約：
+#   - 建議 voice_id 全小寫 + 連字號（如 master / xinran / narrator-deep）
+#   - 但目前部分 voice（DIDI / GY / JADE / Sean）保留 PascalCase / 全大寫
+#     待少爺確認是否要規範化
+
+version: 2
+updated_at: 2026-05-20
+
+voices:
+  # ─── 有完整 metadata ───
+  - voice_id: master
+    display_name: 少爺
+    language: zh-TW
+    gender: male
+    style: [conversational, technical]
+    variants: 3                # 原 + 8s + enhanced
+    enhanced: true
+    status: active
+
+  - voice_id: xinran
+    display_name: 心然
+    language: zh-CN
+    gender: female
+    style: [literary, calm]
+    variants: 2                # 原 + enhanced
+    enhanced: true
+    status: active
+
+  # ─── 2026-05-20 新增 4 個 voice（DIDI / GY / JADE / Sean）─────
+  # 已補 transcript（ASR 初稿）+ downsample（16k mono variant）
+  # TODO: 補 author / gender / age_range / 確認 display_name
+
+  - voice_id: DIDI
+    display_name: DIDI
+    language: zh-TW
+    gender: male
+    birth_year: 1998
+    style: [conversational, technical]
+    variants: 3               # 48k stereo + 16k mono + enhanced
+    enhanced: true
+    status: active
+    duration_s: 10.06
+    notes: ASR 初稿待校對
+
+  - voice_id: GY
+    display_name: GY
+    language: zh-TW
+    gender: male
+    birth_year: 1994
+    style: [conversational]
+    variants: 3                # 48k stereo + 16k mono + enhanced
+    enhanced: true
+    status: active
+    duration_s: 4.45          # ⚠️ 偏短，低於 TTS sweet spot；enhanced 後僅剩 2.12s
+    notes: 少爺計畫之後更換此 reference 錄音
+
+  - voice_id: JADE
+    display_name: JADE
+    language: zh-TW
+    gender: female
+    birth_year: 1984          # 少爺粗估 42 歲，2026 - 42 = 1984
+    age_estimated: true
+    style: [conversational, technical]
+    variants: 3                # 48k stereo + 16k mono + enhanced
+    enhanced: true
+    status: active
+    duration_s: 9.17
+
+  - voice_id: Sean
+    display_name: Sean
+    language: zh-TW
+    gender: male
+    birth_year: 1975          # 少爺粗估 51 歲，2026 - 51 = 1975
+    age_estimated: true
+    style: [conversational, technical]
+    variants: 3                # 48k stereo + 16k mono + enhanced
+    enhanced: true
+    status: active
+    duration_s: 9.48
+
+# ─── reverse lookup (tag → voice_ids) ───
+# Station / SDK 可依此快速篩選符合條件的 voice
+tag_index:
+  by_language:
+    zh-TW: [master, DIDI, GY, JADE, Sean]
+    zh-CN: [xinran]
+  by_gender:
+    male:      [master, DIDI, GY, Sean]
+    female:    [xinran, JADE]
+  by_birth_year:
+    "1970s": [Sean]
+    "1980s": [JADE]
+    "1990s": [GY, DIDI]
+  by_style:
+    conversational: [master, xinran, DIDI, GY, JADE, Sean]
+    technical:      [master, DIDI, JADE, Sean]
+    literary:       [xinran]
+    calm:           [xinran]
+  by_duration:
+    short_under_5s: [GY]
+    normal_5_15s:   [master, xinran, DIDI, JADE, Sean]
+
+# ─── outstanding TODOs ───
+todo:
+  - 補 4 個新 voice (DIDI / GY / JADE / Sean) 的 author 欄位
+  - 確認 voice_id 命名是否規範化為全小寫
+  - GY 重錄（enhanced 後只剩 2.12s，無法用於 voice clone）
+  - 同步 voices/ 到 win-gpu: `rsync -av ~/workshop/stations/tts/voices/ win-gpu:~/workshop/stations/tts/voices/`
+  - ASR transcript 校對（4 個 voice 都是 apple zh-TW 初稿）
+
+done:
+  - "2026-05-20: Phase 1 — meta.yaml schema v2 + INDEX.yaml + README v2"
+  - "2026-05-20: Phase 1+ — 4 個新 voice (DIDI/GY/JADE/Sean) downsample + transcript + meta"
+  - "2026-05-20: Phase 3 — voice_enhance.py (ffmpeg afftdn + silenceremove + loudnorm) 跑完 6 voice"

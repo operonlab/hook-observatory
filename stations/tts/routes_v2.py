@@ -164,8 +164,8 @@ def _resolve_engine_name(req: SynthesizeReqModel) -> str:
             raise HTTPException(400, f"unknown engine: {req.engine}")
         return req.engine
     try:
-        return pick_engine(req.lang, available=V2_ENGINES.keys())
-    except RuntimeError as e:
+        return pick_engine(req.lang, available=V2_ENGINES.keys(), mode=req.mode)
+    except (RuntimeError, ValueError) as e:
         raise HTTPException(503, str(e)) from e
 
 
@@ -240,8 +240,8 @@ async def synthesize_v2_long(payload: dict, request: Request) -> dict:
     engine_param = payload.get("engine", "auto")
     if engine_param == "auto":
         try:
-            engine_name = pick_engine(lang, available=V2_ENGINES.keys())
-        except RuntimeError as e:
+            engine_name = pick_engine(lang, available=V2_ENGINES.keys(), mode=payload.get("mode"))
+        except (RuntimeError, ValueError) as e:
             raise HTTPException(503, str(e)) from e
     else:
         if engine_param not in V2_ENGINES:
@@ -326,8 +326,8 @@ async def synthesize_v2_podcast(payload: dict, request: Request) -> dict:
     engine_param = payload.get("engine", "auto")
     if engine_param == "auto":
         try:
-            engine_name = pick_engine(lang, available=V2_ENGINES.keys())
-        except RuntimeError as e:
+            engine_name = pick_engine(lang, available=V2_ENGINES.keys(), mode=payload.get("mode"))
+        except (RuntimeError, ValueError) as e:
             raise HTTPException(503, str(e)) from e
     else:
         if engine_param not in V2_ENGINES:
@@ -429,8 +429,8 @@ async def synthesize_v2_stream(payload: dict, request: Request):
     engine_param = payload.get("engine", "auto")
     if engine_param == "auto":
         try:
-            engine_name = pick_engine(lang, available=V2_ENGINES.keys())
-        except RuntimeError as e:
+            engine_name = pick_engine(lang, available=V2_ENGINES.keys(), mode=payload.get("mode"))
+        except (RuntimeError, ValueError) as e:
             raise HTTPException(503, str(e)) from e
     else:
         if engine_param not in V2_ENGINES:
@@ -568,12 +568,17 @@ async def synthesize_v2_batch(payload: dict, request: Request) -> dict:
         raise HTTPException(400, "FILE batch requires output_dir")
 
     # Group items by resolved engine; default 自動 routing per item.lang
+    batch_mode = payload.get("mode")
     resolved: list[tuple[str, dict]] = []
     for it in items:
         if engine_param != "auto":
             eng = engine_param
         else:
-            eng = pick_engine(it.get("lang", "zh"), available=V2_ENGINES.keys())
+            eng = pick_engine(
+                it.get("lang", "zh"),
+                available=V2_ENGINES.keys(),
+                mode=it.get("mode") or batch_mode,
+            )
         resolved.append((eng, it))
 
     # Sort by engine to maximize keep-alive runs
@@ -672,8 +677,13 @@ def list_voices_v2() -> dict:
 
 
 @router_v2.get("/route")
-def route_debug(lang: str, multi_speaker: bool = False, prefer_fast: bool = False) -> dict:
-    return explain_route(lang, multi_speaker=multi_speaker, prefer_fast=prefer_fast)
+def route_debug(
+    lang: str,
+    multi_speaker: bool = False,
+    prefer_fast: bool = False,
+    mode: str | None = None,
+) -> dict:
+    return explain_route(lang, multi_speaker=multi_speaker, prefer_fast=prefer_fast, mode=mode)
 
 
 @router_v2.get("/pool")

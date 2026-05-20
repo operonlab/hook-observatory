@@ -68,6 +68,13 @@ Speaker 1: 那我们开始吧。</textarea>
       <option value="ko">ko</option>
     </select>
   </div>
+  <div>
+    <label>Mode (when engine=auto)</label>
+    <select id="mode">
+      <option value="quality" selected>quality — indextts (best)</option>
+      <option value="live">live — cosyvoice (fast)</option>
+    </select>
+  </div>
 </div>
 
 <div class="row">
@@ -99,6 +106,7 @@ async function synthesize() {
     voices,
     lang: $('lang').value,
     engine: $('engine').value,
+    mode: $('mode').value,
     output: 'base64',
   });
   const baseUrl = $('base-url').value.trim().replace(/\/$/, '');

@@ -46,6 +46,7 @@ def cmd_synthesize(args, client: TTSClient) -> int:
         target_sample_rate=args.sample_rate,
         speed=args.speed,
         engine_specific=engine_specific or None,
+        mode=getattr(args, "mode", None),
     )
 
     if args.output == "buffer":
@@ -88,6 +89,7 @@ def cmd_long(args, client: TTSClient) -> int:
         output="base64",
         max_chars=args.max_chars,
         speed=args.speed,
+        mode=getattr(args, "mode", None),
     )
 
     audio_b64 = res.get("audio_base64") or res.get("audio_bytes_b64", "")
@@ -153,6 +155,7 @@ def cmd_stream(args, client: TTSClient) -> int:
             max_chars=args.max_chars,
             speed=args.speed,
             ref_text=args.ref_text,
+            mode=getattr(args, "mode", None),
         ):
             wall = round(_time.monotonic() - t0, 2)
             d = evt["data"]
@@ -251,6 +254,7 @@ def cmd_podcast(args, client: TTSClient) -> int:
         engine=args.engine,
         output="base64",
         speed=args.speed,
+        mode=getattr(args, "mode", None),
     )
     audio_b64 = res.get("audio_base64") or res.get("audio_bytes_b64", "")
     if not audio_b64:
@@ -312,11 +316,15 @@ def cmd_list_voices(args, client: TTSClient) -> int:
 
 def cmd_route(args, client: TTSClient) -> int:
     res = client.explain_route(
-        args.lang, multi_speaker=args.multi_speaker, prefer_fast=args.prefer_fast
+        args.lang,
+        multi_speaker=args.multi_speaker,
+        prefer_fast=args.prefer_fast,
+        mode=getattr(args, "mode", None),
     )
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
     else:
+        print(f"mode:    {res.get('mode')}")
         print(f"primary: {res['primary']}")
         print(f"chain:   {' → '.join(res.get('fallback_chain', []))}")
     return 0
@@ -369,6 +377,11 @@ def build_parser() -> argparse.ArgumentParser:
     syn.add_argument("--speed", type=float, default=1.0)
     syn.add_argument("--ref-text", help="reference transcript (qwen3tts zero-shot 必填)")
     syn.add_argument("--instruct", help="instruct prompt (cosyvoice)")
+    syn.add_argument(
+        "--mode",
+        choices=["quality", "live"],
+        help="routing preset (quality=indextts default / live=cosyvoice sub-realtime); only applies when --engine=auto",
+    )
 
     # long subcommand — text segmented server-side, returns full concatenated wav
     lng = sub.add_parser("long", help="Synthesize long text (auto-segment + concat)")
@@ -381,6 +394,7 @@ def build_parser() -> argparse.ArgumentParser:
     lng.add_argument("--max-chars", type=int, help="override per-lang segment cap")
     lng.add_argument("--speed", type=float, default=1.0)
     lng.add_argument("--verbose", action="store_true", help="print per-segment durations")
+    lng.add_argument("--mode", choices=["quality", "live"], help="routing preset")
 
     # stream subcommand — SSE chunks; CLI rebuilds wav locally
     strm = sub.add_parser("stream", help="SSE pseudo-streaming long text synthesis")
@@ -398,6 +412,7 @@ def build_parser() -> argparse.ArgumentParser:
     strm.add_argument("--out", help="write concatenated wav to this path")
     strm.add_argument("--segments-dir", help="also write each segment as seg_NNN.wav into this dir")
     strm.add_argument("--quiet", action="store_true", help="suppress per-event stderr progress")
+    strm.add_argument("--mode", choices=["quality", "live"], help="routing preset")
 
     # podcast subcommand — multi-speaker conversational synthesis
     pod = sub.add_parser("podcast", help="Multi-speaker podcast (Speaker N: lines)")
@@ -413,6 +428,7 @@ def build_parser() -> argparse.ArgumentParser:
     pod.add_argument("--engine", default="auto")
     pod.add_argument("--out", help="output wav path")
     pod.add_argument("--speed", type=float, default=1.0)
+    pod.add_argument("--mode", choices=["quality", "live"], help="routing preset")
 
     le = sub.add_parser("list-engines")  # noqa: F841
     lv = sub.add_parser("list-voices")  # noqa: F841
@@ -421,6 +437,7 @@ def build_parser() -> argparse.ArgumentParser:
     rt.add_argument("--lang", required=True)
     rt.add_argument("--multi-speaker", action="store_true")
     rt.add_argument("--prefer-fast", action="store_true")
+    rt.add_argument("--mode", choices=["quality", "live"])
 
     sub.add_parser("healthcheck")
 
@@ -438,6 +455,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--speed", type=float, default=1.0, help=argparse.SUPPRESS)
     p.add_argument("--ref-text", help=argparse.SUPPRESS)
     p.add_argument("--instruct", help=argparse.SUPPRESS)
+    p.add_argument("--mode", choices=["quality", "live"], help=argparse.SUPPRESS)
     return p
 
 

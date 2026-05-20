@@ -44,7 +44,7 @@
   <div>
     <label>Engine</label>
     <select id="engine">
-      <option value="auto" selected>auto</option>
+      <option value="auto" selected>auto (uses mode preset below)</option>
       <option value="vibevoice">vibevoice (zh/en)</option>
       <option value="cosyvoice_v3_native">cosyvoice_v3_native (zh/en/ja)</option>
       <option value="qwen3tts_gpu">qwen3tts_gpu (zh/en/ja/ko)</option>
@@ -64,6 +64,13 @@
   <div>
     <label>Voice</label>
     <input id="voice" value="master" />
+  </div>
+  <div>
+    <label>Mode (auto routing)</label>
+    <select id="mode">
+      <option value="quality" selected>quality — indextts (best fidelity)</option>
+      <option value="live">live — cosyvoice (sub-realtime)</option>
+    </select>
   </div>
 </div>
 
@@ -147,6 +154,7 @@ async function startStream() {
   const body = JSON.stringify({
     text: $('text').value, lang: $('lang').value,
     voice_id: $('voice').value, engine: $('engine').value,
+    mode: $('mode').value,
   });
 
   abortController = new AbortController();

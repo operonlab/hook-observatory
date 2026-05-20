@@ -146,11 +146,14 @@ class TTSClient:
         speed: float = 1.0,
         engine_specific: dict | None = None,
         allow_fallback: bool = True,
+        mode: str | None = None,
     ) -> dict:
         """v2 synthesize — JSON body, output ∈ {file,buffer,numpy,tensor,base64,stream}.
 
-        Auto-routing: engine="auto" + lang → routing.py 預設選 (zh/en→indextts2_base,
-        ja→indextts2_jmica, ko→qwen3tts_gpu, multi_speaker→vibevoice).
+        Auto-routing presets (mode):
+          "quality" (default) — indextts2_base/jmica (best fidelity, RTF ~1.0)
+          "live"              — cosyvoice_v3_native (sub-realtime, RTF 0.5-0.8)
+        engine="<name>" overrides preset entirely.
 
         Offline fallback: 若 v2 service (win-gpu) 連不上且 allow_fallback=True，
         自動降級到 v1 Mac engine（mlx-qwen3 / edge）。同 circuit breaker 30s 冷卻。
@@ -164,6 +167,8 @@ class TTSClient:
             "speed": speed,
             "engine_specific": engine_specific or {},
         }
+        if mode is not None:
+            body["mode"] = mode
         if out_path:
             body["output_path"] = out_path
         if target_sample_rate:
@@ -255,6 +260,7 @@ class TTSClient:
         out_path: str | None = None,
         max_chars: int | None = None,
         speed: float = 1.0,
+        mode: str | None = None,
     ) -> dict:
         """POST /v2/synthesize/long — auto-segment + per-segment synth + concat.
 
@@ -276,6 +282,8 @@ class TTSClient:
             "output": output,
             "speed": speed,
         }
+        if mode is not None:
+            body["mode"] = mode
         if out_path:
             body["output_path"] = out_path
         if max_chars is not None:
@@ -293,6 +301,7 @@ class TTSClient:
         output: str = "base64",
         out_path: str | None = None,
         speed: float = 1.0,
+        mode: str | None = None,
     ) -> dict:
         """POST /v2/synthesize/podcast — multi-speaker fake-via-dispatch.
 
@@ -310,6 +319,8 @@ class TTSClient:
             "output": output,
             "speed": speed,
         }
+        if mode is not None:
+            body["mode"] = mode
         if out_path:
             body["output_path"] = out_path
         return self._post_json("/v2/synthesize/podcast", body)
@@ -326,6 +337,7 @@ class TTSClient:
         speed: float = 1.0,
         ref_text: str | None = None,
         timeout: float = 600.0,
+        mode: str | None = None,
     ) -> Iterator[dict[str, Any]]:
         """POST /v2/synthesize/stream — SSE generator yielding parsed events.
 
@@ -353,6 +365,8 @@ class TTSClient:
             "engine": engine,
             "speed": speed,
         }
+        if mode is not None:
+            body["mode"] = mode
         if max_chars is not None:
             body["max_chars"] = max_chars
         if ref_text is not None:
@@ -408,12 +422,20 @@ class TTSClient:
         return self._get(f"/v2/engines/{name}")
 
     def explain_route(
-        self, lang: str, multi_speaker: bool = False, prefer_fast: bool = False
+        self,
+        lang: str,
+        multi_speaker: bool = False,
+        prefer_fast: bool = False,
+        mode: str | None = None,
     ) -> dict:
-        return self._get(
-            "/v2/route",
-            {"lang": lang, "multi_speaker": multi_speaker, "prefer_fast": prefer_fast},
-        )
+        params = {
+            "lang": lang,
+            "multi_speaker": multi_speaker,
+            "prefer_fast": prefer_fast,
+        }
+        if mode is not None:
+            params["mode"] = mode
+        return self._get("/v2/route", params)
 
     # ======================== Lifecycle ========================
 
