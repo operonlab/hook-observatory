@@ -437,16 +437,18 @@ async def synthesize_v2_stream(payload: dict, request: Request):
             raise HTTPException(400, f"unknown engine: {engine_param}")
         engine_name = engine_param
 
-    # Engines with safe_rtf > _STREAM_MAX_RTF are too slow for SSE — the
-    # client would have to pre-roll the entire audio before press-play,
-    # defeating the point. Refuse and tell the client to use /v2/synthesize/long.
+    # Engines with safe_rtf > _STREAM_MAX_RTF will need a pre-roll that
+    # approaches the full audio duration, mostly defeating the point of
+    # stream mode. We do NOT reject — caller decides; we just surface a
+    # warning in the meta event so the client can decide what to do.
     safe_rtf = _SAFE_RTF.get(engine_name, _DEFAULT_SAFE_RTF)
-    if safe_rtf > _STREAM_MAX_RTF:
-        raise HTTPException(
-            400,
+    stream_advisable = safe_rtf <= _STREAM_MAX_RTF
+    advisory_warning = None
+    if not stream_advisable:
+        advisory_warning = (
             f"engine '{engine_name}' has safe_rtf={safe_rtf} > {_STREAM_MAX_RTF}; "
-            f"stream mode would require pre-rolling the full audio. "
-            f"Use /v2/synthesize/long instead.",
+            f"first-segment pre-roll may approach total audio duration. "
+            f"Consider /v2/synthesize/long for this engine."
         )
 
     from text_segmenter import split_for_tts
@@ -480,6 +482,8 @@ async def synthesize_v2_stream(payload: dict, request: Request):
                 "total_segments": len(chunks),
                 "pre_roll_sec": pre_roll_sec,
                 "safe_rtf": safe_rtf,
+                "stream_advisable": stream_advisable,
+                "warning": advisory_warning,
                 "expected_total_dur_s": expected_total_dur,
                 "seg_chunks": chunks,
             },

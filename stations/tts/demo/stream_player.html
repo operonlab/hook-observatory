@@ -48,8 +48,8 @@
       <option value="vibevoice">vibevoice (zh/en)</option>
       <option value="cosyvoice_v3_native">cosyvoice_v3_native (zh/en/ja)</option>
       <option value="qwen3tts_gpu">qwen3tts_gpu (zh/en/ja/ko)</option>
-      <option value="indextts2_base" disabled>indextts2_base — RTF too high for stream, use /v2/synthesize/long</option>
-      <option value="indextts2_jmica" disabled>indextts2_jmica — RTF too high for stream, use /v2/synthesize/long</option>
+      <option value="indextts2_base">indextts2_base (zh/en — RTF high, pre-roll will be long)</option>
+      <option value="indextts2_jmica">indextts2_jmica (ja — RTF high, pre-roll will be long)</option>
     </select>
   </div>
   <div>
@@ -192,6 +192,9 @@ async function startStream() {
           expectedDurS = payload.expected_total_dur_s || 0;
           totalSegments = payload.total_segments;
           resetLog(`[+${wall}s] meta — engine=${payload.engine} sr=${sampleRate} segs=${totalSegments} pre_roll=${preRoll}s safe_rtf=${payload.safe_rtf}`);
+          if (payload.warning) {
+            log(`⚠ server warning: ${payload.warning}`);
+          }
           (payload.seg_chunks || []).forEach((c, i) => setSegRow(i, 'pending', c.length > 50 ? c.slice(0, 50) + '…' : c));
         }
         else if (eventName === 'audio') {
