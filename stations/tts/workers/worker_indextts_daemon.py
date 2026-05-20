@@ -17,6 +17,58 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from base_daemon import WorkerDaemon
 
+# 8-dim emotion vector order matches IndexTTS-2's emo_bias in
+# lab/indextts/indextts/infer_v2.py (line 344):
+#   [happy, angry, sad, afraid, disgusted, melancholic, surprised, calm]
+EMOTION_PRESETS: dict[str, list[float]] = {
+    "happy":       [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "angry":       [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "sad":         [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    "afraid":      [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+    "disgusted":   [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+    "melancholic": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+    "surprised":   [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+    "calm":        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+    "neutral":     [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+}
+
+
+def _resolve_emotion(emotion: dict | None) -> dict:
+    """Translate engine_specific.emotion → IndexTTS-2 infer() kwargs.
+
+    Priority (matches infer_v2.py L396-410): emo_audio > emo_text > vector/preset.
+    Returns a dict ready to splat into infer(); empty dict when no emotion given.
+    """
+    if not emotion or not isinstance(emotion, dict):
+        return {}
+    alpha = float(emotion.get("alpha", 1.0))
+    alpha = max(0.0, min(1.0, alpha))
+    out: dict = {"emo_alpha": alpha}
+
+    if emotion.get("audio"):
+        out["emo_audio_prompt"] = emotion["audio"]
+        return out
+
+    if emotion.get("text"):
+        out["use_emo_text"] = True
+        out["emo_text"] = emotion["text"]
+        return out
+
+    vec = emotion.get("vector")
+    if vec is None and emotion.get("preset"):
+        preset = str(emotion["preset"]).lower()
+        if preset not in EMOTION_PRESETS:
+            raise ValueError(
+                f"unknown emotion preset '{preset}'; "
+                f"choose from {sorted(EMOTION_PRESETS)}"
+            )
+        vec = EMOTION_PRESETS[preset]
+    if vec is not None:
+        if len(vec) != 8:
+            raise ValueError(f"emotion vector must be 8-dim, got {len(vec)}")
+        out["emo_vector"] = [float(v) for v in vec]
+    return out
+
 
 class WorkerIndexTTSDaemon(WorkerDaemon):
     LAB_INDEXTTS = "C:/Users/User/workshop/lab/indextts"
@@ -105,10 +157,17 @@ class WorkerIndexTTSDaemon(WorkerDaemon):
 
         import soundfile as sf
 
+        emo_kwargs = _resolve_emotion(kwargs.get("emotion"))
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
             tmp_wav = tf.name
         try:
-            self.engine_obj.infer(spk_audio_prompt=ref_wav, text=text, output_path=tmp_wav)
+            self.engine_obj.infer(
+                spk_audio_prompt=ref_wav,
+                text=text,
+                output_path=tmp_wav,
+                **emo_kwargs,
+            )
             audio, sr = sf.read(tmp_wav, dtype="float32")
             if audio.ndim > 1:
                 audio = audio.mean(axis=1)
