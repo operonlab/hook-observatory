@@ -52,6 +52,74 @@ logger = logging.getLogger(__name__)
 router_v2 = APIRouter(prefix="/v2", tags=["v2"])
 
 
+def _trailing_punct(text: str) -> str:
+    """Return the last punctuation char of `text` (for gap-length lookup)."""
+    text = text.rstrip()
+    return text[-1] if text else ""
+
+
+# Inter-segment silence (ms) keyed by trailing punctuation of the previous chunk.
+# Sentence ends → longer pause; clause boundaries → shorter; default → short
+# spacing so concatenated segments don't sound rushed.
+_GAP_MS = {
+    "。": 280,
+    ".": 280,
+    "!": 280,
+    "?": 280,
+    "！": 280,
+    "？": 280,
+    "\n": 280,
+    "，": 140,
+    ",": 140,
+    "、": 140,
+    ";": 200,
+    "；": 200,
+    ":": 160,
+    "：": 160,
+}
+_DEFAULT_GAP_MS = 100
+_CROSSFADE_MS = 30  # short linear crossfade at segment boundary to avoid clicks
+
+
+def _concat_with_gap(audios: list[np.ndarray], sr: int, chunks: list[str]) -> np.ndarray:
+    """Concatenate per-segment audio with prosody-aware silence + crossfade.
+
+    Between segment i and i+1:
+      1. Apply linear crossfade of `_CROSSFADE_MS` over the boundary
+         (prevents clicks from abrupt amplitude change).
+      2. Insert silence of `_GAP_MS[trailing_punct]` to honor punctuation
+         pacing — short for comma/colon, long for period/question.
+    """
+    if len(audios) <= 1:
+        return audios[0] if audios else np.zeros(0, dtype=np.float32)
+
+    xfade = int(sr * _CROSSFADE_MS / 1000)
+    out: list[np.ndarray] = []
+    out.append(audios[0])
+    for i in range(1, len(audios)):
+        prev_text = chunks[i - 1] if i - 1 < len(chunks) else ""
+        gap_ms = _GAP_MS.get(_trailing_punct(prev_text), _DEFAULT_GAP_MS)
+        gap_samples = int(sr * gap_ms / 1000)
+
+        cur = audios[i]
+        # Apply crossfade: blend tail of out[-1] with head of cur over xfade samples
+        if xfade > 0 and len(out[-1]) > xfade and len(cur) > xfade:
+            fade_out = np.linspace(1.0, 0.0, xfade, dtype=np.float32)
+            fade_in = np.linspace(0.0, 1.0, xfade, dtype=np.float32)
+            tail = out[-1][-xfade:] * fade_out
+            head = cur[:xfade] * fade_in
+            blended = tail + head
+            out[-1] = np.concatenate([out[-1][:-xfade], blended])
+            cur = cur[xfade:]
+
+        # Insert prosody silence
+        if gap_samples > 0:
+            out.append(np.zeros(gap_samples, dtype=np.float32))
+        out.append(cur)
+
+    return np.concatenate(out)
+
+
 def _encode_audio(
     audio: np.ndarray, sr: int, output_mode: OutputMode, output_path: str | None, engine_name: str
 ) -> dict[str, Any]:
@@ -204,7 +272,7 @@ async def synthesize_v2_long(payload: dict, request: Request) -> dict:
         sr = s
         seg_durs.append(round(len(a) / s, 3))
 
-    full = np.concatenate(audios) if len(audios) > 1 else audios[0]
+    full = _concat_with_gap(audios, sr, chunks)
     payload_out = _encode_audio(full, sr, output_mode, output_path, engine_name)
     payload_out["segments"] = len(chunks)
     payload_out["seg_durations_s"] = seg_durs
@@ -316,6 +384,14 @@ async def synthesize_v2_stream(payload: dict, request: Request):
                 logger.exception("stream chunk %d failed", idx)
                 yield _sse("error", {"error": str(e), "chunk_idx": idx})
                 return
+            # Append prosody silence to the END of this segment based on its
+            # trailing punctuation — gives client-side concat the same pacing
+            # as /v2/synthesize/long. Last segment gets no tail silence.
+            if idx < len(chunks) - 1:
+                gap_ms = _GAP_MS.get(_trailing_punct(chunk), _DEFAULT_GAP_MS)
+                pad = int(sr * gap_ms / 1000)
+                if pad > 0:
+                    audio = np.concatenate([audio, np.zeros(pad, dtype=np.float32)])
             total_samples += len(audio)
             yield _sse(
                 "audio",
