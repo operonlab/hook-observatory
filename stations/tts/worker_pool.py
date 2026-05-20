@@ -271,20 +271,28 @@ class WorkerPool:
         voice_id: str = "master",
         speed: float = 1.0,
         ref_text: str | None = None,
+        engine_specific: dict[str, Any] | None = None,
     ) -> dict:
         async with self._lock:
             worker = await self._ensure_active(engine_name)
             self.last_used = time.monotonic()
-            resp = await worker.send(
-                {
-                    "op": "synth",
-                    "text": text,
-                    "lang": lang,
-                    "voice_id": voice_id,
-                    "speed": speed,
-                    "ref_text": ref_text or "",
-                }
-            )
+            # engine_specific keys (emotion/instruct/seed/...) flatten into the
+            # synth command — base_daemon dispatches via _do_synth(**cmd) so the
+            # extras reach engine-specific workers as kwargs. ref_text inside
+            # engine_specific is honored only when the positional ref_text is
+            # absent (positional path wins for backward compat).
+            es = dict(engine_specific or {})
+            es_ref_text = es.pop("ref_text", None)
+            payload = {
+                "op": "synth",
+                "text": text,
+                "lang": lang,
+                "voice_id": voice_id,
+                "speed": speed,
+                "ref_text": ref_text if ref_text else (es_ref_text or ""),
+                **es,
+            }
+            resp = await worker.send(payload)
             self.last_used = time.monotonic()
             return resp
 
@@ -293,22 +301,30 @@ class WorkerPool:
         engine_name: str,
         items: list[dict[str, Any]],
     ) -> list[dict]:
-        """Run multiple synth requests on the same engine — keep-alive between calls."""
+        """Run multiple synth requests on the same engine — keep-alive between calls.
+
+        Each item may carry an `engine_specific` dict; its keys flatten into the
+        per-call command the same way `synth` does, letting long/podcast/batch
+        endpoints attach per-segment emotion or instruct overrides.
+        """
         async with self._lock:
             worker = await self._ensure_active(engine_name)
             results = []
             for it in items:
                 self.last_used = time.monotonic()
-                resp = await worker.send(
-                    {
-                        "op": "synth",
-                        "text": it["text"],
-                        "lang": it["lang"],
-                        "voice_id": it.get("voice_id", "master"),
-                        "speed": it.get("speed", 1.0),
-                        "ref_text": it.get("ref_text", ""),
-                    }
-                )
+                es = dict(it.get("engine_specific") or {})
+                es_ref_text = es.pop("ref_text", None)
+                ref_text_val = it.get("ref_text")
+                payload = {
+                    "op": "synth",
+                    "text": it["text"],
+                    "lang": it["lang"],
+                    "voice_id": it.get("voice_id", "master"),
+                    "speed": it.get("speed", 1.0),
+                    "ref_text": ref_text_val if ref_text_val else (es_ref_text or ""),
+                    **es,
+                }
+                resp = await worker.send(payload)
                 results.append(resp)
                 self.last_used = time.monotonic()
             return results
