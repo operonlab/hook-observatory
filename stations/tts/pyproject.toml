@@ -15,4 +15,7 @@ dependencies = [
     "python-json-logger>=2.0,<4.0",
     "soundfile>=0.12",
     "numpy>=1.26",
+    # Traditional → Simplified Chinese conversion for zh-CN voices.
+    # Pure-Python build avoids C++ toolchain on arm64.
+    "opencc-python-reimplemented>=0.1.7",
 ]

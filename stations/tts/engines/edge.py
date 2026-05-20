@@ -23,6 +23,21 @@ from . import register
 
 DEFAULT_VOICE = "zh-CN-YunjianNeural"  # matches voice_notify.py
 
+# Polyphone fixes — zh-CN neural voices pick the high-frequency reading and
+# stumble on context-specific ones. Substitute a same-sound character so the
+# acoustic model has no ambiguity. Keys are Traditional and applied BEFORE
+# t2s, so one dict covers both Traditional and Simplified inputs.
+_PHONETIC_FIXES = {
+    "少爺": "紹爺",  # 少 ㄕㄠˋ vs ㄕㄠˇ — 紹/shao4 同音
+}
+
+
+def _apply_phonetic_fixes(text: str) -> str:
+    for src, dst in _PHONETIC_FIXES.items():
+        if src in text:
+            text = text.replace(src, dst)
+    return text
+
 
 def _speed_to_rate(speed: float) -> str:
     """Convert float speed multiplier (1.0 = normal) to edge-tts rate string.
@@ -71,6 +86,7 @@ class EdgeTTSEngine:
         if voice.startswith("zh-CN-"):
             from . import to_simplified
 
+            text = _apply_phonetic_fixes(text)
             text = to_simplified(text)
 
         if output_path is None:
