@@ -166,6 +166,14 @@ def _register_builtins():
         normalize,
         vad_trim,
     )
+    # speaker_similarity + visualize sit behind optional extras
+    # (resemblyzer / librosa+matplotlib). Import lazily so the core library
+    # remains usable without those deps installed.
+    for modname in ("speaker_similarity", "visualize"):
+        try:
+            __import__(f"{__name__}.{modname}")
+        except ImportError as e:
+            logger.debug("optional op '%s' not registered: %s", modname, e)
 
 
 _register_builtins()
