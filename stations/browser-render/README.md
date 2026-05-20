@@ -188,6 +188,18 @@ the full render pipeline against it, and asserts:
 
 ---
 
+## Known Issues
+
+- **chromiumoxide 0.9 incompatible with Chrome 148+ CDP** (incident 2026-05-20):
+  triggers `WS Invalid message: data did not match any variant of untagged enum
+  Message`. Short-term workaround: drop the `--enable-begin-frame-control`
+  Chromium flag — this restores rendering but **disables CDP virtual time
+  pause**, so animation timing reverts to wall-clock. Long-term: bump
+  `chromiumoxide` once upstream tracks the new CDP, or migrate the CDP layer
+  to Playwright. Keep an eye on `chromiumoxide` releases.
+
+---
+
 ## Files
 
 | Path | Purpose |
