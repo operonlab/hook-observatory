@@ -119,11 +119,18 @@ def _scan_single(projects_dir: Path, session_id: str) -> list[SessionMeta]:
     return []
 
 
-def _is_cold(meta: SessionMeta) -> bool:
-    """Check if a session meta represents a cold/archived session."""
-    # Archived stubs have file_size_bytes from the original, but the jsonl_path
-    # points to the stub, not a real JSONL.  We detect them by the .archived.json suffix.
+def is_archived_stub(meta: SessionMeta) -> bool:
+    """Check if a session meta represents a cold/archived session stub.
+
+    Archived stubs have file_size_bytes from the original, but the jsonl_path
+    points to the stub file, not a real JSONL. Detected by the .archived.json suffix
+    (covers both single .archived.json and legacy .archived.archived.json forms).
+    """
     return str(meta.jsonl_path).endswith(".archived.json")
+
+
+# Backwards-compatible alias (used by scan_sessions log)
+_is_cold = is_archived_stub
 
 
 # ---------------------------------------------------------------------------

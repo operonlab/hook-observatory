@@ -209,6 +209,33 @@ def archive_session(
         logger.error("jsonl_not_found", path=str(meta.jsonl_path))
         return None
 
+    # Guard against re-archiving a session whose .zst already exists in cold/.
+    # Means a prior archive run wrote the zst but DB/stub steps did not complete
+    # (or this is a stub the candidate filter let slip). Reconcile DB and skip
+    # compression rather than silently failing on "Not overwritten" prompt.
+    if archive_path.exists():
+        logger.warning(
+            "archive_target_exists_reconciling",
+            session_id=meta.session_id,
+            archive_path=str(archive_path),
+        )
+        from session_archiver import db
+
+        existing_size = archive_path.stat().st_size
+        ratio = 1 - (existing_size / max(meta.file_size_bytes, 1))
+        db.update_archive_info(
+            config, meta.session_id, str(archive_path),
+            "cold-archive", existing_size, ratio,
+        )
+        result.update({
+            "compressed_size": existing_size,
+            "compression_ratio": round(ratio, 4),
+            "companion_archived": companion_archive.exists(),
+            "saved_bytes": meta.file_size_bytes - existing_size,
+            "reconciled": True,
+        })
+        return result
+
     if not _compress_file_safe(meta.jsonl_path, archive_path, config.compression_level):
         return None
 
