@@ -75,8 +75,13 @@ def main():
         if instruct:
             # instruct2 channel takes a separate natural-language directive;
             # ref_transcript / sys_prompt are unused on this path.
+            # CosyVoice3 llm asserts <|endofprompt|> in instruct_text — append
+            # when missing. CosyVoice2 ignores the trailing tag harmlessly.
+            instruct_eop = (
+                instruct if "<|endofprompt|>" in instruct else instruct + "<|endofprompt|>"
+            )
             gen = cosy.inference_instruct2(
-                text, instruct, ref_wav, stream=False, speed=speed
+                text, instruct_eop, ref_wav, stream=False, speed=speed
             )
         elif lang == "zh" and ref_transcript:
             prompt_text_with_sys = sys_prompt + ref_transcript

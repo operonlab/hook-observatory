@@ -169,8 +169,16 @@ class WorkerTrioDaemon(WorkerDaemon):
             # instruct2 (CosyVoice2/3) takes the prompt wav directly and the
             # natural-language instruct text as a separate channel; ref_text /
             # SYS_PROMPT are not used in this path.
+            #
+            # CosyVoice3's llm/llm.py:479 asserts token id 151646 (<|endofprompt|>)
+            # appears in text or prompt_text. inference_instruct2 doesn't append
+            # it automatically (unlike inference_zero_shot via SYS_PROMPT), so we
+            # append here. CosyVoice2 ignores the trailing tag harmlessly.
+            instruct_eop = (
+                instruct if "<|endofprompt|>" in instruct else instruct + "<|endofprompt|>"
+            )
             gen = self.engine_obj.inference_instruct2(
-                text, instruct, ref_wav, stream=False
+                text, instruct_eop, ref_wav, stream=False
             )
         else:
             prompt_text_with_sys = SYS_PROMPT + (ref_text or "")
