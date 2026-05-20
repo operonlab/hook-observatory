@@ -1,1 +1,0 @@
-"""Matchcore schemas — placeholder."""

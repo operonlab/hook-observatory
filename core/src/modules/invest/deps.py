@@ -1,1 +1,0 @@
-"""Invest-specific FastAPI dependencies."""

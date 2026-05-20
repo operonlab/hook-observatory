@@ -1,1 +1,0 @@
-"""Workpool schemas — placeholder."""

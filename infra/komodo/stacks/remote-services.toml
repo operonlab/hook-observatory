@@ -1,7 +1,0 @@
-[[stack]]
-name = "ws-remote-services"
-server = "win-gpu"
-project_name = "ws-remote"
-file_paths = ["infra/docker/docker-compose.remote.yml"]
-# Credentials loaded from .env.remote on the Windows host (not checked in)
-# environment = """ ... """
