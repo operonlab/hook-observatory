@@ -44,6 +44,7 @@ handlers:
     context_inject: true
     context_relay: true
     claudemd_suggest: true
+    claudemd_writer: true       # SessionEnd: raw-blocks -> Haiku reflect -> pending
     cleanup_versions: true
     utility_watchdog: true
 

@@ -624,6 +624,7 @@ Timestamp: {timestamp}
                 }
             ]
             _write_claude_staging(suggestions)
+            _write_claude_raw_blocks(suggestions)
             total_claude_suggestions += 1
 
         # --- POST block to Core API ---
@@ -863,7 +864,12 @@ def _http_post(
 
 
 def _write_claude_staging(suggestions: list[dict]) -> None:
-    """Append CLAUDE.md suggestions to staging JSONL file."""
+    """Append CLAUDE.md suggestions to legacy pending JSONL.
+
+    Kept for backward compat during Phase 3 dual-write rollout. Once
+    claudemd_writer Go handler is in production, this can be removed and
+    raw-blocks.jsonl becomes the sole entry point.
+    """
     staging_dir = Path.home() / ".claude" / "data" / "claudemd-suggestions"
     staging_dir.mkdir(parents=True, exist_ok=True)
     staging_file = staging_dir / "pending.jsonl"
@@ -873,6 +879,27 @@ def _write_claude_staging(suggestions: list[dict]) -> None:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception as e:
         log(f"Failed to write CLAUDE.md staging: {e}")
+
+
+def _write_claude_raw_blocks(suggestions: list[dict]) -> None:
+    """Append CLAUDE.md raw blocks for downstream Go writer (claudemd_writer.go).
+
+    These are the unrefined facts; the Go handler reads them ~120s after
+    SessionEnd, runs LLM reflection to upgrade phrasing + classify
+    target_channel + embedding dedup, then writes to pending.jsonl.
+    """
+    staging_dir = Path.home() / ".claude" / "data" / "claudemd-suggestions"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    raw_file = staging_dir / "raw-blocks.jsonl"
+    try:
+        with open(raw_file, "a", encoding="utf-8") as f:
+            for entry in suggestions:
+                # Tag as raw for the Go writer to identify unprocessed entries
+                raw_entry = dict(entry)
+                raw_entry["_stage"] = "raw"
+                f.write(json.dumps(raw_entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        log(f"Failed to write CLAUDE.md raw-blocks: {e}")
 
 
 def _write_fallback_jsonl(

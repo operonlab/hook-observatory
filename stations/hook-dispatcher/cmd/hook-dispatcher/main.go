@@ -21,7 +21,7 @@ import (
 	"github.com/joneshong/hook-dispatcher/internal/core"
 
 	// Handler packages self-register via init().
-	_ "github.com/joneshong/hook-dispatcher/internal/handlers"
+	"github.com/joneshong/hook-dispatcher/internal/handlers"
 
 	"github.com/joneshong/hook-dispatcher/internal/handlers/sessionpipeline"
 	"github.com/joneshong/hook-dispatcher/internal/handlers/voicenotify"
@@ -55,6 +55,9 @@ func main() {
 				payload = os.Args[2]
 			}
 			sessionpipeline.RunnerMain(payload)
+			return
+		case "--claudemd-writer-runner":
+			handlers.ClaudemdWriterRunnerMain()
 			return
 		}
 	}
