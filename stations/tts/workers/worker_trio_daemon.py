@@ -199,6 +199,16 @@ class WorkerTrioDaemon(WorkerDaemon):
             text = f"Speaker 1: {text}"
 
         import numpy as np
+        import torch
+
+        # VibeVoice 使用 DDPM diffusion，內部仍有隨機 noise sampling，即使
+        # generation_config={'do_sample': False} 也只關 token sampling、不關
+        # diffusion noise。要每次穩定產出 + 音量一致，**強制 seed**：與 voice clone
+        # ref 配對的 fixed seed (42 = vibevoice 官方 demo 預設) 讓 SSE 5-段串流
+        # 跨段 prosody 漂移最小。
+        torch.manual_seed(42)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(42)
 
         voice_samples = [ref_wav]
         inputs = self.vibevoice_processor(
@@ -241,7 +251,16 @@ class WorkerTrioDaemon(WorkerDaemon):
         audio = audio_obj.detach().float().cpu().numpy().squeeze()
         if audio.ndim > 1:
             audio = audio.mean(axis=tuple(range(1, audio.ndim)))
-        return audio.astype(np.float32), 24000
+        audio = audio.astype(np.float32)
+        # Peak normalize to -3 dBFS (~0.707) to prevent clipping when later
+        # stages concatenate or re-encode. Without this, vibevoice 偶爾噴出
+        # peak ≈ 0.99 的段，跟前後段 RMS 不一致 → SSE 串流體感「音量忽大忽小、
+        # 像外國腔失真」。
+        peak = float(np.abs(audio).max())
+        if peak > 1e-6:
+            target = 0.707
+            audio = audio * (target / peak) if peak > target else audio
+        return audio, 24000
 
 
 if __name__ == "__main__":
