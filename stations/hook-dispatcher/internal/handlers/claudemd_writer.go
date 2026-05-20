@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -59,8 +60,37 @@ func claudemdWriterHandle(_, _ string, _ map[string]any, _ string) core.HookResu
 	if os.Getenv("CLAUDEMD_WRITER") == "0" {
 		return core.Allow()
 	}
-	go claudemdWriterRun()
+
+	// Detach a Go runner subprocess and return immediately so the writer
+	// survives parent (hook-dispatcher) exit. In-process goroutines would be
+	// killed when main() returns; we need true OS-level detachment for the
+	// 120s sleep + claude CLI haiku call.
+	self, err := os.Executable()
+	if err != nil {
+		return core.Allow()
+	}
+	if resolved, err := filepath.EvalSymlinks(self); err == nil {
+		self = resolved
+	}
+
+	cmd := exec.Command(self, "--claudemd-writer-runner")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "[claudemd-writer] spawn runner failed: %v\n", err)
+		return core.Allow()
+	}
+	_ = cmd.Process.Release()
 	return core.Allow()
+}
+
+// ClaudemdWriterRunnerMain is the entry for `hook-dispatcher --claudemd-writer-runner`.
+// It runs the delayed reflect-and-write loop in a detached subprocess so it
+// outlives the parent hook invocation.
+func ClaudemdWriterRunnerMain() {
+	claudemdWriterRun()
 }
 
 func claudemdWriterRun() {
