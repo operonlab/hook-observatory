@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+	"github.com/joneshong/hook-observatory/internal/core"
+	portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 )
 
 // recallEndpoint is the Core API URL for server-side recall text building.

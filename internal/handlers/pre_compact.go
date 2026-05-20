@@ -24,7 +24,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 // PreCompactPayload is the JSON shape sent by Claude Code for the PreCompact event.

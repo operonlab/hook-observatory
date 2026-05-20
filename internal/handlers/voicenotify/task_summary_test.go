@@ -115,7 +115,7 @@ func TestTaskSummaryFromPrompt_RejectsQuestions(t *testing.T) {
 		"你只移除第一個主詞嗎？還是還沒重新 build",
 		"幫我看一下這對不對？",
 		"where is the redis client defined?",
-		"我要怎麼啟動 hook-dispatcher 比較好？",
+		"我要怎麼啟動 hook-observatory 比較好？",
 	} {
 		if got := TaskSummaryFromPrompt(in); got != "" {
 			t.Errorf("question %q expected empty, got %q", in, got)

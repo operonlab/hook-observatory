@@ -6,13 +6,13 @@
 // internal/handlers/voicenotify.
 //
 // The queue consumer and deferred-announcement checker run as self-exec
-// modes of the hook-dispatcher binary (`--tts-consumer`, `--tts-checker
+// modes of the hook-observatory binary (`--tts-consumer`, `--tts-checker
 // <ident>`), so there is no longer any Python subprocess in this handler.
 package handlers
 
 import (
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	"github.com/joneshong/hook-dispatcher/internal/handlers/voicenotify"
+	"github.com/joneshong/hook-observatory/internal/core"
+	"github.com/joneshong/hook-observatory/internal/handlers/voicenotify"
 )
 
 func init() {

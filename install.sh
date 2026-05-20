@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hook-dispatcher installer
+# hook-observatory installer
 #
 # Registers the Go binary as Claude Code's hook executor by writing 10 event
 # entries into ~/.claude/settings.json.
@@ -23,13 +23,13 @@ set -euo pipefail
 # Paths
 # ---------------------------------------------------------------------------
 
-DISPATCHER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OBSERVATORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="${HOME}/.claude"
 HOOKS_DIR="${CLAUDE_DIR}/hooks"
 SETTINGS_JSON="${CLAUDE_DIR}/settings.json"
-DISPATCHER_TARGET="${HOOKS_DIR}/hook-dispatcher"
-CONFIG_EXAMPLE="${DISPATCHER_ROOT}/config.example.yaml"
-CONFIG_USER="${DISPATCHER_ROOT}/config.yaml"
+OBSERVATORY_TARGET="${HOOKS_DIR}/hook-observatory"
+CONFIG_EXAMPLE="${OBSERVATORY_ROOT}/config.example.yaml"
+CONFIG_USER="${OBSERVATORY_ROOT}/config.yaml"
 
 # ---------------------------------------------------------------------------
 # Hook events and their default timeouts (seconds). Using parallel arrays +
@@ -113,7 +113,7 @@ resolve_binary() {
     return
   fi
 
-  local local_bin="${DISPATCHER_ROOT}/bin/hook-dispatcher"
+  local local_bin="${OBSERVATORY_ROOT}/bin/hook-observatory"
   if [[ -x "$local_bin" ]]; then
     echo "$local_bin"
     return
@@ -124,9 +124,9 @@ resolve_binary() {
     err "Go binary missing and 'go' not in PATH. Run 'make build' or pass --binary."
     exit 1
   }
-  log "Building hook-dispatcher..."
+  log "Building hook-observatory..."
   if [[ "$dry_run" -eq 0 ]]; then
-    (cd "$DISPATCHER_ROOT" && make build >/dev/null)
+    (cd "$OBSERVATORY_ROOT" && make build >/dev/null)
   fi
   echo "$local_bin"
 }
@@ -192,16 +192,16 @@ remove_settings_hooks() {
 require_jq
 
 if [[ "$mode" == "uninstall" ]]; then
-  log "hook-dispatcher uninstaller"
+  log "hook-observatory uninstaller"
   log "============================"
   remove_settings_hooks
   log ""
-  log "Done. The binary at $DISPATCHER_TARGET is left in place — remove it"
+  log "Done. The binary at $OBSERVATORY_TARGET is left in place — remove it"
   log "manually if you no longer need it. Restart Claude Code to apply."
   exit 0
 fi
 
-log "hook-dispatcher installer"
+log "hook-observatory installer"
 log "=========================="
 
 # 1. Resolve binary (build if needed, or use --binary)
@@ -212,16 +212,16 @@ log "  source: $binary"
 
 # 2. Deploy binary
 log ""
-log "[2/3] Deploying → $DISPATCHER_TARGET"
+log "[2/3] Deploying → $OBSERVATORY_TARGET"
 maybe "mkdir -p '$HOOKS_DIR'"
-maybe "cp '$binary' '$DISPATCHER_TARGET'"
-maybe "chmod +x '$DISPATCHER_TARGET'"
+maybe "cp '$binary' '$OBSERVATORY_TARGET'"
+maybe "chmod +x '$OBSERVATORY_TARGET'"
 log "  installed"
 
 # 3. Register 10 hook events in settings.json
 log ""
 log "[3/3] Registering hooks → $SETTINGS_JSON"
-write_settings "$DISPATCHER_TARGET"
+write_settings "$OBSERVATORY_TARGET"
 
 # 4. Optionally seed config.yaml from example
 if [[ ! -f "$CONFIG_USER" ]]; then

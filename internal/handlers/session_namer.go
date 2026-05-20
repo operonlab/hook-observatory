@@ -24,7 +24,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 var sessionNamerValidColors = map[string]struct{}{

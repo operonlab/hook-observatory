@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+	"github.com/joneshong/hook-observatory/internal/core"
+	portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 )
 
 func init() {

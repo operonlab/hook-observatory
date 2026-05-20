@@ -76,7 +76,7 @@ func RunPipeline(sessionID, transcriptPath string) PipelineResult {
 	return result
 }
 
-// RunnerMain is the entry for `hook-dispatcher --session-pipeline-runner`.
+// RunnerMain is the entry for `hook-observatory --session-pipeline-runner`.
 // Reads `{"session_id", "transcript_path"}` JSON from argv[2] (safe for
 // exec.Command without shell quoting) and runs the full pipeline.
 func RunnerMain(payloadJSON string) {

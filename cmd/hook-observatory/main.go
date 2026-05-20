@@ -1,4 +1,4 @@
-// hook-dispatcher: Go drop-in replacement for ~/.claude/hooks/dispatcher.py.
+// hook-observatory: Go drop-in replacement for ~/.claude/hooks/dispatcher.py.
 //
 // Reads event_type from argv[1] and JSON payload from stdin, delegates to
 // internal/core.Dispatch, writes the response to stdout.
@@ -18,13 +18,13 @@ import (
 
 	workshoplog "github.com/joneshong/workshop/libs/workshop-log"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/core"
 
 	// Handler packages self-register via init().
-	"github.com/joneshong/hook-dispatcher/internal/handlers"
+	"github.com/joneshong/hook-observatory/internal/handlers"
 
-	"github.com/joneshong/hook-dispatcher/internal/handlers/sessionpipeline"
-	"github.com/joneshong/hook-dispatcher/internal/handlers/voicenotify"
+	"github.com/joneshong/hook-observatory/internal/handlers/sessionpipeline"
+	"github.com/joneshong/hook-observatory/internal/handlers/voicenotify"
 )
 
 // gitSHA is injected at build time via -ldflags.
@@ -34,7 +34,7 @@ var gitSHA = "dev"
 const pythonFallbackDisableEnv = "HOOK_DISPATCHER_NO_FALLBACK"
 
 func main() {
-	_ = workshoplog.Init("hook-dispatcher")
+	_ = workshoplog.Init("hook-observatory")
 
 	// Sub-modes: self-exec for detached background workers.
 	if len(os.Args) > 1 {

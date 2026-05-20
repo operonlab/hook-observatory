@@ -16,8 +16,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/joneshong/hook-dispatcher/internal/clients"
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/clients"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 const (

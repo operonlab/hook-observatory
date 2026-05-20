@@ -22,8 +22,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+	"github.com/joneshong/hook-observatory/internal/core"
+	portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 )
 
 // rerBarkServer points at the bark notification daemon (port 8090 in the

@@ -1,4 +1,4 @@
-# hook-dispatcher — Stage 1/2/3 Handoff
+# hook-observatory — Stage 1/2/3 Handoff
 
 > **Historical document — Stage 3 cutover completed 2026-04-17, full
 > hook-observatory Python source archived 2026-05-13** (see
@@ -38,7 +38,7 @@
 - `runcmd.go` + `buffer.go` — subprocess helper with timeout, bounded output capture
 - `dispatcher.go` — registry + phase-split routing (critical no-budget, deferrable 5 s budget) + panic recovery + output assembly
 
-### Entry (`cmd/hook-dispatcher/main.go`)
+### Entry (`cmd/hook-observatory/main.go`)
 - argv[1] = event_type, stdin = JSON, stdout = JSON/passthrough, always exit 0
 - Outermost panic recovery guarantees fail-open
 
@@ -48,16 +48,16 @@
 - `bash_safety.go` — PreToolUse+Bash, regex critical handler (rm/sudo/force push/pnpm/…)
 
 ### Build (`Makefile`)
-- `make build` → `bin/hook-dispatcher` with `-s -w` ldflags
+- `make build` → `bin/hook-observatory` with `-s -w` ldflags
 - `make test` / `make vet` / `make bench`
-- `make install` → copies binary to `~/.claude/hooks/hook-dispatcher`
+- `make install` → copies binary to `~/.claude/hooks/hook-observatory`
 
 ## Public API Frozen for Stage 2
 
 Stage 2 agents **must not touch** `internal/core/*`. Interact only through:
 
 ```go
-import "github.com/joneshong/hook-dispatcher/internal/core"
+import "github.com/joneshong/hook-observatory/internal/core"
 
 func init() {
     core.Register("PreToolUse", core.Entry{
@@ -94,7 +94,7 @@ Available helpers:
 2. **Self-register in `init()`** — do not touch any registry central file.
 3. **Write `<name>_test.go`** with ≥3 cases (normal / edge / error).
 4. **Must pass** `go test ./...`, `go vet ./...`, `gofmt -d .`.
-5. **Do not modify `internal/core/*`** — open an issue in `~/workshop/stations/hook-dispatcher/issues/` if you need a new shared util.
+5. **Do not modify `internal/core/*`** — open an issue in `~/workshop/stations/hook-observatory/issues/` if you need a new shared util.
 6. **Match Python fail-open semantics** — every handler returns `core.Allow()` on error, never panics past the recover boundary.
 7. **Parity over cleverness** — if Python has a quirky regex, mirror it; consistency with the shadow-compare is the goal.
 
@@ -116,7 +116,7 @@ These shared `internal/clients/` packages don't exist yet — whoever needs them
 // ~/.claude/settings.json — change after Stage 3 shadow validation passes
 "PreToolUse": [{
   "type": "command",
-  "command": "~/.claude/hooks/hook-dispatcher PreToolUse",
+  "command": "~/.claude/hooks/hook-observatory PreToolUse",
   "timeout": 20
 }]
 ```

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 const ghTimeout = 10 * time.Second

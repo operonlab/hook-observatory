@@ -13,7 +13,7 @@
 
 | Artifact | Status |
 |----------|--------|
-| Go binary `~/.claude/hooks/hook-dispatcher` (7.3 MB) | ✅ installed |
+| Go binary `~/.claude/hooks/hook-observatory` (7.3 MB) | ✅ installed |
 | Shadow-compare tool `bin/shadow-compare` | ✅ built |
 | 50-fixture shadow replay | ✅ **100% match**, Go 2.19× faster |
 | Python fallback (panic → exec dispatcher.py) | ✅ in main.go |
@@ -26,7 +26,7 @@
 
 ```diff
 -  "command": "/Users/joneshong/.local/bin/python3 ~/.claude/hooks/dispatcher.py <EVENT>"
-+  "command": "/Users/joneshong/.claude/hooks/hook-dispatcher <EVENT>"
++  "command": "/Users/joneshong/.claude/hooks/hook-observatory <EVENT>"
 ```
 
 Affected event types: `Notification`, `PostToolUse`, `PreCompact`, `PreToolUse`, `SessionEnd`, `SessionStart`, `Stop`, `SubagentStart`, `SubagentStop`, `UserPromptSubmit`.
@@ -36,7 +36,7 @@ Affected event types: `Notification`, `PostToolUse`, `PreCompact`, `PreToolUse`,
 ### Option A — Full swap (recommended after manual smoke in new session)
 ```bash
 cp ~/.claude/settings.json ~/.claude/settings.json.bak-$(date +%Y%m%d-%H%M%S)
-sed -i '' 's|/Users/joneshong/.local/bin/python3 ~/.claude/hooks/dispatcher.py |/Users/joneshong/.claude/hooks/hook-dispatcher |g' ~/.claude/settings.json
+sed -i '' 's|/Users/joneshong/.local/bin/python3 ~/.claude/hooks/dispatcher.py |/Users/joneshong/.claude/hooks/hook-observatory |g' ~/.claude/settings.json
 ```
 
 ### Option B — Gradual (low-risk events first)

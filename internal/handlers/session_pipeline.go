@@ -1,9 +1,9 @@
 // Package handlers — session_pipeline.go
 //
-// SessionEnd handler. Pre-filter stays in the hook-dispatcher process so
+// SessionEnd handler. Pre-filter stays in the hook-observatory process so
 // trivial sessions never pay the fork cost; everything else runs as a
-// detached `hook-dispatcher --session-pipeline-runner <json>` child so the
-// parent hook-dispatcher (a short-lived process) can exit immediately.
+// detached `hook-observatory --session-pipeline-runner <json>` child so the
+// parent hook-observatory (a short-lived process) can exit immediately.
 //
 // The runner itself is fully Go: pre-filter, redact, extract, archive,
 // reflect, log — see internal/handlers/sessionpipeline.
@@ -29,9 +29,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	"github.com/joneshong/hook-dispatcher/internal/handlers/sessionpipeline"
-	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+	"github.com/joneshong/hook-observatory/internal/core"
+	"github.com/joneshong/hook-observatory/internal/handlers/sessionpipeline"
+	portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 )
 
 func init() {
@@ -66,7 +66,7 @@ func sessionPipelineHandle(_, _ string, _ map[string]any, rawInput string) core.
 	transcriptPath, _ := data["transcript_path"].(string)
 
 	// Auto-detect transcript before forking so the trivial-skip fast path
-	// stays in the hook-dispatcher process.
+	// stays in the hook-observatory process.
 	if transcriptPath == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			if found := sessionpipeline.FindTranscript(filepath.Join(home, ".claude", "projects"), sessionID); found != "" {

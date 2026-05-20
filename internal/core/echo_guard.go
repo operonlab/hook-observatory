@@ -59,7 +59,7 @@ var echoSignatures = []*regexp.Regexp{
 }
 
 // successLinePattern matches repeated "hook foo: Success" lines produced
-// by the hook-dispatcher itself when output is pasted back in.
+// by the hook-observatory itself when output is pasted back in.
 var successLinePattern = regexp.MustCompile(`(?im)^hook [^\n]+:\s+Success\s*$`)
 
 // echoSignatureStripPatterns mirror echoSignatures at line level. They strip

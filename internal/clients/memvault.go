@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+	"github.com/joneshong/hook-observatory/internal/core"
+	portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 )
 
 const memvaultTimeout = 10 * time.Second

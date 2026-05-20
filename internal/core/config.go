@@ -33,21 +33,19 @@ func Cfg() *Config {
 	return cfgInstance
 }
 
-// observatoryRoot resolves the hook-dispatcher source directory (legacy name
-// kept for internal callers — the directory was renamed from hook-observatory
-// when Python was retired in 2026-05). Priority:
+// observatoryRoot resolves the hook-observatory source directory. Priority:
 //
-//	HOOK_DISPATCHER_ROOT env → HOOK_OBSERVATORY_ROOT env (backward-compat) →
-//	~/workshop/stations/hook-dispatcher.
+//	HOOK_OBSERVATORY_ROOT env → HOOK_DISPATCHER_ROOT env (backward-compat for
+//	the brief 2026-05-13 → 2026-05-21 rename) → ~/workshop/stations/hook-observatory.
 func observatoryRoot() string {
-	if v := os.Getenv("HOOK_DISPATCHER_ROOT"); v != "" {
-		return expandUser(v)
-	}
 	if v := os.Getenv("HOOK_OBSERVATORY_ROOT"); v != "" {
 		return expandUser(v)
 	}
+	if v := os.Getenv("HOOK_DISPATCHER_ROOT"); v != "" {
+		return expandUser(v)
+	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "workshop", "stations", "hook-dispatcher")
+	return filepath.Join(home, "workshop", "stations", "hook-observatory")
 }
 
 func loadConfig() *Config {

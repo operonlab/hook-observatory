@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	"github.com/joneshong/hook-dispatcher/internal/handlers/voicenotify"
+	"github.com/joneshong/hook-observatory/internal/core"
+	"github.com/joneshong/hook-observatory/internal/handlers/voicenotify"
 )
 
 // task_summary handler — auto-extracts a 30-rune task summary from each user

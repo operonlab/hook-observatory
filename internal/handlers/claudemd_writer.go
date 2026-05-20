@@ -30,7 +30,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 const (
@@ -62,7 +62,7 @@ func claudemdWriterHandle(_, _ string, _ map[string]any, _ string) core.HookResu
 	}
 
 	// Detach a Go runner subprocess and return immediately so the writer
-	// survives parent (hook-dispatcher) exit. In-process goroutines would be
+	// survives parent (hook-observatory) exit. In-process goroutines would be
 	// killed when main() returns; we need true OS-level detachment for the
 	// 120s sleep + claude CLI haiku call.
 	self, err := os.Executable()
@@ -86,7 +86,7 @@ func claudemdWriterHandle(_, _ string, _ map[string]any, _ string) core.HookResu
 	return core.Allow()
 }
 
-// ClaudemdWriterRunnerMain is the entry for `hook-dispatcher --claudemd-writer-runner`.
+// ClaudemdWriterRunnerMain is the entry for `hook-observatory --claudemd-writer-runner`.
 // It runs the delayed reflect-and-write loop in a detached subprocess so it
 // outlives the parent hook invocation.
 func ClaudemdWriterRunnerMain() {

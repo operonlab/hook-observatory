@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/clients"
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/clients"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 func init() {
@@ -42,14 +42,14 @@ func pmRepo() string {
 	}
 	// Read from config YAML directly — github.repo is a top-level key
 	// that core.Config doesn't expose, so we read config files ourselves.
-	// HOOK_DISPATCHER_ROOT (preferred) / HOOK_OBSERVATORY_ROOT (backward-compat) override default.
-	root := os.Getenv("HOOK_DISPATCHER_ROOT")
+	// HOOK_OBSERVATORY_ROOT (preferred) / HOOK_DISPATCHER_ROOT (backward-compat) override default.
+	root := os.Getenv("HOOK_OBSERVATORY_ROOT")
 	if root == "" {
-		root = os.Getenv("HOOK_OBSERVATORY_ROOT")
+		root = os.Getenv("HOOK_DISPATCHER_ROOT")
 	}
 	if root == "" {
 		home, _ := os.UserHomeDir()
-		root = filepath.Join(home, "workshop", "stations", "hook-dispatcher")
+		root = filepath.Join(home, "workshop", "stations", "hook-observatory")
 	}
 	for _, name := range []string{"config.yaml", "config.example.yaml"} {
 		data, err := os.ReadFile(filepath.Join(root, name))

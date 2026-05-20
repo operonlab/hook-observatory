@@ -7,8 +7,8 @@
 //   - Three-layer TTS fallback: Workshop stations/tts HTTP → edge-tts → macOS say
 //
 // This Go version keeps the same behaviour but collapses the process topology:
-// the consumer and checker run as `hook-dispatcher --tts-consumer` /
-// `hook-dispatcher --tts-checker <ident>` self-exec modes, so we no longer
+// the consumer and checker run as `hook-observatory --tts-consumer` /
+// `hook-observatory --tts-checker <ident>` self-exec modes, so we no longer
 // ship a Python script template as a string.
 package voicenotify
 
@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+	portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 )
 
 // Env-overridable configuration.
@@ -63,13 +63,13 @@ func SubagentVolume() string {
 	return envOr("CLAUDE_SUBAGENT_VOLUME", "0.3")
 }
 
-// SelfBinary returns the path to the currently running hook-dispatcher binary.
+// SelfBinary returns the path to the currently running hook-observatory binary.
 // Used to self-exec for consumer/checker modes.
 func SelfBinary() string {
 	exe, err := os.Executable()
 	if err != nil || exe == "" {
 		// Fallback to PATH lookup
-		return "hook-dispatcher"
+		return "hook-observatory"
 	}
 	// Resolve symlinks so `make install` + ~/.local/bin symlink still works.
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {

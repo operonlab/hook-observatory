@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/clients"
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/clients"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 const issueSyncRepo = "JonesHong/workshop"

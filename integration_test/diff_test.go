@@ -20,14 +20,14 @@ import (
 
 func buildBinary(t *testing.T) string {
 	t.Helper()
-	tmp, err := os.CreateTemp("", "hook-dispatcher-*")
+	tmp, err := os.CreateTemp("", "hook-observatory-*")
 	if err != nil {
 		t.Fatalf("tempfile: %v", err)
 	}
 	tmp.Close()
 	out := tmp.Name()
 
-	cmd := exec.Command("go", "build", "-o", out, "../cmd/hook-dispatcher")
+	cmd := exec.Command("go", "build", "-o", out, "../cmd/hook-observatory")
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("build failed: %v", err)

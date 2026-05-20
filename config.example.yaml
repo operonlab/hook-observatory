@@ -1,4 +1,4 @@
-# hook-dispatcher configuration — EXAMPLE
+# hook-observatory configuration — EXAMPLE
 # Copy this file to config.yaml and edit to match your environment.
 # config.yaml is gitignored; config.example.yaml is committed.
 #
@@ -112,7 +112,7 @@ tts:
 
 # ─── Paths ─────────────────────────────────────────────────────
 paths:
-  observatory_root: auto       # auto-detect from package location (legacy key name; resolves to hook-dispatcher dir)
+  observatory_root: auto       # auto-detect from package location (legacy key name; resolves to hook-observatory dir)
   claude_dir: "~/.claude"
   hooks_dir: "~/.claude/hooks"
   data_dir: "~/.claude/data"

@@ -11,7 +11,7 @@ import (
 	"os"
 	"time"
 
-	portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+	portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 )
 
 const liteLLMTimeout = 10 * time.Second

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	rclient "github.com/joneshong/hook-dispatcher/internal/clients"
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	rclient "github.com/joneshong/hook-observatory/internal/clients"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 func init() {

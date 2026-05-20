@@ -1,27 +1,39 @@
-# hook-dispatcher — Go-native hook executor for Claude Code
+# hook-observatory — Go-native hook executor for Claude Code
 
 Single statically-linked binary that handles all 10 [Claude Code hook
 events](https://docs.claude.com/en/docs/claude-code/hooks) — PreToolUse,
 PostToolUse, Stop, SessionStart, SessionEnd, UserPromptSubmit,
 Notification, PreCompact, SubagentStop, and the OnError fallback — in-process.
 
-Designed to drop into `~/.claude/hooks/hook-dispatcher` and replace
+Designed to drop into `~/.claude/hooks/hook-observatory` and replace
 per-event Python / shell scripts with one cold-start-free executable.
 
-## Migration note (2026-05-13)
+## Migration notes
 
-This repository was historically `operonlab/hook-observatory` (Python +
-FastAPI dashboard). As of v0.2.0 it is replaced by a Go binary. The old
-Python source is preserved in the upstream Workshop monorepo at
+### 2026-05-21 — binary renamed back to `hook-observatory`
+
+During the 2026-05-13 Python → Go rewrite the binary and install path
+were briefly renamed to `hook-dispatcher`. As of v0.2.2 the binary is
+renamed back to `hook-observatory` so the install path, GitHub repo,
+Homebrew formula, and blog narrative all line up.
+
+If you installed v0.2.0 or v0.2.1:
+
+```bash
+brew uninstall hook-observatory
+rm -f ~/.claude/hooks/hook-dispatcher
+brew update
+brew install operonlab/tap/hook-observatory
+~/.claude/hooks/hook-observatory --install   # or ./install.sh
+```
+
+### 2026-05-13 — Python → Go rewrite
+
+This repository was historically a Python + FastAPI dashboard. As of
+v0.2.0 the hook execution path is a single Go binary. The old Python
+source is preserved in the upstream Workshop monorepo at
 `stations/_archive/hook-observatory-py/` and is no longer maintained
 here.
-
-If you previously installed the Python version:
-
-1. Upgrade via Homebrew or the install script below.
-2. Run `hook-dispatcher --install` (or `./install.sh`) to rewrite the 10
-   hook entries in `~/.claude/settings.json` to point at the binary.
-3. Remove the old `~/.claude/hooks/dispatcher.py` if it still exists.
 
 ## Install
 
@@ -30,7 +42,7 @@ If you previously installed the Python version:
 ```bash
 brew tap operonlab/tap
 brew install hook-observatory
-hook-dispatcher --install   # registers hooks in ~/.claude/settings.json
+hook-observatory --install   # registers hooks in ~/.claude/settings.json
 ```
 
 ### One-liner installer
@@ -40,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/operonlab/hook-observatory/main/ins
 ```
 
 The installer detects your platform, downloads the matching binary from
-the latest GitHub release, places it at `~/.claude/hooks/hook-dispatcher`,
+the latest GitHub release, places it at `~/.claude/hooks/hook-observatory`,
 and writes 10 hook entries into `~/.claude/settings.json`.
 
 ### From source
@@ -74,16 +86,16 @@ handlers per your needs. Three handler tiers:
 
 | Variable | Purpose |
 |----------|---------|
-| `HOOK_DISPATCHER_ROOT` | Override install dir (preferred) |
-| `HOOK_OBSERVATORY_ROOT` | Backward-compat fallback (still honored) |
+| `HOOK_OBSERVATORY_ROOT` | Override install dir (preferred) |
+| `HOOK_DISPATCHER_ROOT` | Backward-compat fallback (honored for 2026-05-13 → 2026-05-21 installs) |
 
 ## Architecture
 
 ```
 ~/.claude/settings.json
-   │  10 hook event entries point at →  ~/.claude/hooks/hook-dispatcher
+   │  10 hook event entries point at →  ~/.claude/hooks/hook-observatory
    ▼
-hook-dispatcher (Go binary)
+hook-observatory (Go binary)
    ├─ reads YAML config
    ├─ dispatches event JSON on stdin to matching handler
    ├─ in-process handlers (bash_safety, secret_scan, …)
@@ -112,7 +124,7 @@ untested.
 
 ```
 cmd/
-  hook-dispatcher/      # main entry — reads stdin, dispatches event
+  hook-observatory/      # main entry — reads stdin, dispatches event
   echo-guard-cli/       # standalone CLI: TTS spam guard
   pre-compact-cli/      # standalone CLI: pre-compact event helper
   shadow-compare/       # diff Go vs Python dispatcher output (dev tool)
@@ -134,7 +146,7 @@ Makefile                # build / install / test targets
 go vet ./...
 gofmt -d .
 go test ./...
-go build -o /tmp/hd ./cmd/hook-dispatcher
+go build -o /tmp/hd ./cmd/hook-observatory
 ```
 
 CI runs all of the above + cross-builds 4 platforms on every push.
@@ -146,7 +158,7 @@ MIT — see `LICENSE` if present, otherwise inherited from upstream
 
 ## Provenance
 
-Maintained as a subtree mirror of `stations/hook-dispatcher/` in the
+Maintained as a subtree mirror of `stations/hook-observatory/` in the
 [Workshop](https://github.com/JonesHong/workshop) monorepo. Upstream
 changes land here via `git subtree split + push --force`. Pull requests
 filed against this repo are welcome but will be cherry-picked back to the

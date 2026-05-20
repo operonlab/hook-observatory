@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
+	"github.com/joneshong/hook-observatory/internal/core"
 )
 
 func init() {
@@ -60,15 +60,15 @@ var (
 )
 
 func init() {
-	// Load tool_registry.json from the hook-dispatcher assets dir.
-	// HOOK_DISPATCHER_ROOT (preferred) / HOOK_OBSERVATORY_ROOT (backward-compat) override default.
-	root := os.Getenv("HOOK_DISPATCHER_ROOT")
+	// Load tool_registry.json from the hook-observatory assets dir.
+	// HOOK_OBSERVATORY_ROOT (preferred) / HOOK_DISPATCHER_ROOT (backward-compat) override default.
+	root := os.Getenv("HOOK_OBSERVATORY_ROOT")
 	if root == "" {
-		root = os.Getenv("HOOK_OBSERVATORY_ROOT")
+		root = os.Getenv("HOOK_DISPATCHER_ROOT")
 	}
 	if root == "" {
 		home, _ := os.UserHomeDir()
-		root = filepath.Join(home, "workshop", "stations", "hook-dispatcher")
+		root = filepath.Join(home, "workshop", "stations", "hook-observatory")
 	}
 	regPath := filepath.Join(root, "assets", "tool_registry.json")
 	if data, err := os.ReadFile(regPath); err == nil {

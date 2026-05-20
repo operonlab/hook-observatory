@@ -46,14 +46,14 @@ Phase 1 MVP completed 2026-05-16. Next session picks up here.
 - Schema (from archive): `event_type`, `session_id`, `tool_name`, `hook_name`, `payload` (JSONB), `dedup_hash`, `created_at`
 - Spool format: `{event_type, ts, data}` JSON Lines
 - Spool path: `~/.hook-observatory/spool/` (events.jsonl + cursor.json + *.processing)
-- Existing Go pattern reference: `cmd/hook-dispatcher/main.go`
+- Existing Go pattern reference: `cmd/hook-observatory/main.go`
 - Nginx auth pattern reference: `sentinel` block at workshop-apps.inc
 
 ## Quick commands
 
 ```bash
 # Build + install
-cd ~/workshop/stations/hook-dispatcher
+cd ~/workshop/stations/hook-observatory
 go build -ldflags="-s -w" -o bin/hook-dashboard ./cmd/hook-dashboard
 cp bin/hook-dashboard ~/.local/bin/hook-dashboard
 

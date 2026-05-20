@@ -42,7 +42,7 @@ func EnqueueTTS(msg string) {
 	ensureConsumer()
 }
 
-// ensureConsumer spawns `hook-dispatcher --tts-consumer` detached if no
+// ensureConsumer spawns `hook-observatory --tts-consumer` detached if no
 // consumer is currently alive.
 func ensureConsumer() {
 	if consumerAlive() {
@@ -75,7 +75,7 @@ func processAliveFromPID(pidFile string) bool {
 }
 
 // spawnDetached starts an independent child process (session-detached) so it
-// outlives the parent hook-dispatcher invocation.
+// outlives the parent hook-observatory invocation.
 func spawnDetached(name string, args ...string) {
 	cmd := exec.Command(name, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}

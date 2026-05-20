@@ -1,14 +1,14 @@
 // Package portregistry exposes the Workshop port registry to Go consumers.
 //
 // This package was vendored from the Workshop monorepo's
-// libs/go-port-registry/ into hook-dispatcher's internal tree so the
+// libs/go-port-registry/ into hook-observatory's internal tree so the
 // external operonlab/hook-observatory repo can build self-contained
 // without depending on the monorepo. Keep ports.go in lock-step manually
 // when upstream re-runs `go generate ./...`.
 //
 // Usage:
 //
-//	import portregistry "github.com/joneshong/hook-dispatcher/internal/portregistry"
+//	import portregistry "github.com/joneshong/hook-observatory/internal/portregistry"
 //
 //	if svc, ok := portregistry.Get("core"); ok {
 //	    fmt.Println(svc.URL())                  // "http://127.0.0.1:10000"

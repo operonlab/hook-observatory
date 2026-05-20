@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// ConsumerMain implements the TTS queue consumer loop. Runs as `hook-dispatcher
+// ConsumerMain implements the TTS queue consumer loop. Runs as `hook-observatory
 // --tts-consumer`. Drains QueueFile and plays entries sequentially; exits after
 // 3 seconds of idle, matching the Python consumer's self-cleaning behaviour.
 func ConsumerMain() {
@@ -29,7 +29,7 @@ func ConsumerMain() {
 }
 
 // CheckerMain implements the deferred-announcement checker loop. Runs as
-// `hook-dispatcher --tts-checker <ident>`. Polls Redis until sub-agents have
+// `hook-observatory --tts-checker <ident>`. Polls Redis until sub-agents have
 // settled (or MaxWait elapses) then announces the pending message.
 func CheckerMain(ident string) {
 	ident = strings.TrimSpace(ident)

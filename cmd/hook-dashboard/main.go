@@ -1,7 +1,7 @@
 // hook-dashboard: HTTP dashboard for hook events.
 //
 // Reads events from ~/.hook-observatory/spool/events.jsonl (current source of
-// truth, written by hook-dispatcher) and serves stats + event list via REST API
+// truth, written by hook-observatory) and serves stats + event list via REST API
 // plus a single-page HTML viewer.
 //
 // MVP (Phase 1 vertical slice 2026-05-16):

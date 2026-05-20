@@ -1,4 +1,4 @@
-module github.com/joneshong/hook-dispatcher
+module github.com/joneshong/hook-observatory
 
 go 1.25.7
 
@@ -12,7 +12,6 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 )
-
 
 require github.com/joneshong/workshop/libs/workshop-log v0.0.0
 

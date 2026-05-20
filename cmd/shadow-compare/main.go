@@ -47,7 +47,7 @@ var reTS = regexp.MustCompile(`"ts":"[^"]+"`)
 func main() {
 	eventsFile := flag.String("events", "", "JSONL file of {event, input} lines")
 	spoolGlob := flag.String("spool-glob", "", "glob for hook-observatory spool files (events-*.jsonl, *.processing)")
-	goBinary := flag.String("go-bin", "", "Go hook-dispatcher binary (required)")
+	goBinary := flag.String("go-bin", "", "Go hook-observatory binary (required)")
 	pyBinary := flag.String("py-bin", "/Users/joneshong/.local/bin/python3", "Python interpreter")
 	pyDispatcher := flag.String("py-disp", "/Users/joneshong/.claude/hooks/dispatcher.py", "Python dispatcher script")
 	limit := flag.Int("limit", 0, "max events to process (0 = no limit)")

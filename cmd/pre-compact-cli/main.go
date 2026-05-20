@@ -17,8 +17,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/joneshong/hook-dispatcher/internal/core"
-	"github.com/joneshong/hook-dispatcher/internal/handlers"
+	"github.com/joneshong/hook-observatory/internal/core"
+	"github.com/joneshong/hook-observatory/internal/handlers"
 )
 
 func main() {
