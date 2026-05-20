@@ -3830,7 +3830,9 @@ source = { editable = "libs/sdk-client" }
 dependencies = [
     { name = "httpx" },
     { name = "python-json-logger" },
+    { name = "pyyaml" },
     { name = "redis" },
+    { name = "starlette" },
 ]
 
 [package.optional-dependencies]
@@ -3844,8 +3846,10 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "numpy", marker = "extra == 'audio'", specifier = ">=2.0" },
     { name = "python-json-logger", specifier = ">=2.0,<4.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "redis", specifier = ">=5.0" },
     { name = "soundfile", marker = "extra == 'audio'", specifier = ">=0.13" },
+    { name = "starlette", specifier = ">=0.40" },
 ]
 provides-extras = ["audio"]
 
