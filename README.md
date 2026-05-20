@@ -13,9 +13,11 @@ per-event Python / shell scripts with one cold-start-free executable.
 ### 2026-05-21 — binary renamed back to `hook-observatory`
 
 During the 2026-05-13 Python → Go rewrite the binary and install path
-were briefly renamed to `hook-dispatcher`. As of v0.2.2 the binary is
-renamed back to `hook-observatory` so the install path, GitHub repo,
-Homebrew formula, and blog narrative all line up.
+were briefly renamed to `hook-dispatcher`. As of the 2026-05-21 v0.2.1
+re-upload the binary is renamed back to `hook-observatory` so the
+install path, GitHub repo, Homebrew formula, and blog narrative all
+line up. (No version bump — release assets and tap formula stayed at
+v0.2.1; only the binary filename + URL changed.)
 
 If you installed v0.2.0 or v0.2.1:
 
