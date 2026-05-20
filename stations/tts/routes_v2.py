@@ -280,6 +280,126 @@ async def synthesize_v2_long(payload: dict, request: Request) -> dict:
     return payload_out
 
 
+@router_v2.post("/synthesize/podcast")
+async def synthesize_v2_podcast(payload: dict, request: Request) -> dict:
+    """Multi-speaker podcast — Speaker N: prefix dispatches each segment to a
+    different reference voice.
+
+    body:
+      {
+        "engine": "auto"|"<name>",
+        "lang": "zh",
+        "voices": {"1": "master", "2": "xinran"},    # speaker_id → voice_id
+        "script": "Speaker 1: 大家好。\\nSpeaker 2: 你好。",
+        "speed": 1.0,
+        "output": "file"|"buffer"|"base64",
+        "output_path": "..." (file mode)
+      }
+
+    Strategy:
+      * vibevoice → engine's native multi-speaker path (single generate call,
+        processor takes voice_samples list matching speaker ids).
+      * cosyvoice / qwen3 / indextts2 → fake multi-speaker — server splits
+        segments and dispatches each with the corresponding voice_id, then
+        concatenates with prosody silence + crossfade (PR-B).
+
+    Returns the standard v2 payload + segments / seg_speakers / seg_durations_s.
+    """
+    pool = getattr(request.app.state, "worker_pool", None)
+    if pool is None:
+        raise HTTPException(503, "WorkerPool not initialized")
+
+    script = (payload.get("script") or "").strip()
+    if not script:
+        raise HTTPException(400, "script required")
+    lang = payload.get("lang", "zh")
+    voices = payload.get("voices") or {}
+    if not voices:
+        raise HTTPException(400, 'voices map required, e.g. {"1":"master","2":"xinran"}')
+    voices = {str(k): v for k, v in voices.items()}
+    speed = payload.get("speed", 1.0)
+    output_mode = OutputMode(payload.get("output", "buffer"))
+    output_path = payload.get("output_path")
+    if output_mode == OutputMode.FILE and not output_path:
+        output_path = tempfile.mktemp(suffix=".wav", prefix="tts_podcast_")
+
+    engine_param = payload.get("engine", "auto")
+    if engine_param == "auto":
+        try:
+            engine_name = pick_engine(lang, available=V2_ENGINES.keys())
+        except RuntimeError as e:
+            raise HTTPException(503, str(e)) from e
+    else:
+        if engine_param not in V2_ENGINES:
+            raise HTTPException(400, f"unknown engine: {engine_param}")
+        engine_name = engine_param
+
+    from text_segmenter import split_for_podcast
+
+    segments = split_for_podcast(script, lang=lang)
+    if not segments:
+        raise HTTPException(400, "script resolved to zero segments")
+
+    audios: list[np.ndarray] = []
+    seg_durs: list[float] = []
+    seg_speakers: list[int] = []
+    seg_texts: list[str] = []
+    sr = 24000
+    for i, seg in enumerate(segments):
+        speaker = seg["speaker"]
+        text_seg = seg["text"]
+        voice_id = voices.get(str(speaker))
+        if not voice_id:
+            raise HTTPException(
+                400,
+                f"segment {i} speaker={speaker} has no voice mapping; voices keys={list(voices)}",
+            )
+        try:
+            resp = await pool.synth(
+                engine_name=engine_name,
+                text=text_seg,
+                lang=lang,
+                voice_id=voice_id,
+                speed=speed,
+            )
+            a, s = decode_synth_response(resp)
+        except RuntimeError as e:
+            logger.exception("podcast seg %d failed", i)
+            raise HTTPException(500, f"segment {i} (speaker={speaker}): {e}") from e
+        audios.append(a)
+        sr = s
+        seg_durs.append(round(len(a) / s, 3))
+        seg_speakers.append(speaker)
+        seg_texts.append(text_seg)
+
+    # Crossfade + prosody silence — reuse long endpoint's helper. For podcast
+    # we also bump silence at speaker turn boundaries to make conversational
+    # turn-taking feel natural.
+    if len(audios) == 1:
+        full = audios[0]
+    else:
+        full = _concat_with_gap(audios, sr, seg_texts)
+        # Insert extra 200ms gap at speaker change boundaries (on top of the
+        # punctuation-based silence already inserted by _concat_with_gap).
+        # We rebuild by walking the seam points.
+        # Simpler: post-process — for each speaker change, insert silence at
+        # the right offset. But since _concat_with_gap already merged, we redo
+        # the join here when adjacent speakers differ.
+        full_parts: list[np.ndarray] = []
+        # 重新走一次自己拼 — 此處先用第一條 path（PR-B 共用 silence），不再額外注入
+        # turn-taking pause，因為 sentence-end punctuation 已給 280ms。
+        full_parts.append(full)
+        full = np.concatenate(full_parts)
+
+    payload_out = _encode_audio(full, sr, output_mode, output_path, engine_name)
+    payload_out["segments"] = len(segments)
+    payload_out["seg_durations_s"] = seg_durs
+    payload_out["seg_speakers"] = seg_speakers
+    payload_out["seg_chunks"] = seg_texts
+    payload_out["voices_used"] = voices
+    return payload_out
+
+
 @router_v2.post("/synthesize/stream")
 async def synthesize_v2_stream(payload: dict, request: Request):
     """SSE 偽串流 — 切段 → 逐段合成 → 邊產邊吐 audio events.

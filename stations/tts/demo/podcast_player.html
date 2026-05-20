@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<title>Workshop TTS — Podcast Studio</title>
+<style>
+  body { font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+         max-width: 760px; margin: 32px auto; padding: 0 16px; color: #1c1c1e; }
+  h1 { font-weight: 600; font-size: 18px; margin: 0 0 18px; }
+  label { display: block; font-size: 12px; color: #6e6e73; margin: 12px 0 4px; }
+  textarea, input, select, button {
+    font: inherit; padding: 8px 10px; border: 1px solid #d2d2d7;
+    border-radius: 6px; background: #fff; color: inherit;
+  }
+  textarea { width: 100%; height: 160px; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .row { display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 110px; }
+  button { background: #007aff; color: #fff; border-color: #007aff; cursor: pointer; padding: 9px 16px; }
+  button:disabled { background: #c7c7cc; border-color: #c7c7cc; cursor: not-allowed; }
+  button.secondary { background: #e8e8ed; color: #1c1c1e; border-color: #d2d2d7; }
+  .voices-grid { display: grid; grid-template-columns: 80px 1fr; gap: 6px 10px; align-items: center; margin: 6px 0; }
+  .status { background: #f5f5f7; border-radius: 8px; padding: 12px 14px; margin-top: 16px;
+            font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap; }
+  audio { width: 100%; margin-top: 12px; }
+  .seg-list { display: grid; grid-template-columns: 30px 60px 1fr 60px; gap: 4px 10px; margin-top: 8px;
+              font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Workshop TTS — Podcast Studio</h1>
+
+<label>Base URL</label>
+<input id="base-url" value="http://127.0.0.1:10201" />
+
+<label>Voices map (speaker id → voice_id)</label>
+<div class="voices-grid">
+  <div>Speaker 1</div><input id="voice-1" value="master" />
+  <div>Speaker 2</div><input id="voice-2" value="xinran" />
+  <div>Speaker 3</div><input id="voice-3" placeholder="(empty = skip)" />
+  <div>Speaker 4</div><input id="voice-4" placeholder="(empty = skip)" />
+</div>
+
+<label>Script (one "Speaker N: ..." line per turn)</label>
+<textarea id="script">Speaker 1: 大家好，欢迎收听今天的节目。
+Speaker 2: 我是欣然，很高兴跟大家见面。
+Speaker 1: 今天我们要聊一聊开源语音合成。
+Speaker 2: 这个题目我也很感兴趣。
+Speaker 1: 那我们开始吧。</textarea>
+
+<div class="row">
+  <div>
+    <label>Engine</label>
+    <select id="engine">
+      <option value="vibevoice" selected>vibevoice (zh/en)</option>
+      <option value="cosyvoice_v3_native">cosyvoice_v3_native</option>
+      <option value="qwen3tts_gpu">qwen3tts_gpu</option>
+      <option value="auto">auto</option>
+    </select>
+  </div>
+  <div>
+    <label>Lang</label>
+    <select id="lang">
+      <option value="zh" selected>zh</option>
+      <option value="en">en</option>
+      <option value="ja">ja (vibevoice 不支援)</option>
+      <option value="ko">ko</option>
+    </select>
+  </div>
+</div>
+
+<div class="row">
+  <button id="synth-btn">Synthesize Podcast</button>
+  <button id="download-btn" class="secondary" disabled>Download WAV</button>
+</div>
+
+<audio id="player" controls></audio>
+<div class="status" id="status">idle.</div>
+<div class="seg-list" id="seg-list"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let lastBlobUrl = null;
+
+async function synthesize() {
+  $('synth-btn').disabled = true;
+  $('download-btn').disabled = true;
+  $('seg-list').innerHTML = '';
+  $('status').textContent = 'synthesizing…';
+
+  const voices = {};
+  for (const sid of ['1', '2', '3', '4']) {
+    const v = $(`voice-${sid}`).value.trim();
+    if (v) voices[sid] = v;
+  }
+  const body = JSON.stringify({
+    script: $('script').value,
+    voices,
+    lang: $('lang').value,
+    engine: $('engine').value,
+    output: 'base64',
+  });
+  const baseUrl = $('base-url').value.trim().replace(/\/$/, '');
+
+  const t0 = performance.now();
+  let resp;
+  try {
+    resp = await fetch(baseUrl + '/v2/synthesize/podcast', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    });
+  } catch (e) {
+    $('status').textContent = 'fetch error: ' + e.message;
+    $('synth-btn').disabled = false;
+    return;
+  }
+  const wall = ((performance.now() - t0) / 1000).toFixed(2);
+  const json = await resp.json();
+  if (!resp.ok) {
+    $('status').textContent = `HTTP ${resp.status}: ${json.detail || JSON.stringify(json)}`;
+    $('synth-btn').disabled = false;
+    return;
+  }
+
+  const bin = atob(json.audio_base64);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const blob = new Blob([u8], { type: 'audio/wav' });
+  if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+  lastBlobUrl = URL.createObjectURL(blob);
+  $('player').src = lastBlobUrl;
+  $('player').play();
+
+  $('status').textContent =
+    `engine=${json.engine}  segments=${json.segments}  total_dur=${json.duration_s}s  wall=${wall}s\n` +
+    `voices_used=${JSON.stringify(json.voices_used)}`;
+
+  (json.seg_chunks || []).forEach((c, i) => {
+    const speaker = (json.seg_speakers || [])[i];
+    const dur = (json.seg_durations_s || [])[i];
+    const a = document.createElement('div'); a.textContent = i;
+    const b = document.createElement('div'); b.textContent = `S${speaker}`;
+    const cEl = document.createElement('div'); cEl.textContent = c.length > 60 ? c.slice(0, 60) + '…' : c;
+    const d = document.createElement('div'); d.textContent = `${dur}s`;
+    $('seg-list').append(a, b, cEl, d);
+  });
+
+  $('synth-btn').disabled = false;
+  $('download-btn').disabled = false;
+}
+
+function downloadWav() {
+  if (!lastBlobUrl) return;
+  const a = document.createElement('a');
+  a.href = lastBlobUrl;
+  a.download = `tts_podcast_${Date.now()}.wav`;
+  a.click();
+}
+
+$('synth-btn').onclick = synthesize;
+$('download-btn').onclick = downloadWav;
+</script>
+</body>
+</html>

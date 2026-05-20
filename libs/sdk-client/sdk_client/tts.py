@@ -282,6 +282,38 @@ class TTSClient:
             body["max_chars"] = max_chars
         return self._post_json("/v2/synthesize/long", body)
 
+    # ======================== v2 Multi-speaker podcast ========================
+
+    def synthesize_podcast(
+        self,
+        script: str,
+        voices: dict[str, str],
+        lang: str = "zh",
+        engine: str = "auto",
+        output: str = "base64",
+        out_path: str | None = None,
+        speed: float = 1.0,
+    ) -> dict:
+        """POST /v2/synthesize/podcast — multi-speaker fake-via-dispatch.
+
+        Script uses "Speaker N: text" lines (one speaker per line). `voices`
+        maps speaker id → voice_id; each segment is dispatched to the engine
+        with the corresponding reference. vibevoice currently runs in the
+        same fake-dispatch mode as the others; native multi-speaker would
+        need a worker-side opcode extension.
+        """
+        body: dict[str, Any] = {
+            "script": script,
+            "voices": {str(k): v for k, v in voices.items()},
+            "lang": lang,
+            "engine": engine,
+            "output": output,
+            "speed": speed,
+        }
+        if out_path:
+            body["output_path"] = out_path
+        return self._post_json("/v2/synthesize/podcast", body)
+
     # ======================== v2 SSE streaming ========================
 
     def synthesize_stream(

@@ -216,6 +216,68 @@ def cmd_stream(args, client: TTSClient) -> int:
     return 0
 
 
+def cmd_podcast(args, client: TTSClient) -> int:
+    """Multi-speaker podcast: 'Speaker N:' script + voices map → single wav."""
+    # Parse --voices "1=master,2=xinran"
+    voices: dict[str, str] = {}
+    for pair in (args.voices or "").split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        if "=" not in pair:
+            print(f"bad --voices entry: {pair!r}, expected 'N=voice_id'", file=sys.stderr)
+            return 2
+        k, v = pair.split("=", 1)
+        voices[k.strip()] = v.strip()
+    if not voices:
+        print("--voices required, e.g. --voices '1=master,2=xinran'", file=sys.stderr)
+        return 2
+
+    if args.script_file:
+        with open(args.script_file, encoding="utf-8") as f:
+            script = f.read()
+    elif args.script:
+        # Convert literal "\n" sequences to real newlines so shell users can
+        # pass a multi-line script in a single --script argument.
+        script = args.script.replace("\\n", "\n")
+    else:
+        print("--script or --script-file required", file=sys.stderr)
+        return 2
+
+    res = client.synthesize_podcast(
+        script=script,
+        voices=voices,
+        lang=args.lang,
+        engine=args.engine,
+        output="base64",
+        speed=args.speed,
+    )
+    audio_b64 = res.get("audio_base64") or res.get("audio_bytes_b64", "")
+    if not audio_b64:
+        print(
+            f"server returned no audio: {json.dumps(res, ensure_ascii=False)[:200]}",
+            file=sys.stderr,
+        )
+        return 1
+    audio_bytes = base64.b64decode(audio_b64)
+    if not args.out:
+        import tempfile
+
+        args.out = tempfile.mktemp(suffix=".wav", prefix=f"tts_podcast_{res.get('engine', 'x')}_")
+    with open(args.out, "wb") as f:
+        f.write(audio_bytes)
+
+    if args.json:
+        print(json.dumps({**res, "audio_path": args.out}, ensure_ascii=False, indent=2))
+    else:
+        eng = res.get("engine", "?")
+        dur = res.get("duration_s", "?")
+        segs = res.get("segments", "?")
+        speakers = res.get("seg_speakers", [])
+        print(f"[{eng}] podcast: {dur}s in {segs} seg(s), speakers={speakers}  →  {args.out}")
+    return 0
+
+
 def cmd_list_engines(args, client: TTSClient) -> int:
     data = client.list_engines_v2()
     if args.json:
@@ -337,6 +399,21 @@ def build_parser() -> argparse.ArgumentParser:
     strm.add_argument("--segments-dir", help="also write each segment as seg_NNN.wav into this dir")
     strm.add_argument("--quiet", action="store_true", help="suppress per-event stderr progress")
 
+    # podcast subcommand — multi-speaker conversational synthesis
+    pod = sub.add_parser("podcast", help="Multi-speaker podcast (Speaker N: lines)")
+    src = pod.add_mutually_exclusive_group(required=True)
+    src.add_argument("--script", help="Inline script with 'Speaker N: text' lines")
+    src.add_argument("--script-file", help="Path to script file")
+    pod.add_argument(
+        "--voices",
+        required=True,
+        help="Speaker-id → voice_id map, e.g. '1=master,2=xinran'",
+    )
+    pod.add_argument("--lang", required=True, choices=["zh", "en", "ja", "ko"])
+    pod.add_argument("--engine", default="auto")
+    pod.add_argument("--out", help="output wav path")
+    pod.add_argument("--speed", type=float, default=1.0)
+
     le = sub.add_parser("list-engines")  # noqa: F841
     lv = sub.add_parser("list-voices")  # noqa: F841
 
@@ -380,6 +457,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_long(args, client)
         elif args.command == "stream":
             return cmd_stream(args, client)
+        elif args.command == "podcast":
+            return cmd_podcast(args, client)
         elif args.command == "list-engines":
             return cmd_list_engines(args, client)
         elif args.command == "list-voices":

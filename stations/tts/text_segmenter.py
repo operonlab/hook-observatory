@@ -79,6 +79,55 @@ def split_for_tts(text: str, lang: str = "zh", max_chars: int | None = None) -> 
     return out or [text]
 
 
+_SPEAKER_PREFIX = re.compile(r"^Speaker\s+(\d+)\s*:\s*(.*)$", re.IGNORECASE)
+
+
+def split_for_podcast(script: str, lang: str = "zh", max_chars: int | None = None) -> list[dict]:
+    """Parse a "Speaker N: ..." script into per-speaker per-sentence segments.
+
+    Input formats accepted:
+        Speaker 1: hello.\\nSpeaker 2: hi there.
+        Speaker 1: long paragraph with multiple sentences. another sentence.
+
+    Output: [{"speaker": int, "text": str}, ...], each chunk respects the same
+    max_chars cap as split_for_tts so long monologue lines still get sub-split.
+
+    Lines without a "Speaker N:" prefix attach to the current speaker (default
+    speaker=1 if the script never declares one — same default as VibeVoice's
+    processor._convert_text_to_script fallback).
+    """
+    cap = max_chars or DEFAULT_MAX_CHARS.get(lang, DEFAULT_FALLBACK)
+    out: list[dict] = []
+    current_speaker = 1
+    pending_text = ""
+
+    def _flush(speaker: int, text: str) -> None:
+        text = text.strip()
+        if not text:
+            return
+        for chunk in split_for_tts(text, lang=lang, max_chars=cap):
+            out.append({"speaker": speaker, "text": chunk})
+
+    for raw in (script or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = _SPEAKER_PREFIX.match(line)
+        if m:
+            # Flush previous speaker's accumulated text first
+            _flush(current_speaker, pending_text)
+            pending_text = ""
+            current_speaker = int(m.group(1))
+            rest = m.group(2).strip()
+            if rest:
+                pending_text = rest
+        else:
+            pending_text = (pending_text + " " + line).strip() if pending_text else line
+
+    _flush(current_speaker, pending_text)
+    return out
+
+
 def _split_oversized(sent: str, cap: int) -> list[str]:
     """Tier 2 → Tier 3: try soft boundaries first, then force chunks."""
     soft = _split_by(_SOFT_BOUNDARIES, sent)
