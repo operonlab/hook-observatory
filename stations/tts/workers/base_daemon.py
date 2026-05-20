@@ -221,15 +221,21 @@ class WorkerDaemon(ABC):
             }
 
     def main_loop(self) -> int:
-        # Critical: many ML libs print INFO/WARN to stdout at import time (vllm,
-        # modelscope, qwen-tts, vibevoice). That pollutes our JSONL protocol.
-        # Redirect stdout → stderr; keep a private fd for protocol responses.
-        _real_stdout = sys.stdout
-        sys.stdout = sys.stderr
+        # Critical: many ML libs print INFO/WARN/LINK errors at native fd 1 level
+        # (vllm / modelscope / qwen-tts / vibevoice via Python; deepspeed via
+        # C++ JIT compile). Pure `sys.stdout = sys.stderr` only catches Python
+        # prints — native fd 1 still bleeds into our JSONL protocol.
+        #
+        # Fix: dup native fd 1 to a backup, then dup fd 2 over fd 1 so anyone
+        # writing to fd 1 actually goes to stderr. Protocol writes go through
+        # os.write on the backup fd.
+        real_stdout_fd = os.dup(1)
+        os.dup2(2, 1)
+        sys.stdout = sys.stderr  # Python-side: keep prints in stderr too
 
         def _write(obj: dict[str, Any]) -> None:
-            _real_stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
-            _real_stdout.flush()
+            line = (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+            os.write(real_stdout_fd, line)
 
         # Signal ready so station knows daemon is alive
         _write({"ready": True, "supported": self.supported_engines()})

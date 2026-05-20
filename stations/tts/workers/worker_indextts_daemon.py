@@ -36,10 +36,20 @@ class WorkerIndexTTSDaemon(WorkerDaemon):
         ckpt_dir = "checkpoints" if engine_name == "indextts2_base" else "checkpoints_ja"
         from indextts.infer_v2 import IndexTTS2
 
+        # Performance flags (2026-05-20 RTF 2.5 → 1.0-1.5 expected on RTX 3090):
+        #   use_fp16=True            — GPT autoregressive ~1.5-2× faster
+        #   use_cuda_kernel=True     — BigVGan vocoder fused activation ~1.2-1.5×
+        #   use_deepspeed=True       — transformer inference optimizer
+        #     (DeepSpeed Windows wheel 0.17.5+e1560d84 from 6Morpheus6/deepspeed-windows-wheels;
+        #     IndexTTS2 ctor has graceful try/except fallback if import fails — see
+        #     infer_v2.py:92-95)
         self.engine_obj = IndexTTS2(
             model_dir=ckpt_dir,
             cfg_path=f"{ckpt_dir}/config.yaml",
-            device="cuda",
+            device="cuda:0",
+            use_fp16=True,
+            use_cuda_kernel=True,
+            use_deepspeed=True,
         )
 
     def _do_unload(self) -> None:
