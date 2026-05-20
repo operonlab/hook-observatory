@@ -12,6 +12,7 @@ Every feature must implement all applicable layers: Backend → SDK → CLI → 
 - **sync→async**: `after_create/update/delete` calling `event_bus.publish()` → must use `asyncio.ensure_future()`
 - **Cache pattern**: Read-Through + Write-Invalidate at Core service layer
 - **Test data purge**: Must hard-delete, not just soft-delete
+- **Go `//go:embed` path basis**: relative to the `.go` file containing the directive, **not** the project root. After moving the embed source file or refactoring directory layout, verify embedded resources still resolve.
 
 ## Frontend
 - **Station URLs**: Always relative paths, never absolute
@@ -51,6 +52,15 @@ Every feature must implement all applicable layers: Backend → SDK → CLI → 
 - `#(...)` calls MUST use shell script (`tmux_status.sh`), **NEVER** `#(python3 ...)`
 - Reason: tmux forks a subprocess per `#(cmd)` every status-interval seconds; Python startup ~1s/call × 13 = CPU 100%
 - Shell + jq reads same JSON file: 0.07s/call, no residual processes
+
+## Binary Deployment Locations (operonlab)
+
+operonlab subtree-released binaries (hook-dispatcher / hook-observatory family) sit in two locations:
+
+- **Local build** `~/.claude/hooks/<binary>` — newest, `make install` target, what `settings.json` hooks actually invoke
+- **Homebrew tap** `/opt/homebrew/bin/<binary>` → `Cellar/<name>/<ver>/bin/<binary>` — **same-source** open-source release, lags local by days-to-weeks
+
+**Treat brew copy as same-source-but-stale, not third-party.** E2E / critical scripts must pin to `~/.claude/hooks/` absolute path — the reason is "brew is stale", not "brew is unrelated". Don't fall back through PATH (`command -v`) in tests; it would silently pick up the stale brew copy.
 
 ## Skill Integration
 - CLI-first, MCP only when no CLI alternative exists
