@@ -53,6 +53,40 @@ async def _model_unloader_loop():
             f5_tts.unload_model()
 
 
+async def _prewarm_engines(pool) -> None:
+    """Fire one dummy synth per engine to amortize daemon-level cold costs
+    (DeepSpeed init, BigVGan kernel build, model load) before users arrive.
+
+    Runs as a background task so HTTP startup isn't blocked. Pool runs with
+    model_pool max=1, so the 5 engines warm sequentially via swap-reload.
+    """
+    import logging as _l
+
+    log = _l.getLogger(__name__)
+    engines = [
+        ("vibevoice", "zh", "你好"),
+        ("cosyvoice_v3_native", "zh", "你好"),
+        ("qwen3tts_gpu", "zh", "你好"),
+        ("indextts2_base", "zh", "你好"),
+        ("indextts2_jmica", "ja", "こんにちは"),
+    ]
+    import time as _t
+
+    for engine, lang, text in engines:
+        t0 = _t.monotonic()
+        try:
+            await pool.synth(
+                engine_name=engine,
+                text=text,
+                lang=lang,
+                voice_id="master",
+                speed=1.0,
+            )
+            log.info("prewarm %s ok in %.1fs", engine, _t.monotonic() - t0)
+        except Exception as e:
+            log.warning("prewarm %s failed: %s", engine, e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _unloader_task
@@ -70,6 +104,13 @@ async def lifespan(app: FastAPI):
             import logging as _l
 
             _l.getLogger(__name__).info("WorkerPool started (trio + qwen3 daemons)")
+
+            # Pre-warm all engines in background — daemon-level fixed costs
+            # (DeepSpeed init, cuda kernel build) attributed to boot time
+            # instead of first user request. Opt-out via TTS_PREWARM=0.
+            if os.environ.get("TTS_PREWARM", "1") == "1":
+                app.state.prewarm_task = asyncio.create_task(_prewarm_engines(pool))
+                _l.getLogger(__name__).info("prewarm task scheduled in background")
         except Exception as e:
             import logging as _l
 

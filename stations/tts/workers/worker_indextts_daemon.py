@@ -34,6 +34,13 @@ class WorkerIndexTTSDaemon(WorkerDaemon):
         # CWD 要對才能 import indextts package
         os.chdir(self.LAB_INDEXTTS)
         ckpt_dir = "checkpoints" if engine_name == "indextts2_base" else "checkpoints_ja"
+
+        # Mandatory BEFORE importing indextts → deepspeed → C++ JIT toolchain:
+        # native fd 1 must point to stderr so LINK errors / nvcc test output
+        # don't bleed into our JSONL protocol. main_loop already backed up the
+        # protocol fd.
+        self.redirect_native_stdout_to_stderr()
+
         from indextts.infer_v2 import IndexTTS2
 
         # Performance flags (2026-05-20 RTF 2.5 → 1.0-1.5 expected on RTX 3090):

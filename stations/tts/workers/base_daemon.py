@@ -100,6 +100,19 @@ class WorkerDaemon(ABC):
     DEFAULT_SEED = 42
     PEAK_TARGET = 0.707  # -3 dBFS
 
+    def redirect_native_stdout_to_stderr(self) -> None:
+        """Force fd 1 → fd 2 so native C/C++ libs writing to stdout (e.g.
+        DeepSpeed JIT LINK errors) don't pollute the JSONL protocol.
+
+        Safe to call multiple times. Subclasses should call this in `_do_load`
+        immediately before importing the offending native library, AFTER
+        main_loop has already backed up the protocol fd via `self._protocol_fd`.
+        """
+        try:
+            os.dup2(2, 1)
+        except Exception:
+            pass  # best-effort; protocol fd is already backed up
+
     def seed_rngs(self, seed: int | None = None) -> None:
         """Seed torch / cuda RNG so diffusion / sampling models are deterministic.
 
@@ -221,21 +234,20 @@ class WorkerDaemon(ABC):
             }
 
     def main_loop(self) -> int:
-        # Critical: many ML libs print INFO/WARN/LINK errors at native fd 1 level
-        # (vllm / modelscope / qwen-tts / vibevoice via Python; deepspeed via
-        # C++ JIT compile). Pure `sys.stdout = sys.stderr` only catches Python
-        # prints — native fd 1 still bleeds into our JSONL protocol.
-        #
-        # Fix: dup native fd 1 to a backup, then dup fd 2 over fd 1 so anyone
-        # writing to fd 1 actually goes to stderr. Protocol writes go through
-        # os.write on the backup fd.
-        real_stdout_fd = os.dup(1)
-        os.dup2(2, 1)
-        sys.stdout = sys.stderr  # Python-side: keep prints in stderr too
+        # Many ML libs print INFO/WARN to stdout at import time (vllm,
+        # modelscope, qwen-tts, vibevoice). Python-level redirect catches those.
+        # Subclasses that need additional native-fd redirect (e.g. indextts2
+        # with DeepSpeed's C++ JIT) call self._redirect_native_stdout() inside
+        # _do_load, just before the offending import.
+        sys.stdout = sys.stderr
+
+        # Back up the real protocol fd; writes go through os.write so future
+        # native-level dup2(2,1) doesn't break the protocol channel.
+        self._protocol_fd = os.dup(1)
 
         def _write(obj: dict[str, Any]) -> None:
             line = (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
-            os.write(real_stdout_fd, line)
+            os.write(self._protocol_fd, line)
 
         # Signal ready so station knows daemon is alive
         _write({"ready": True, "supported": self.supported_engines()})
