@@ -34,8 +34,8 @@
 <body>
 <h1>Workshop TTS — SSE Stream Player</h1>
 
-<label>Base URL (e.g. http://127.0.0.1:10201 or via Tailscale to win-gpu)</label>
-<input id="base-url" value="http://127.0.0.1:10201" />
+<label>Base URL (open SSH tunnel first: <code>ssh -fN -L 10210:127.0.0.1:10201 win-gpu</code>)</label>
+<input id="base-url" value="http://127.0.0.1:10210" />
 
 <label>Text (long paragraphs supported — server segments automatically)</label>
 <textarea id="text">今天我們要聊一個很重要的話題，就是開源語音合成技術的最新進展。從去年開始，零樣本聲音克隆技術突飛猛進，現在我們只需要短短幾秒鐘的參考音訊，就可以合成出非常接近本人的聲音。這個技術背後其實非常複雜，需要結合深度神經網絡、聲學模型、以及語言模型三大部分。</textarea>

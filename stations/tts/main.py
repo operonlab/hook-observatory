@@ -19,6 +19,7 @@ from pathlib import Path
 
 import uvicorn
 from engines import get_engine
+
 from sdk_client.station_bootstrap import setup_logging
 
 setup_logging("tts", log_dir=Path("/opt/homebrew/var/log/workshop") / "tts", json=True)
@@ -56,12 +57,52 @@ async def _model_unloader_loop():
 async def lifespan(app: FastAPI):
     global _unloader_task
     _unloader_task = asyncio.create_task(_model_unloader_loop())
+
+    # v2 worker pool (持久化 daemon) — fail-soft so v1 path can still serve
+    app.state.worker_pool = None
+    if os.environ.get("TTS_ENABLE_WORKER_POOL", "1") == "1":
+        try:
+            from worker_pool import WorkerPool
+
+            pool = WorkerPool()
+            await pool.start_all()
+            app.state.worker_pool = pool
+            import logging as _l
+
+            _l.getLogger(__name__).info("WorkerPool started (trio + qwen3 daemons)")
+        except Exception as e:
+            import logging as _l
+
+            _l.getLogger(__name__).warning("WorkerPool start failed: %s — v2 endpoints will 503", e)
+
     yield
+
     if _unloader_task:
         _unloader_task.cancel()
+    if getattr(app.state, "worker_pool", None) is not None:
+        try:
+            await app.state.worker_pool.stop_all()
+        except Exception as e:
+            import logging as _l
+
+            _l.getLogger(__name__).warning("WorkerPool stop failed: %s", e)
 
 
-app = FastAPI(title="TTS Station", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="TTS Station", version="0.4.0", lifespan=lifespan)
+
+# CORS — open for local demo HTML files. Station bind is 127.0.0.1, so
+# external access requires either an SSH tunnel or nginx reverse-proxy; the
+# CORS layer only matters for browsers opening demo/*.html via file:// or
+# from a different localhost port.
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # v2 router (cosyvoice_v3 / indextts2 / vibevoice / qwen3tts_gpu, win-gpu only)
 try:
@@ -70,6 +111,7 @@ try:
     app.include_router(router_v2)
 except ImportError as _e:
     import logging as _l
+
     _l.getLogger(__name__).warning("v2 router unavailable: %s", _e)
 
 
