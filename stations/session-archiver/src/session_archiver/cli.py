@@ -64,6 +64,14 @@ def cmd_scan(args: list[str]) -> None:
         if db.upsert_session(config, meta, score):
             upserted += 1
 
+    # Cleanup orphans: DB rows whose underlying JSONL has disappeared from disk.
+    # Only touch hot tier + unarchived rows to avoid clobbering cold/frozen/warm history.
+    # Scoped to scans of the full projects dir (skip when --session-id targeted one row).
+    orphans_pruned = 0
+    if not opts.session_id:
+        scanned_ids = {meta.session_id for meta, _ in scored}
+        orphans_pruned = db.cleanup_missing_hot_sessions(config, scanned_ids)
+
     # Warm tier promotion: generate summary + embedding for eligible hot sessions
     warmed = 0
     skipped_budget = 0
@@ -107,6 +115,7 @@ def cmd_scan(args: list[str]) -> None:
         "scanned": len(sessions),
         "upserted": upserted,
         "warmed": warmed,
+        "orphans_pruned": orphans_pruned,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -114,6 +123,8 @@ def cmd_scan(args: list[str]) -> None:
         print(json.dumps(result, indent=2))
     else:
         print(f"Scanned {len(sessions)} sessions, upserted {upserted} to DB")
+        if orphans_pruned:
+            print(f"Pruned {orphans_pruned} orphan hot rows (jsonl removed from disk)")
         if warmed:
             print(f"Promoted {warmed} sessions to warm (summary + embedding generated)")
 
@@ -218,22 +229,28 @@ def cmd_archive(args: list[str]) -> None:
     scored = score_all(sessions)
 
     # Active session guard — never archive sessions with a live PID
-    from session_archiver.scanner import get_active_session_ids
+    from session_archiver.scanner import get_active_session_ids, is_archived_stub
 
     active_ids = get_active_session_ids()
     if active_ids:
         logger.info("active_sessions_protected", count=len(active_ids))
 
-    # Filter candidates: score > threshold, age > min days, not active
+    # Filter candidates: not already archived (stub), score > threshold, age > min days, not active
     min_age = config.archive_min_age_days
     now = datetime.now(UTC)
     candidates = []
+    skipped_stubs = 0
     for meta, score in scored:
         if meta.session_id in active_ids:
+            continue
+        if is_archived_stub(meta):
+            skipped_stubs += 1
             continue
         age_days = (now - meta.last_modified).total_seconds() / 86400
         if score.total >= threshold and age_days >= min_age:
             candidates.append((meta, score))
+    if skipped_stubs:
+        logger.info("archive_skipped_stubs", count=skipped_stubs)
 
     if not candidates:
         msg = f"No sessions meet threshold ({threshold}) and age ({min_age}d) criteria"

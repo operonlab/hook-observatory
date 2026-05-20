@@ -942,3 +942,38 @@ def delete_session(config: Config, session_id: str) -> bool:
         return False
     finally:
         conn.close()
+
+
+def cleanup_missing_hot_sessions(config: Config, scanned_ids: set[str]) -> int:
+    """Delete DB rows whose JSONL has disappeared from disk.
+
+    Only purges tier='hot' AND archive_path IS NULL rows that are NOT in scanned_ids.
+    Preserves cold/warm/frozen and any already-archived hot rows.
+
+    Returns the number of rows pruned (0 on DB connection failure).
+    """
+    if not scanned_ids:
+        return 0
+    conn = get_connection(config)
+    if conn is None:
+        return 0
+    try:
+        with conn:
+            result = conn.execute(
+                """
+                DELETE FROM sessions
+                WHERE tier = 'hot'
+                  AND archive_path IS NULL
+                  AND session_id != ALL(%(sids)s)
+                """,
+                {"sids": list(scanned_ids)},
+            )
+            pruned = result.rowcount or 0
+        if pruned:
+            log.info("cleanup_orphan_hot", pruned=pruned)
+        return pruned
+    except Exception:
+        log.warning("cleanup_orphan_hot_failed", exc_info=True)
+        return 0
+    finally:
+        conn.close()
