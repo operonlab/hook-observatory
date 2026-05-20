@@ -57,24 +57,43 @@ class TTSClient:
         "disgusted", "melancholic", "surprised", "calm", "neutral",
     )
 
+    # alpha=0.4 chosen from speaker-similarity sweep (outputs/tts-emotion-smoke/
+    # similarity_bar.png, 2026-05-20). Resemblyzer d-vector vs master.wav:
+    #   alpha 0.2 → 0.890 (~ baseline 0.872, emotion barely audible)
+    #   alpha 0.4 → 0.841  ← sweet spot: emotion clear, voice still recognisable
+    #   alpha 0.6 → 0.794  (audible drift)
+    #   alpha 0.8 → 0.664  ← cliff: voice identity collapses
+    #   alpha 1.0 → 0.681
+    # IndexTTS-2's emo_vec is additive to the conditioning mel, so strong
+    # emotion overwhelms speaker identity by design. Callers who genuinely
+    # need maximum emotion expressiveness can pass alpha=1.0 explicitly.
+    DEFAULT_EMOTION_ALPHA = 0.4
+
     @staticmethod
-    def emotion_preset(name: str, alpha: float = 1.0) -> dict:
-        """Build engine_specific={"emotion":...} for IndexTTS-2 preset mode."""
+    def emotion_preset(name: str, alpha: float | None = None) -> dict:
+        """Build engine_specific={"emotion":...} for IndexTTS-2 preset mode.
+
+        alpha defaults to DEFAULT_EMOTION_ALPHA (0.4) — chosen from a sweep
+        showing voice fidelity holds until alpha=0.6 then collapses.
+        """
         if name not in TTSClient.EMOTION_NAMES:
             raise ValueError(
                 f"unknown emotion '{name}'; choose from {TTSClient.EMOTION_NAMES}"
             )
-        return {"emotion": {"preset": name, "alpha": float(alpha)}}
+        a = TTSClient.DEFAULT_EMOTION_ALPHA if alpha is None else float(alpha)
+        return {"emotion": {"preset": name, "alpha": a}}
 
     @staticmethod
-    def emotion_text(text: str, alpha: float = 1.0) -> dict:
+    def emotion_text(text: str, alpha: float | None = None) -> dict:
         """Build engine_specific for IndexTTS-2 emotion-from-text mode."""
-        return {"emotion": {"text": text, "alpha": float(alpha)}}
+        a = TTSClient.DEFAULT_EMOTION_ALPHA if alpha is None else float(alpha)
+        return {"emotion": {"text": text, "alpha": a}}
 
     @staticmethod
-    def emotion_audio(audio_path: str, alpha: float = 1.0) -> dict:
+    def emotion_audio(audio_path: str, alpha: float | None = None) -> dict:
         """Build engine_specific for IndexTTS-2 emotion-from-audio mode."""
-        return {"emotion": {"audio": audio_path, "alpha": float(alpha)}}
+        a = TTSClient.DEFAULT_EMOTION_ALPHA if alpha is None else float(alpha)
+        return {"emotion": {"audio": audio_path, "alpha": a}}
 
     @staticmethod
     def instruct(text: str) -> dict:

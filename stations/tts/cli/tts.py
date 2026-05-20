@@ -66,8 +66,13 @@ def _build_engine_specific(args) -> dict | None:
         emo["vector"] = vec
     if emo:
         alpha = getattr(args, "emotion_alpha", None)
-        if alpha is not None:
-            emo["alpha"] = float(alpha)
+        # Default alpha = TTSClient.DEFAULT_EMOTION_ALPHA (0.4) — speaker-
+        # similarity sweep showed voice identity collapses above ~0.6 (see
+        # outputs/tts-emotion-smoke/similarity_bar.png). Explicit
+        # --emotion-alpha 1.0 still works for callers who want max strength.
+        if alpha is None:
+            alpha = TTSClient.DEFAULT_EMOTION_ALPHA
+        emo["alpha"] = float(alpha)
         es["emotion"] = emo
     return es or None
 
