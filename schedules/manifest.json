@@ -677,6 +677,38 @@
       "category": "workshop",
       "type": "periodic",
       "enabled": true
+    },
+    {
+      "name": "ws-claudemd-weekly-health",
+      "label": "com.joneshong.scheduler.ws-claudemd-weekly-health",
+      "command": "~/.local/bin/python3 ~/.claude/scripts/claudemd_weekly_health.py",
+      "schedule": {
+        "calendar": {
+          "Hour": 4,
+          "Minute": 0,
+          "Weekday": 0
+        }
+      },
+      "description": "每週日 04:00: CLAUDE.md evolution backlog 健檢 (pending count / age / channel / stale entries) → weekly-report.md",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
+    },
+    {
+      "name": "ws-claudemd-memvault-secondary",
+      "label": "com.joneshong.scheduler.ws-claudemd-memvault-secondary",
+      "command": "~/.local/bin/python3 ~/.claude/scripts/claudemd_memvault_secondary.py",
+      "schedule": {
+        "calendar": {
+          "Hour": 2,
+          "Minute": 0,
+          "Weekday": 6
+        }
+      },
+      "description": "每週六 02:00: safety net — memvault polished blocks 二次萃取 (decision/preference/gotcha/lesson) → raw-blocks.jsonl",
+      "category": "workshop",
+      "type": "periodic",
+      "enabled": true
     }
   ]
 }
