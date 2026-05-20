@@ -55,7 +55,7 @@ func claudemdSuggestHandle(eventType, _ string, _ map[string]any, _ string) core
 	if len(pending) > claudemdSuggestMaxPreview {
 		parts = append(parts, fmt.Sprintf("  ... 還有 %d 條", len(pending)-claudemdSuggestMaxPreview))
 	}
-	parts = append(parts, "使用 `/review-claudemd` 審閱並套用")
+	parts = append(parts, "使用 `/review-evolution` 審閱並套用（四 channel：rules / claudemd / skill-obs / memory）")
 
 	return core.Message(strings.Join(parts, "\n"))
 }
