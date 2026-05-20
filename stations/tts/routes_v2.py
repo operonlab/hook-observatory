@@ -42,6 +42,11 @@ _SAFE_RTF: dict[str, float] = {
 }
 _DEFAULT_SAFE_RTF = 2.0
 
+# Engines beyond this RTF can't realistically stream — first-chunk pre-roll
+# would need to cover the entire audio duration, defeating the point.
+# /v2/synthesize/stream returns 400 for these; clients should use /v2/synthesize/long.
+_STREAM_MAX_RTF = 2.5
+
 logger = logging.getLogger(__name__)
 
 router_v2 = APIRouter(prefix="/v2", tags=["v2"])
@@ -244,19 +249,32 @@ async def synthesize_v2_stream(payload: dict, request: Request):
             raise HTTPException(400, f"unknown engine: {engine_param}")
         engine_name = engine_param
 
+    # Engines with safe_rtf > _STREAM_MAX_RTF are too slow for SSE — the
+    # client would have to pre-roll the entire audio before press-play,
+    # defeating the point. Refuse and tell the client to use /v2/synthesize/long.
+    safe_rtf = _SAFE_RTF.get(engine_name, _DEFAULT_SAFE_RTF)
+    if safe_rtf > _STREAM_MAX_RTF:
+        raise HTTPException(
+            400,
+            f"engine '{engine_name}' has safe_rtf={safe_rtf} > {_STREAM_MAX_RTF}; "
+            f"stream mode would require pre-rolling the full audio. "
+            f"Use /v2/synthesize/long instead.",
+        )
+
     from text_segmenter import split_for_tts
 
     chunks = split_for_tts(text, lang=lang, max_chars=max_chars)
     if not chunks:
         raise HTTPException(400, "text resolved to zero chunks")
 
-    safe_rtf = _SAFE_RTF.get(engine_name, _DEFAULT_SAFE_RTF)
-    # Pre-roll heuristic: time first segment will take to render, expressed
-    # as audio-seconds the client should buffer before press-play. Conservative:
-    # assume worst seg duration ≈ avg char count × seconds-per-char.
+    # Pre-roll heuristic (2026-05-20 修補): use max chunk dur (not avg) × safe_rtf
+    # × 1.5 buffer factor. Earlier "avg × (rtf - 1)" was too optimistic — the
+    # longest middle segment dominates stall risk (it must finish generating
+    # before its predecessor finishes playing).
     chars_per_sec = {"zh": 4.0, "ja": 4.0, "ko": 4.0, "en": 2.5}.get(lang, 4.0)
-    avg_seg_dur = (sum(len(c) for c in chunks) / len(chunks)) / chars_per_sec
-    pre_roll_sec = round(max(0.5, avg_seg_dur * (safe_rtf - 1)), 2)
+    max_seg_chars = max(len(c) for c in chunks)
+    max_seg_dur = max_seg_chars / chars_per_sec
+    pre_roll_sec = round(max(1.0, max_seg_dur * safe_rtf * 1.5 - max_seg_dur), 2)
     expected_total_dur = round(sum(len(c) for c in chunks) / chars_per_sec, 2)
 
     def _sse(event: str, data: dict) -> bytes:
