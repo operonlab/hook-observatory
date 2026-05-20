@@ -153,6 +153,10 @@ class WorkerTrioDaemon(WorkerDaemon):
         import numpy as np
         import torch
 
+        # CosyVoice v3 用 conditional flow matching (CFM) vocoder — 同 diffusion
+        # 家族，內部 noise 仍隨機。固定 seed 讓 SSE 跨段 / 重跑可重現。
+        self.seed_rngs()
+
         prompt_text_with_sys = SYS_PROMPT + (ref_text or "")
         gen = self.engine_obj.inference_zero_shot(text, prompt_text_with_sys, ref_wav, stream=False)
         chunks = [j["tts_speech"] for j in gen]
@@ -199,16 +203,11 @@ class WorkerTrioDaemon(WorkerDaemon):
             text = f"Speaker 1: {text}"
 
         import numpy as np
-        import torch
 
-        # VibeVoice 使用 DDPM diffusion，內部仍有隨機 noise sampling，即使
-        # generation_config={'do_sample': False} 也只關 token sampling、不關
-        # diffusion noise。要每次穩定產出 + 音量一致，**強制 seed**：與 voice clone
-        # ref 配對的 fixed seed (42 = vibevoice 官方 demo 預設) 讓 SSE 5-段串流
-        # 跨段 prosody 漂移最小。
-        torch.manual_seed(42)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(42)
+        # VibeVoice 使用 DDPM diffusion；generation_config={'do_sample': False}
+        # 只關 token sampler、不關 diffusion noise → 必須 explicit seed。
+        # 統一走 base_daemon.seed_rngs() 跟其他 engine 一致。
+        self.seed_rngs()
 
         voice_samples = [ref_wav]
         inputs = self.vibevoice_processor(
@@ -251,16 +250,8 @@ class WorkerTrioDaemon(WorkerDaemon):
         audio = audio_obj.detach().float().cpu().numpy().squeeze()
         if audio.ndim > 1:
             audio = audio.mean(axis=tuple(range(1, audio.ndim)))
-        audio = audio.astype(np.float32)
-        # Peak normalize to -3 dBFS (~0.707) to prevent clipping when later
-        # stages concatenate or re-encode. Without this, vibevoice 偶爾噴出
-        # peak ≈ 0.99 的段，跟前後段 RMS 不一致 → SSE 串流體感「音量忽大忽小、
-        # 像外國腔失真」。
-        peak = float(np.abs(audio).max())
-        if peak > 1e-6:
-            target = 0.707
-            audio = audio * (target / peak) if peak > target else audio
-        return audio, 24000
+        # Peak normalize 統一在 base_daemon.handle_cmd 做；engine 端只回原始 float32。
+        return audio.astype(np.float32), 24000
 
 
 if __name__ == "__main__":

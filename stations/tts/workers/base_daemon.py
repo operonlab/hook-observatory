@@ -95,6 +95,29 @@ class WorkerDaemon(ABC):
                 return (str(wav), transcript)
         return (None, "")
 
+    # ---- Determinism + amplitude safety (shared across all engines) ----
+
+    DEFAULT_SEED = 42
+    PEAK_TARGET = 0.707  # -3 dBFS
+
+    def seed_rngs(self, seed: int | None = None) -> None:
+        """Seed torch / cuda RNG so diffusion / sampling models are deterministic.
+
+        Subclass _do_synth() should call this before generate(). Centralized
+        here so seed value is consistent across cosyvoice / vibevoice /
+        indextts2 / qwen3 — and so stream endpoints get bit-identical output
+        as the long endpoint.
+        """
+        seed = self.DEFAULT_SEED if seed is None else seed
+        try:
+            import torch
+
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+        except ImportError:
+            pass  # cosyvoice / qwen3 venvs always have torch; indextts also; safe-guard only
+
     # ---- Lang preprocessing ----
 
     def to_simplified(self, text: str) -> str:
@@ -159,6 +182,13 @@ class WorkerDaemon(ABC):
                 arr = np.asarray(audio, dtype=np.float32).squeeze()
                 if arr.ndim > 1:
                     arr = arr.mean(axis=tuple(range(1, arr.ndim)))
+                # Centralized peak normalize — prevents clipping when audio
+                # is later concat'd across segments (stream / long endpoints)
+                # or re-encoded. Threshold matches DDPM seed fix for
+                # vibevoice but applies to all engines for consistency.
+                peak = float(np.abs(arr).max())
+                if peak > self.PEAK_TARGET:
+                    arr = arr * (self.PEAK_TARGET / peak)
                 duration = len(arr) / sr if sr else 0
                 rtf = (elapsed / duration) if duration else float("inf")
                 return {

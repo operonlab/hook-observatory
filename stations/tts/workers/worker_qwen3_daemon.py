@@ -106,6 +106,11 @@ class WorkerQwen3Daemon(WorkerDaemon):
 
         import numpy as np
 
+        # Qwen3-TTS 內部 token sampler (do_sample=True, temp=0.9) — 即使
+        # repetition_penalty 已壓住明顯 collapse，輸出仍非 deterministic。
+        # 跟 cosyvoice / vibevoice 一致 seed，讓 SSE 跨段穩。
+        self.seed_rngs()
+
         language = self._resolve_language(lang)
         # 官方 hard_defaults: repetition_penalty=1.05, max_new_tokens=2048, do_sample=True.
         # 偶發 repetition collapse（觀察到日文長句 + 連續 -masu 結尾 → "歩歩歩歩" hallucination,

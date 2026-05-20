@@ -68,6 +68,9 @@ class WorkerIndexTTSDaemon(WorkerDaemon):
     ):
         if lang == "zh":
             text = self.to_simplified(text)
+        # IndexTTS-2 內部用 flow matching vocoder（diffusion 家族），同樣需要
+        # explicit seed 才能跨段 / 重跑 deterministic。
+        self.seed_rngs()
         # indextts2_jmica 只接 ja，base 接 zh/en — engine gate at load time
         import tempfile
 
