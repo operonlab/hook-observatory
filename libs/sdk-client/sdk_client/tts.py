@@ -13,9 +13,12 @@ Usage:
     print(res["audio_path"])
 """
 
+import base64
+import json
 import logging
 import os
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -32,9 +35,9 @@ logger = logging.getLogger(__name__)
 
 # lang → v1 engine (Mac native，永遠可用)
 _V1_FALLBACK_BY_LANG = {
-    "zh": "qwen3-tts",   # mlx-audio Mac 版（注意：不是 v2 的 qwen3tts_gpu）
-    "en": "qwen3-tts",   # mlx-audio 也支援英文，音色一致性勝跨 engine
-    "ja": "qwen3-tts",   # mlx-audio 4 lang native
+    "zh": "qwen3-tts",  # mlx-audio Mac 版（注意：不是 v2 的 qwen3tts_gpu）
+    "en": "qwen3-tts",  # mlx-audio 也支援英文，音色一致性勝跨 engine
+    "ja": "qwen3-tts",  # mlx-audio 4 lang native
     "ko": "qwen3-tts",
 }
 _V1_FALLBACK_DEFAULT = "edge"  # 雲端 fallback；mlx-audio 載不出時走 edge
@@ -47,9 +50,7 @@ class TTSClient:
     """HTTP client for TTS station (port 10201)."""
 
     def __init__(self, base_url: str | None = None, timeout: float = 180):
-        self.base_url = (
-            base_url or os.environ.get("TTS_URL", get_url("tts"))
-        ).rstrip("/")
+        self.base_url = (base_url or os.environ.get("TTS_URL", get_url("tts"))).rstrip("/")
         self._timeout = timeout
         self._client: httpx.Client | None = None
         # Circuit breaker — last v2 connect failure timestamp
@@ -123,8 +124,11 @@ class TTSClient:
         return self._post_params(
             "/synthesize",
             params={
-                "text": text, "voice": voice, "speed": speed,
-                "engine": engine, "format": format,
+                "text": text,
+                "voice": voice,
+                "speed": speed,
+                "engine": engine,
+                "format": format,
             },
         )
 
@@ -179,9 +183,7 @@ class TTSClient:
             # ConnectError → APIError(0, ...). 其他狀態（400 / 500）不 fallback —
             # 那些是真正的 user-input bug，fallback 會遮蓋問題。
             if e.status_code == 0 and allow_fallback:
-                logger.warning(
-                    "TTS v2 unreachable (%s), falling back to v1 Mac engine", e
-                )
+                logger.warning("TTS v2 unreachable (%s), falling back to v1 Mac engine", e)
                 self._v2_last_failure_ts = time.monotonic()
                 return self._fallback_to_v1(text, lang, voice, speed, out_path)
             raise
@@ -240,6 +242,127 @@ class TTSClient:
 
     def list_engines(self) -> dict:
         return self._get("/engines")
+
+    # ======================== v2 Long-text synthesis ========================
+
+    def synthesize_long(
+        self,
+        text: str,
+        lang: str,
+        voice: str = "master",
+        engine: str = "auto",
+        output: str = "buffer",
+        out_path: str | None = None,
+        max_chars: int | None = None,
+        speed: float = 1.0,
+    ) -> dict:
+        """POST /v2/synthesize/long — auto-segment + per-segment synth + concat.
+
+        TTS engines (cosyvoice / qwen3 / vibevoice / indextts2) degrade on inputs
+        beyond ~150 zh chars. This endpoint splits at sentence/punctuation
+        boundaries and concatenates the resulting waveforms server-side.
+
+        Returns the standard v2 payload (duration_s, sample_rate, engine,
+        output_mode, audio_path/audio_bytes_b64/audio_base64) plus:
+            - segments: int
+            - seg_durations_s: list[float]
+            - seg_chunks: list[str]  (echo of how text was split, for debug)
+        """
+        body: dict[str, Any] = {
+            "text": text,
+            "lang": lang,
+            "voice_id": voice,
+            "engine": engine,
+            "output": output,
+            "speed": speed,
+        }
+        if out_path:
+            body["output_path"] = out_path
+        if max_chars is not None:
+            body["max_chars"] = max_chars
+        return self._post_json("/v2/synthesize/long", body)
+
+    # ======================== v2 SSE streaming ========================
+
+    def synthesize_stream(
+        self,
+        text: str,
+        lang: str,
+        voice: str = "master",
+        engine: str = "auto",
+        max_chars: int | None = None,
+        speed: float = 1.0,
+        ref_text: str | None = None,
+        timeout: float = 600.0,
+    ) -> Iterator[dict[str, Any]]:
+        """POST /v2/synthesize/stream — SSE generator yielding parsed events.
+
+        Yields dicts with `event` ∈ {"meta", "audio", "done", "error"} and the
+        parsed `data` payload. For "audio" events `data["audio"]` is decoded
+        bytes (raw float32 PCM at the sample_rate announced in meta); `data["audio_b64"]`
+        is preserved if caller wants to forward unmodified.
+
+        Engines with safe_rtf > 2.5 (e.g. indextts2) are rejected server-side
+        with HTTP 400 directing to /v2/synthesize/long; this method re-raises
+        APIError in that case.
+
+        Example:
+            meta = None
+            chunks = []
+            for evt in client.synthesize_stream("...", lang="zh", engine="vibevoice"):
+                if evt["event"] == "meta": meta = evt["data"]
+                elif evt["event"] == "audio": chunks.append(evt["data"]["audio"])
+                elif evt["event"] == "done": print(evt["data"])
+        """
+        body: dict[str, Any] = {
+            "text": text,
+            "lang": lang,
+            "voice_id": voice,
+            "engine": engine,
+            "speed": speed,
+        }
+        if max_chars is not None:
+            body["max_chars"] = max_chars
+        if ref_text is not None:
+            body["ref_text"] = ref_text
+
+        with self.client.stream(
+            "POST",
+            f"{self.base_url}/v2/synthesize/stream",
+            json=body,
+            timeout=timeout,
+        ) as resp:
+            if resp.status_code != 200:
+                resp.read()
+                detail = resp.text
+                try:
+                    detail = resp.json().get("detail", detail)
+                except Exception:
+                    pass
+                raise APIError(resp.status_code, detail)
+
+            event_name: str | None = None
+            data_buf = ""
+            for raw in resp.iter_lines():
+                line = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
+                line = line.rstrip("\r")
+                if line.startswith("event: "):
+                    event_name = line[7:].strip()
+                elif line.startswith("data: "):
+                    data_buf = line[6:]
+                elif line == "" and event_name and data_buf:
+                    try:
+                        payload = json.loads(data_buf)
+                    except Exception as e:
+                        logger.warning("bad SSE data on event %s: %s", event_name, e)
+                        event_name, data_buf = None, ""
+                        continue
+                    if event_name == "audio" and "audio_b64" in payload:
+                        payload["audio"] = base64.b64decode(payload["audio_b64"])
+                    yield {"event": event_name, "data": payload}
+                    if event_name in ("done", "error"):
+                        return
+                    event_name, data_buf = None, ""
 
     # ======================== v2 Voices / Engines / Routing ========================
 
