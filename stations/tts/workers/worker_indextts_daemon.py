@@ -43,19 +43,31 @@ class WorkerIndexTTSDaemon(WorkerDaemon):
 
         from indextts.infer_v2 import IndexTTS2
 
-        # Performance flags (2026-05-20 RTF 2.5 → 1.0-1.5 expected on RTX 3090):
-        #   use_fp16=True            — GPT autoregressive ~1.5-2× faster
+        # Performance flags (2026-05-20 RFC outputs/indextts-perf-rfc/RFC.md):
+        #   use_fp16=True            — GPT autoregressive ~1.5-2×
         #   use_cuda_kernel=True     — BigVGan vocoder fused activation ~1.2-1.5×
-        #   use_deepspeed=True       — transformer inference optimizer
-        #     (DeepSpeed Windows wheel 0.17.5+e1560d84 from 6Morpheus6/deepspeed-windows-wheels;
-        #     IndexTTS2 ctor has graceful try/except fallback if import fails — see
-        #     infer_v2.py:92-95)
+        #   use_accel=True           — AccelInferenceEngine (paged KV + CUDA Graph +
+        #                              FlashAttention + @torch.compile sampler).
+        #                              Routes GPT generate to indextts/accel/ path
+        #                              (gpt/model_v2.py:761), 1.5-2.5× hot-path speedup.
+        #   use_torch_compile=True   — s2mel CFM vocoder torch.compile (~1.2-1.4×)
+        #   use_deepspeed=False      — accel supersedes deepspeed wrapping; keeping
+        #                              deepspeed True pays ~70s cold-load with no
+        #                              hot-path benefit (line 761 if/else gate).
         self.engine_obj = IndexTTS2(
             model_dir=ckpt_dir,
             cfg_path=f"{ckpt_dir}/config.yaml",
             device="cuda:0",
             use_fp16=True,
             use_cuda_kernel=True,
+            # use_accel=True 需 flash_attn；Windows native build hdim128+bf16+sm80
+            # 在 nvcc 12.8 + MSVC 14.44 編不過（cutlass template 不相容，業界共識）。
+            # 候選解：搬 indextts 到 WSL2 venv (cosyvoice/qwen3 同路線) 才能跑 Linux 路徑
+            # flash_attn install。暫關。
+            use_accel=False,
+            use_torch_compile=False,  # 2026-05-20 ablation: torch_compile s2mel 對 RTF 影響微 (+0.1)
+            # 2026-05-20 ablation: use_deepspeed=False 反而 RTF 從 1.21→1.89 慢 56%。
+            # RFC 假設「accel 開了 ds 用不到」錯 — accel 沒開時 ds 仍是必要 GPT wrapper。
             use_deepspeed=True,
         )
 
