@@ -1,1 +1,0 @@
-"""Ideagraph schemas — placeholder."""

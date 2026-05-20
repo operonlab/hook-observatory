@@ -1,9 +1,0 @@
-host: "127.0.0.1"
-port: 10221
-
-default_fps: 30
-default_viewport: [1920, 1080]
-
-# Empty → auto-detect (Playwright cache → system Chrome → Linux paths).
-# Override with $BROWSER_RENDER_CHROMIUM_PATH or $CHROME.
-chromium_path: ""

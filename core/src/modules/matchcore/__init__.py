@@ -1,1 +1,0 @@
-"""Matchcore module — matching engine."""

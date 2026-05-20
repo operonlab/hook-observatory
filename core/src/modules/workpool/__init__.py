@@ -1,1 +1,0 @@
-"""Workpool module — resource management."""

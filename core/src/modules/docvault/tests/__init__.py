@@ -1,1 +1,0 @@
-"""DocVault tests."""

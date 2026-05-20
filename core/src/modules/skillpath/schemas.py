@@ -1,1 +1,0 @@
-"""Skillpath schemas — placeholder."""

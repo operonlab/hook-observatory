@@ -1,8 +1,0 @@
-{
-  "commands": [
-    "cd stations/hook-dispatcher && go vet ./...",
-    "cd stations/hook-dispatcher && go test ./..."
-  ],
-  "max_iterations": 5,
-  "timeout_minutes": 30
-}
