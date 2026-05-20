@@ -11,18 +11,36 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 import os
 import tempfile
+import time
 from typing import Any
 
 import numpy as np
 from engines.base_v2 import OutputMode
 from engines.registry_v2 import V2_ENGINES, get_v2_engine, list_v2_engines
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from routing import explain_route, pick_engine
 from schemas import EngineInfoModel, SynthesizeReqModel, SynthesizeResultModel
 from worker_pool import decode_synth_response
+
+# Per-engine "safe" RTF for streaming pre-roll calculation. Pulled from
+# 2026-05-20 矩陣 worst-case + 50% safety margin. Used to advise the client
+# how much initial buffer to hold before starting playback so subsequent
+# segments arrive ahead of playback. Real-world RTF can spike; client should
+# treat this as a minimum.
+_SAFE_RTF: dict[str, float] = {
+    "vibevoice": 1.2,
+    "cosyvoice_v3_native": 1.5,
+    "cosyvoice_v3_vllm": 1.0,
+    "qwen3tts_gpu": 1.8,
+    "indextts2_base": 3.5,
+    "indextts2_jmica": 3.5,
+}
+_DEFAULT_SAFE_RTF = 2.0
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +205,124 @@ async def synthesize_v2_long(payload: dict, request: Request) -> dict:
     payload_out["seg_durations_s"] = seg_durs
     payload_out["seg_chunks"] = chunks  # echo back for debugging
     return payload_out
+
+
+@router_v2.post("/synthesize/stream")
+async def synthesize_v2_stream(payload: dict, request: Request):
+    """SSE 偽串流 — 切段 → 逐段合成 → 邊產邊吐 audio events.
+
+    Engines 本身不支援 streaming generate；station 在外面切段並以 SSE 緩送
+    PCM chunk，client 在收到第一段後等 pre_roll_sec 再開播即可平滑接續播放。
+
+    body 同 /v2/synthesize/long; SSE events:
+      event: meta   data: {engine, sample_rate, total_segments, pre_roll_sec, expected_total_dur_s, seg_chunks}
+      event: audio  data: {chunk_idx, samples, duration_s, audio_b64 (raw float32 PCM)}
+      event: done   data: {total_chunks, total_duration_s, wall_s}
+      event: error  data: {error, chunk_idx?}
+    """
+    pool = getattr(request.app.state, "worker_pool", None)
+    if pool is None:
+        raise HTTPException(503, "WorkerPool not initialized")
+
+    text = (payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "text required")
+    lang = payload.get("lang", "zh")
+    voice_id = payload.get("voice_id", "master")
+    speed = payload.get("speed", 1.0)
+    max_chars = payload.get("max_chars")
+    ref_text = payload.get("ref_text")
+
+    engine_param = payload.get("engine", "auto")
+    if engine_param == "auto":
+        try:
+            engine_name = pick_engine(lang, available=V2_ENGINES.keys())
+        except RuntimeError as e:
+            raise HTTPException(503, str(e)) from e
+    else:
+        if engine_param not in V2_ENGINES:
+            raise HTTPException(400, f"unknown engine: {engine_param}")
+        engine_name = engine_param
+
+    from text_segmenter import split_for_tts
+
+    chunks = split_for_tts(text, lang=lang, max_chars=max_chars)
+    if not chunks:
+        raise HTTPException(400, "text resolved to zero chunks")
+
+    safe_rtf = _SAFE_RTF.get(engine_name, _DEFAULT_SAFE_RTF)
+    # Pre-roll heuristic: time first segment will take to render, expressed
+    # as audio-seconds the client should buffer before press-play. Conservative:
+    # assume worst seg duration ≈ avg char count × seconds-per-char.
+    chars_per_sec = {"zh": 4.0, "ja": 4.0, "ko": 4.0, "en": 2.5}.get(lang, 4.0)
+    avg_seg_dur = (sum(len(c) for c in chunks) / len(chunks)) / chars_per_sec
+    pre_roll_sec = round(max(0.5, avg_seg_dur * (safe_rtf - 1)), 2)
+    expected_total_dur = round(sum(len(c) for c in chunks) / chars_per_sec, 2)
+
+    def _sse(event: str, data: dict) -> bytes:
+        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
+
+    async def _gen():
+        wall0 = time.monotonic()
+        yield _sse(
+            "meta",
+            {
+                "engine": engine_name,
+                "lang": lang,
+                "voice_id": voice_id,
+                "sample_rate": 24000,
+                "total_segments": len(chunks),
+                "pre_roll_sec": pre_roll_sec,
+                "safe_rtf": safe_rtf,
+                "expected_total_dur_s": expected_total_dur,
+                "seg_chunks": chunks,
+            },
+        )
+        total_samples = 0
+        sr = 24000
+        for idx, chunk in enumerate(chunks):
+            if await request.is_disconnected():
+                logger.info("client disconnected on chunk %d/%d", idx, len(chunks))
+                return
+            try:
+                resp = await pool.synth(
+                    engine_name=engine_name,
+                    text=chunk,
+                    lang=lang,
+                    voice_id=voice_id,
+                    speed=speed,
+                    ref_text=ref_text,
+                )
+                audio, sr = decode_synth_response(resp)
+            except Exception as e:
+                logger.exception("stream chunk %d failed", idx)
+                yield _sse("error", {"error": str(e), "chunk_idx": idx})
+                return
+            total_samples += len(audio)
+            yield _sse(
+                "audio",
+                {
+                    "chunk_idx": idx,
+                    "samples": len(audio),
+                    "duration_s": round(len(audio) / sr, 3),
+                    "audio_b64": base64.b64encode(audio.astype(np.float32).tobytes()).decode(),
+                },
+            )
+        yield _sse(
+            "done",
+            {
+                "total_chunks": len(chunks),
+                "total_duration_s": round(total_samples / sr, 3),
+                "wall_s": round(time.monotonic() - wall0, 2),
+                "sample_rate": int(sr),
+            },
+        )
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router_v2.post("/synthesize/batch")
